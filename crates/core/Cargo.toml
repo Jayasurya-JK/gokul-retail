@@ -1,0 +1,12 @@
+[package]
+name = "gokul-core"
+description = "Gokul Retail core: database, stock ledger and business rules. No UI/Tauri dependency."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.41", features = ["bundled", "backup"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }

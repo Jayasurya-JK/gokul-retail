@@ -1,0 +1,28 @@
+{
+  "name": "gokul-retail",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["apps/pos", "apps/office", "packages/ui"],
+  "scripts": {
+    "build:ui": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "fmt:check": "cargo fmt --all --check",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "test:rust": "cargo test --workspace",
+    "check": "npm run build:ui && npm run fmt:check && npm run clippy && npm run test:rust && npm run typecheck && npm run lint && npm run test",
+    "tauri:pos": "npm run tauri --workspace apps/pos --",
+    "tauri:office": "npm run tauri --workspace apps/office --"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1"
+  }
+}
+

@@ -1,0 +1,64 @@
+/* Gokul theme tokens. Placeholder for step 1; real design comes with the shells. */
+:root {
+  --gk-bg: #f7f5f0;
+  --gk-surface: #ffffff;
+  --gk-text: #1f2937;
+  --gk-muted: #6b7280;
+  --gk-primary: #b45309;
+  --gk-primary-text: #ffffff;
+  --gk-border: #d6d3cb;
+  --gk-danger: #b91c1c;
+  --gk-font: "Segoe UI", system-ui, sans-serif;
+  --gk-radius: 6px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--gk-bg);
+  color: var(--gk-text);
+  font-family: var(--gk-font);
+  font-size: 16px;
+}
+
+.gk-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.gk-page h1 {
+  margin: 0 0 24px;
+  color: var(--gk-primary);
+}
+
+.gk-card {
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-border);
+  border-radius: var(--gk-radius);
+  padding: 16px 20px;
+}
+
+.gk-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.gk-row dt {
+  color: var(--gk-muted);
+}
+
+.gk-row dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.gk-error {
+  color: var(--gk-danger);
+}

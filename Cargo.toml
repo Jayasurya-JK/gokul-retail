@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "apps/pos/src-tauri", "apps/office/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+# Small installer, no panic=abort (the panic hook in step 4 needs unwinding).
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1
+strip = true

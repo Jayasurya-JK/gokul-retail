@@ -3,6 +3,9 @@
 Status: APPROVED by owner direction 5 Nov 2026 ("complete normal billing first, world-class, like GoFrugal").
 Depends on: spec 00 skeleton. Gokul-specific loose/barrel and production come after (specs 01, 02).
 
+## Time and business day
+Timestamps are stored in UTC (skeleton). Every report, bill print and day open/close uses IST (+05:30). A "business day" runs from day-open to day-close (not midnight), so a late close after 12 am still counts to that day. Financial year for bill series: 1 April - 31 March, IST.
+
 ## Billing rules (gokul-core, all unit tested)
 - **Prices are GST-inclusive** (retail). Per line: amount = qty x rate - discount; taxable = amount x 10000 / (10000 + gst_rate_bp), rounded half-up to paise; tax = amount - taxable; split CGST/SGST equally (odd paisa goes to CGST). Totals = sum of lines.
 - **Bill round-off** to nearest rupee (setting: none / 0.50 / 1.00), shown as its own line.

@@ -60,6 +60,7 @@ A small, fast, crash-safe Windows app that opens to a menu, stores data safely, 
 
 ### Step 6 - Speed proof with fake data
 - Dev-only command / test fixture: 20,000 items, 1 year of ledger rows (~500 movements/day).
+- Query-plan tests use bound parameters (`LIKE ?1`), as the real search calls it (QA note).
 - Tests in `cargo test` assert: item search by code/barcode/name prefix < 50 ms; post_stock of a 20-line movement < 30 ms; stock report over all items < 2 s.
 - Manual check recorded in this spec: app RAM at idle and after 10 minutes of use, with POSBean also open, on a low-end setting.
 
