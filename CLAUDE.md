@@ -4,7 +4,9 @@ Own retail POS for Gokul Oils (oil shop, 500+ bills/day). Replaces an old POSBea
 
 **The one rule: it must never be slow, never lose a bill, never crash during billing.** Staff will compare it to POSBean on day one.
 
-Not for sale now. Write it cleanly enough that it could become a product later.
+**Quality bar: build it like GoFrugal or a commercial POS company would.** No shortcuts, no "good enough for now". Product-grade code, tests, error handling and UX. Small and light because the shop PC is weak, never because of lower quality.
+
+Not for sale now, but build it as if it will be sold later (clean modules, settings instead of hard-coded shop details).
 
 ## Read first
 - `docs/ENGINEERING-RULES.md` - non-negotiable quality rules (money, stock, speed, crash safety)
@@ -15,8 +17,10 @@ Not for sale now. Write it cleanly enough that it could become a product later.
 ## Stack (decided 5 Nov 2026 - shop PC is Windows 10, ~4 GB RAM, slow)
 Electron was rejected: too heavy for the shop PC (100 MB+ installer, 300 MB+ RAM).
 - **Tauri 2** desktop app -> one small NSIS installer `.exe` (target < 15 MB). Uses Windows' built-in WebView2.
-- **Rust core** (`src-tauri/src/core/`): all business rules, database, stock, GST, printing, backup. `rusqlite` with bundled SQLite, WAL mode. Tested with `cargo test`.
-- **UI**: React + TypeScript (strict) + Vite in `src/`. UI only calls Tauri commands; no business rules in the UI. Tested with Vitest.
+- **Two apps**: `apps/pos` (Gokul POS - billing counter only) and `apps/office` (Gokul Office - dashboard, items, stock, production, reports, settings). Same DB.
+- **Rust core** `crates/core` (`gokul-core`): all business rules, database, stock, GST, printing, backup. `rusqlite` with bundled SQLite, WAL mode. Tested with `cargo test`. No Tauri dependency.
+- **UI**: React + TypeScript (strict) + Vite per app, shared components in `packages/ui`. UI only calls Tauri commands; no business rules in the UI. Tested with Vitest.
+- Rust tools live in `%USERPROFILE%\.cargo\bin` - add it to PATH in each shell if `cargo` is not found.
 - Thermal bills via ESC/POS, barcode stickers via TSPL/ZPL (printer models to confirm).
 - Fully offline. Data in `%APPDATA%\GokulRetail\`.
 - Dev laptop is high-spec; the shop PC is not. Always measure on low-end settings. Lightweight never means lower quality.

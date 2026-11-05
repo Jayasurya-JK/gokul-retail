@@ -12,9 +12,9 @@ Before coding, read `CLAUDE.md`, `docs/ENGINEERING-RULES.md`, and the spec path 
 
 Rules:
 - Money in integer paise. Stock as ledger rows. Bill save in one transaction.
-- Business rules live in Rust under `src-tauri/src/core/`, as plain functions with `#[cfg(test)]` tests. Write tests for the spec's acceptance criteria and edge cases.
+- Business rules live in Rust in `crates/core` (`gokul-core`), as plain functions with tests. Write tests for the spec's acceptance criteria and edge cases.
 - No `unwrap()`/`expect()` in non-test code; return `Result` and turn errors into plain messages for the UI.
-- Expose to the UI only through `#[tauri::command]` functions in `src-tauri/src/commands/`.
+- Expose to the UI only through thin `#[tauri::command]` functions in `apps/<app>/src-tauri/src/commands/` that call `gokul-core`.
 - Schema changes only as new numbered migrations.
 - No new crate or npm package unless the spec allows it. Keep the binary small.
 - Run `cargo test`, `cargo clippy -- -D warnings` and `npm run typecheck` before you finish. Do not report done with failing tests.

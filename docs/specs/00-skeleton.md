@@ -9,15 +9,22 @@ A small, fast, crash-safe Windows app that opens to a menu, stores data safely, 
 - Shop PC: Windows 10, ~4 GB RAM, slow. The old POSBean keeps running on the same PC during changeover (1-2 weeks side by side).
 - So: our app must stay under 150 MB RAM, near 0% idle CPU, never touch POSBean's folders, database or services, and must not hold the printer/COM ports when it is not printing.
 
+## Two apps, one core (owner decision 5 Nov 2026 - "like a real POS")
+- **Gokul POS** (`apps/pos`) - billing counter only. Opens straight to login -> billing. Nothing else on screen.
+- **Gokul Office** (`apps/office`) - back office: dashboard, items, stock, production, packing, purchases, reports, users, settings, backup.
+- Both use the shared Rust crate `crates/core` (`gokul-core`: db, migrations, all business rules; no Tauri dependency) and the shared React package `packages/ui` (theme, components, keyboard helpers).
+- Both open the same SQLite DB `%APPDATA%\GokulRetail\data\gokul.db` (WAL handles both processes). Later: LAN server mode for more counters - keep all DB access behind `gokul-core` so this is possible.
+- Repo layout: root `Cargo.toml` (workspace: `crates/core`, `apps/pos/src-tauri`, `apps/office/src-tauri`), root `package.json` (npm workspaces: `apps/pos`, `apps/office`, `packages/ui`).
+
 ## Build steps (each step = builder run + verifier PASS + commit)
 
 ### Step 1 - Project scaffold
-- Tauri 2 + React + TypeScript (strict) + Vite. App name "Gokul Retail", identifier `in.gokuloils.retail`.
-- Folders: `src/` (UI), `src-tauri/src/core/` (rules + db), `src-tauri/src/commands/` (Tauri commands).
+- Workspace above. Two Tauri 2 + React + TypeScript (strict) + Vite apps. Names "Gokul POS" (`in.gokuloils.pos`) and "Gokul Office" (`in.gokuloils.office`).
+- In each app: `src-tauri/src/commands/` (thin Tauri commands calling `gokul-core`).
 - Plugins allowed: single-instance (second launch focuses the open window), log (file logging). No others.
-- NSIS installer, per-user install (no admin needed), WebView2 `embedBootstrapper` mode.
-- `npm run check` script runs: cargo fmt check, clippy -D warnings, cargo test, tsc, eslint, vitest.
-- Accept: `npm run tauri build` produces setup .exe under 15 MB; app opens to an empty shell.
+- NSIS installer per app, per-user install (no admin needed), WebView2 `embedBootstrapper` mode. Release profile: `lto = true`, `opt-level = "s"`, `codegen-units = 1`, `strip = true`, `panic = "abort"` is NOT allowed (we need the panic hook).
+- Root `npm run check` runs: cargo fmt --check, clippy -D warnings, cargo test (workspace), tsc, eslint, vitest.
+- Accept: both apps build to setup .exe under 15 MB each; each opens to its empty shell.
 
 ### Step 2 - Database layer
 - File `%APPDATA%\GokulRetail\data\gokul.db`. PRAGMAs: `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=5000`.
@@ -33,9 +40,10 @@ A small, fast, crash-safe Windows app that opens to a menu, stores data safely, 
 - Core fn `rebuild_balances()` + test that the cache always equals the ledger sum.
 - Accept: tests for migrations from empty, re-open existing DB, ledger immutability, balance rebuild.
 
-### Step 3 - App shell and login
-- Login by user + 4-6 digit PIN (argon2 hash). First run: create owner account screen.
-- Shell: left menu with Billing, Production, Packing, Items, Stock, Reports, Settings. Unbuilt screens show "Coming soon". Every menu item reachable by keyboard (Alt+letter / F-keys); Esc goes back.
+### Step 3 - App shells and login
+- Login by user + 4-6 digit PIN (argon2 hash) in both apps. First run (Office): create owner account screen. POS refuses to start billing until Office has set up the shop.
+- POS shell: full-screen billing placeholder, status bar, F-key legend at the bottom.
+- Office shell: left menu with Dashboard, Items, Stock, Production, Packing, Purchases, Reports, Users, Settings. Unbuilt screens show "Coming soon". Every menu item reachable by keyboard (Alt+letter / F-keys); Esc goes back.
 - Status bar: shop name, user, date/time, last backup time.
 - Settings screen: shop name, address, GSTIN, FSSAI no, phone, bill footer.
 - Accept: whole shell usable without a mouse; cashier cannot open Settings.
@@ -55,8 +63,12 @@ A small, fast, crash-safe Windows app that opens to a menu, stores data safely, 
 - Tests in `cargo test` assert: item search by code/barcode/name prefix < 50 ms; post_stock of a 20-line movement < 30 ms; stock report over all items < 2 s.
 - Manual check recorded in this spec: app RAM at idle and after 10 minutes of use, with POSBean also open, on a low-end setting.
 
+## Order after the skeleton (owner, 5 Nov 2026)
+1. Spec 03 - complete normal billing (POS) + items/stock basics (Office), GoFrugal-grade.
+2. Then Gokul-specific one by one: 01 production, 02 loose and packing, then the WAIT list.
+
 ## Out of scope
-Billing, production, packing logic (specs 01, 02), printing, POSBean import.
+Billing, production, packing logic, printing, POSBean import.
 
 ## Open items (do not block the skeleton)
 - Printer and scanner models (needed for spec 03 billing/printing).

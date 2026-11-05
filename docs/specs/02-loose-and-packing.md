@@ -27,8 +27,17 @@ Status: DRAFT - needs owner answers below before build.
 ## Edge cases to test
 Not enough bulk oil or bottles for the run; amount that gives fractional ml; packing run cancelled; same bottle type used by two oils; tank dip higher than system stock.
 
+## Owner facts (5 Nov 2026)
+- Sales are **bottled packs** or **loose into the customer's own container**. No loose sale in our bottles.
+- Loose oil is held in **200 L barrels with a tap**. Staff fill a **1 L (and smaller) measuring container** from the tap and pour it into the customer's container, repeating as needed.
+- So: each barrel is a bulk stock location (ml). Loose sale = volume in measure steps, no packing material used.
+- Billing quick keys for loose: 1/2 L, 1 L, 2 L, 5 L, plus typed qty (e.g. 3.5 L) and "Rs amount worth" (converted to ml, rounded to the nearest measure step set in Settings, e.g. 50 ml or 100 ml - shown before saving).
+- Barrel dip check (measured litres left) is the main way to catch over-pouring/spill. Report: expected vs actual per barrel, per week.
+- Barrel refill: from production batch or purchase -> barrel +ml. A barrel can be marked empty/cleaned.
+
 ## Questions for owner
-1. Which pack sizes per oil (200 ml, 500 ml, 1 L, 5 L tin, 15 kg tin)? Bottles or pouches?
-2. Do you sell loose oil by litre, by kg, or both? Do customers bring their own cans?
-3. How do you measure loose oil today - measuring jug, weighing scale, or pump meter?
+1. Which bottle sizes per oil (200 ml, 500 ml, 1 L, 5 L)? Bottles, pouches or tins?
+2. Measuring containers: exactly which sizes (1 L, 1/2 L, 200 ml)?
+3. How many 200 L barrels, and one oil per barrel?
 4. Do you keep stock of empty bottles, caps and labels, or buy as needed?
+5. Bottles: do you fill them yourselves from the barrel, or buy them already filled?
