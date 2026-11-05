@@ -2,11 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
-mod state;
 
-use gokul_core::{paths, Db};
-use state::AppState;
-use std::sync::Mutex;
+use gokul_core::{nav, paths, AppContext, AppKind};
+use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -26,6 +24,15 @@ fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     }
 }
 
+/// The window may only ever show the app itself, never another web page.
+fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::<R>::new("navigation-guard")
+        .on_navigation(|_webview, url| {
+            nav::is_allowed(url.scheme(), url.host_str(), cfg!(debug_assertions))
+        })
+        .build()
+}
+
 fn main() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -35,13 +42,38 @@ fn main() {
             }
         }))
         .plugin(log_plugin())
+        .plugin(navigation_guard())
         .setup(|app| {
-            let db = Db::open(&paths::default_db_path()?)?;
-            log::info!("{APP_NAME} started, data version {}", db.schema_version()?);
-            app.manage(AppState { db: Mutex::new(db) });
+            // If the data file cannot be opened the app still starts; the start-up screen
+            // reports the problem and lets staff retry (startup_status).
+            let ctx = Arc::new(AppContext::production(AppKind::Office));
+            let status = ctx.startup_status();
+            log::info!("{APP_NAME} started, data file state: {:?}", status.db);
+            app.manage(ctx);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::app_info::app_info])
+        .invoke_handler(tauri::generate_handler![
+            commands::session::app_info,
+            commands::session::startup_status,
+            commands::session::list_login_users,
+            commands::session::login,
+            commands::session::current_session,
+            commands::session::logout,
+            commands::session::lock_session,
+            commands::session::heartbeat,
+            commands::session::change_pin,
+            commands::session::get_status_bar,
+            commands::session::get_shop_settings,
+            commands::admin::setup_owner,
+            commands::admin::recover_owner_pin,
+            commands::admin::save_shop_settings,
+            commands::admin::open_screen,
+            commands::admin::list_users,
+            commands::admin::create_user,
+            commands::admin::reset_pin,
+            commands::admin::unlock_user,
+            commands::admin::deactivate_user,
+        ])
         .run(tauri::generate_context!());
 
     if let Err(e) = result {
