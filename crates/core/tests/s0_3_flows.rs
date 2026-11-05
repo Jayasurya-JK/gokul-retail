@@ -128,7 +128,7 @@ impl World {
             .office
             .create_user("Ravi", pin(CASHIER_PIN))
             .expect("ravi");
-        (ravi.id, res.recovery_code)
+        (ravi.id, res.recovery_code().to_string())
     }
 
     /// Same, and Ravi has already chosen his own PIN (CASHIER_PIN_2).
@@ -276,8 +276,8 @@ fn flow2_new_cashier_must_change_pin_before_anything_works() {
     // Weak or unchanged PIN is refused with the field named, session stays pending.
     let e = app_err(w.pos.change_pin(pin(CASHIER_PIN), pin(CASHIER_PIN)));
     assert_eq!(e.code, ErrorCode::PinInvalid);
-    // The Tauri command layer renames this field to "newPin" (with_pin_field); core says "pin".
-    assert_eq!(e.fields.expect("fields")[0].field, "pin");
+    // Core now names the field itself: a bad NEW PIN is "newPin" (a bad old PIN or login PIN is "pin").
+    assert_eq!(e.fields.expect("fields")[0].field, "newPin");
     assert_eq!(
         code(w.pos.change_pin(pin(CASHIER_PIN), pin("1234"))),
         ErrorCode::PinInvalid
@@ -519,7 +519,7 @@ fn flow5_owner_forgot_pin_recovers_with_code() {
         .office
         .recover_owner_pin(&code1, pin(OWNER_PIN_2))
         .expect("recover")
-        .recovery_code;
+        .into_code();
     assert_ne!(new_code, code1);
     // New PIN works (on POS too), old PIN is dead.
     w.office.login(owner, pin(OWNER_PIN_2)).expect("new pin");
