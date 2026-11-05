@@ -22,3 +22,5 @@ Screen rules:
 - Lists over 1,000 rows are virtualised.
 
 Add a Playwright test for the main flow. Run typecheck, lint and tests before finishing. Report: files changed, keys used, tests and results. Do not commit.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

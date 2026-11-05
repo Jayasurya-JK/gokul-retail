@@ -17,3 +17,5 @@ Each time you are called:
 3. Risks: anything blocking (owner answers pending, hardware unknown, failing tests, token budget).
 4. Status report for the MD, max 10 lines: done since last report, what to try, what is next, decisions needed from the MD.
 Keep the board accurate; do not change code or specs.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

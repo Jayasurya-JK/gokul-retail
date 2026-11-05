@@ -93,7 +93,7 @@ Settings keys: `setup_complete`, `shop_name`, shop detail keys, `idle_lock_secs_
 30. UI (Vitest): login fully keyboard-driven, masked PIN, lock countdown; POS shows "set up in Office" with no users; cashier sees no Settings/Users and a direct route shows nothing; idle-lock overlay keeps the cart; every menu item reachable by Alt+letter or F-key.
 
 ## Measured
-- argon2 verify on low-end setting: (to record)
+- argon2 verify (m=19456, t=3, p=1, release): 41.6 ms on the high-spec dev laptop; full login 41.8 ms. Shop PC: (to record - run `cargo test --release -p gokul-core real_argon2_timing -- --ignored --nocapture`; if under 150 ms raise t, max 4).
 
 ## Command API contract (Head of IT, 5 Nov 2026 - builder and ui-builder both build to this)
 Rust structs use `#[serde(rename_all = "camelCase")]`; JS passes camelCase args (Tauri maps to snake_case). Changing this contract needs Head of IT approval.
@@ -108,7 +108,7 @@ interface StatusBarInfo { shopName: string; userName: string | null; lastBackupA
 interface ShopSettings { shopName: string; addressLine1: string; addressLine2: string; addressLine3: string; gstin: string; fssaiNo: string; phone: string; billFooter: string }
 interface UserRow { id: number; name: string; role: Role; active: boolean; lockedSecondsLeft: number; mustChangePin: boolean; lastLoginAt: string | null }
 interface FieldError { field: keyof ShopSettings | 'name' | 'pin' | 'newPin'; message: string }
-type ErrorCode = 'NOT_LOGGED_IN'|'SESSION_EXPIRED'|'PERMISSION_DENIED'|'WRONG_PIN'|'LOCKED'|'PIN_INVALID'|'ALREADY_SETUP'|'SHOP_NOT_SET_UP'|'VALIDATION'|'NOT_FOUND'|'DB_BUSY'|'DB_NEWER'|'INTERNAL';
+type ErrorCode = 'NOT_LOGGED_IN'|'SESSION_EXPIRED'|'PERMISSION_DENIED'|'WRONG_PIN'|'LOCKED'|'PIN_INVALID'|'ALREADY_SETUP'|'SHOP_NOT_SET_UP'|'VALIDATION'|'NOT_FOUND'|'PIN_CHANGE_REQUIRED'|'DB_BUSY'|'DB_NEWER'|'INTERNAL';
 interface AppError { code: ErrorCode; message: string /* plain English, safe to show */; secondsLeft?: number /* LOCKED */; attemptsBeforeLock?: number /* WRONG_PIN */; fields?: FieldError[] /* VALIDATION, PIN_INVALID */ }
 ```
 
@@ -136,3 +136,14 @@ interface AppError { code: ErrorCode; message: string /* plain English, safe to 
 | `deactivate_user` | office | `{ userId }` | `UserRow` | owner |
 
 UI wraps every call in one typed module per app (`src/api.ts`, shared types in `packages/ui/src/api-types.ts`) and never calls `invoke` elsewhere. Tests mock that module.
+
+### Contract amendments (Head of IT, after backend build 5 Nov 2026)
+1. `PIN_CHANGE_REQUIRED` added. While the session's user has `mustChangePin`, every guarded command except `change_pin`, `logout`, `lock_session`, `heartbeat`, `current_session` returns it. UI shows the change-PIN screen.
+2. Login results: a switched-off or unknown user -> `NOT_FOUND`. The 5th wrong PIN returns `LOCKED` (30 s), not `WRONG_PIN`. POS `login` returns `SHOP_NOT_SET_UP` until Office set-up is complete. A wrong recovery code -> `WRONG_PIN` (recovery-code message).
+3. `PIN_INVALID.fields[0].field` is `pin` (setup_owner, create_user) or `newPin` (change_pin, reset_pin, recover_owner_pin).
+4. Settings field errors come only from `save_shop_settings` (`VALIDATION` + fields). There is no validate-on-blur command; the UI may give cheap format hints only.
+5. `billFooter` max 48 chars (to confirm when paper width is known). Owner name 1-40 chars.
+6. Idle timeouts are stored and validated in core but are not editable in the UI in S0-3 (Office 600 s, POS 0 = off). Editing comes in B-3.
+7. Extra audit event `session_lock` (Ctrl+L). `set_user_role` exists in core, not exposed until B-3.
+8. Webview capabilities: only the app's own `allow-*` command permissions + `core:event:allow-listen/unlisten`, `core:window:allow-close/destroy`. UI needing more must ask Head of IT.
+9. Settings keys in the DB use underscores (`shop_name`, `shop_address1`..., `shop_phone`, `shop_gstin`, `shop_fssai`, `bill_footer`).

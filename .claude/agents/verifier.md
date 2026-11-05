@@ -25,3 +25,5 @@ Check:
 Try to break it: empty bill, zero/negative qty, huge qty, same item scanned twice, unknown barcode, price change mid-bill, two bills saved at once, power cut mid-save (kill the process in a test).
 
 Reply with **PASS** or **FAIL**, then a numbered list of problems with file:line and why it matters. Keep it short.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

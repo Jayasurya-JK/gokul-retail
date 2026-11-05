@@ -20,3 +20,5 @@ Review what you are given against the preloaded `indian-retail-pos` knowledge:
 5. Data safety: backups, retention (6 years), import/export.
 
 Reply short: **POS-grade / Gaps found**, then a numbered list (MUST = legal, money or fraud; SHOULD = parity and UX), then questions for the owner or CA. Do not write code.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

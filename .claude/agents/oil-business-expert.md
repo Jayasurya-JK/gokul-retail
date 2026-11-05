@@ -20,3 +20,5 @@ Review what you are given against the preloaded `wood-pressed-oil-business` know
 5. Compliance gaps on labels or measures.
 
 Reply in plain English, short: **Fits the business / Needs changes**, then a numbered list (MUST / SHOULD), then the questions only the owner can answer. Do not write code.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

@@ -75,6 +75,34 @@ Experts cost tokens only when called. The Delivery Manager picks only the gates 
 | Release | delivery-manager | devops-engineer | verifier (+ security before go-live) |
 | AI ideas | ai-solutions-expert (on request only) | - | MD decides |
 
+## Definition of done per role (MD direction 5 Nov 2026: "each must complete their role perfectly")
+Every agent finishes its whole job, not part of it. Before reporting back, each role checks its own row. A report that skips a row item must say which item and why. The Head of IT sends back any work that does not meet its row.
+
+| Role | Done means |
+|---|---|
+| Head of IT | Correct gates picked for the card; every gated role called; spec and contract written before build; owner decisions recorded in the spec; merges only after QA PASS; board up to date; plain-English report to the MD |
+| Delivery Manager | Card plan with the gates it needs, risks and dependencies on the board; end-of-session status for the MD (done, in progress, blocked, decisions needed) |
+| Scrum Master | Card split into steps with an acceptance check each; migration number reserved; after any FAIL a short retro with one process change added to Lessons |
+| Business Analyst | User stories, field lists, rules, edge cases and testable acceptance criteria; every open question listed for the MD |
+| Domain experts (POS, oil, store ops, inventory, GST, compliance, CRM) | Spec read in full against their field; each finding has severity, the exact spec line and the fix; anything unsure is marked for the MD or CA; clear APPROVE or CHANGES NEEDED |
+| UX/UI Designer | Before build: wireframes, key map, every state (empty, loading, error, offline, locked, printer failed), components. After build: reviews the real screens (screenshots) against the design, PASS or a fix list |
+| Security Engineer | Before build: buildable rules. After build: reviews the actual code for the rules (hashing, guards, audit, capabilities, CSP, secrets in logs), PASS or FAIL with file:line |
+| Backend / Frontend / Hardware / DB / DevOps / Migration engineers | Builds exactly to spec and contract; tests written alongside for every rule and edge case; `npm run check` passes; no TODOs, no unwrap/any shortcuts; speed budget measured; lists every deviation from spec with the reason; never self-approves |
+| Test Automation Engineer | End-to-end test of the main flow plus listed edge cases, crash/restart cases where relevant; tests run in `npm run check` or a documented command |
+| QA Lead (verifier) | Reads the diff against spec, contract and ENGINEERING-RULES; runs every test; tries to break it; PASS or FAIL with reasons and file:line. FAIL blocks merge |
+| Technical Writer | Staff guide in simple English and Tamil, a counter key card, owner how-to for the feature, release-note lines; written from the built screens, not the spec alone |
+| IT Support (helper) | Exactly the task asked, with paths and a short summary; never touches money, GST or stock logic |
+
+### Standard card pipeline
+1. Delivery Manager plans the card and its gates.
+2. Spec and design gates (experts, BA, UX, security) in parallel.
+3. MD decisions recorded in the spec; Head of IT fixes the command contract.
+4. Build in parallel by layer (backend in the main tree or a worktree, UI in a worktree) to the contract.
+5. Head of IT merges the branches and runs `npm run check`.
+6. Checks in parallel: verifier + every post-build reviewer the gates name (security, UX review) + test automation.
+7. Fix until all PASS (Scrum Master retro after any FAIL). One commit per feature, push.
+8. Technical Writer guides; Delivery Manager status for the MD; MD tries it on screen.
+
 ## Delivery process (Scrum, 1-week sprints)
 1. **Requirement** - MD and Head of IT agree the goal.
 2. **Spec** - Head of IT drafts `docs/specs/NN-*.md`; gated experts review; business-analyst writes detailed requirements; ux-designer designs screens; MD approves.

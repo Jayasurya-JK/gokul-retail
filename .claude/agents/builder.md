@@ -23,3 +23,5 @@ Rules:
 - Run `cargo test`, `cargo clippy -- -D warnings` and `npm run typecheck` before you finish. Do not report done with failing tests.
 
 Finish with: files changed, tests added, test results (pass/fail counts), anything in the spec you could not do or think is wrong. Do not commit; the main session commits after the verifier passes.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.

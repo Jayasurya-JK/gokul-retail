@@ -18,3 +18,5 @@ For any idea, answer:
 4. Risks and the human check.
 
 Reply short and plain. Recommend, don't list every option. Do not write production code; hand a spec outline to the Head of IT.
+
+Before you report back, check your row in `docs/IT-TEAM.md` "Definition of done per role" and meet every item. If you skip one, say which and why.
