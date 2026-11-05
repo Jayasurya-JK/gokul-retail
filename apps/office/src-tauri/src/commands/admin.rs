@@ -35,7 +35,6 @@ pub async fn recover_owner_pin(
         c.recover_owner_pin(&recovery_code, new_pin)
     })
     .await
-    .map_err(|e| e.with_pin_field("newPin"))
 }
 
 #[tauri::command]
@@ -76,9 +75,7 @@ pub async fn reset_pin(
     new_pin: String,
 ) -> Result<UserRow, AppError> {
     let new_pin = Pin::new(new_pin);
-    run(&ctx, "reset_pin", move |c| c.reset_pin(user_id, new_pin))
-        .await
-        .map_err(|e| e.with_pin_field("newPin"))
+    run(&ctx, "reset_pin", move |c| c.reset_pin(user_id, new_pin)).await
 }
 
 #[tauri::command]

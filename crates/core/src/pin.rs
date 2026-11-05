@@ -99,8 +99,12 @@ pub fn validate_pin(pin: &str, role: Role) -> std::result::Result<(), PinError> 
     let all_same = d.windows(2).all(|w| w[0] == w[1]);
     let ascending = d.windows(2).all(|w| w[1] - w[0] == 1);
     let descending = d.windows(2).all(|w| w[0] - w[1] == 1);
-    let repeated_halves = d.len().is_multiple_of(2) && d[..d.len() / 2] == d[d.len() / 2..];
-    if all_same || ascending || descending || repeated_halves || DENY_LIST.contains(&pin) {
+    // A short block repeated (1212, 121212, 123123, 696969) or digits in pairs (1122, 112233).
+    let repeated_block = (1..d.len())
+        .filter(|p| d.len().is_multiple_of(*p))
+        .any(|p| (0..d.len()).all(|i| d[i] == d[i % p]));
+    let pairs = d.len().is_multiple_of(2) && d.chunks(2).all(|c| c[0] == c[1]);
+    if all_same || ascending || descending || repeated_block || pairs || DENY_LIST.contains(&pin) {
         return Err(PinError::TooEasy);
     }
     Ok(())
@@ -192,10 +196,20 @@ impl PinHasher for Argon2Hasher {
     }
 
     fn dummy_verify(&self, secret: &str) {
-        let dummy = self
-            .dummy
-            .get_or_init(|| self.hash("dummy-not-a-real-pin").unwrap_or_default());
-        let _ = self.verify(secret, dummy);
+        if let Some(dummy) = self.dummy.get() {
+            let _ = self.verify(secret, dummy);
+            return;
+        }
+        match self.hash("dummy-not-a-real-pin") {
+            Ok(h) => {
+                let _ = self.verify(secret, &h);
+                let _ = self.dummy.set(h);
+            }
+            // Never cache a useless hash: spend the same time on a real one each call.
+            Err(_) => {
+                let _ = self.hash(secret);
+            }
+        }
     }
 }
 
@@ -228,6 +242,11 @@ mod tests {
             ("4321", PinError::TooEasy),
             ("1212", PinError::TooEasy),
             ("123123", PinError::TooEasy),
+            ("121212", PinError::TooEasy),
+            ("696969", PinError::TooEasy),
+            ("9696", PinError::TooEasy),
+            ("112233", PinError::TooEasy),
+            ("4455", PinError::TooEasy),
             ("2580", PinError::TooEasy),
             ("1004", PinError::TooEasy),
             ("2000", PinError::TooEasy),
@@ -282,6 +301,19 @@ mod tests {
         assert!(new.needs_rehash(&phc));
         assert!(new.verify("739158", &phc), "old hashes still verify");
         assert!(new.needs_rehash("garbage"));
+    }
+
+    #[test]
+    fn dummy_verify_never_caches_an_empty_hash() {
+        // Invalid parameters make every hash fail; dummy_verify must neither panic nor cache.
+        let broken = Argon2Hasher::with_params(0, 0, 0);
+        broken.dummy_verify("1234");
+        broken.dummy_verify("1234");
+        assert!(broken.dummy.get().is_none());
+        let ok = cheap();
+        ok.dummy_verify("1234");
+        let cached = ok.dummy.get().expect("cached");
+        assert!(cached.starts_with("$argon2id$"));
     }
 
     #[test]

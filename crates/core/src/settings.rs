@@ -59,11 +59,30 @@ pub(crate) fn set_raw(conn: &Connection, key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-/// Trim, then check 1..=max characters and no control characters. `Err(())` means invalid.
+/// Control characters and invisible formatting characters (zero-width, bidi overrides, byte
+/// order mark, ...) have no place in a name or a bill line: they can hide or reorder text.
+pub(crate) fn is_bad_char(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c as u32,
+            0x00AD
+                | 0x061C
+                | 0x180E
+                | 0x200B..=0x200F
+                | 0x2028..=0x202E
+                | 0x2060..=0x206F
+                | 0xFEFF
+                | 0xFFF9..=0xFFFB
+                | 0xE0000..=0xE007F
+        )
+}
+
+/// Trim, then check 1..=max characters and no control or invisible characters.
+/// `Err(())` means invalid.
 pub(crate) fn clean_name(raw: &str, max: usize) -> std::result::Result<String, ()> {
     let s = raw.trim();
     let n = s.chars().count();
-    if n == 0 || n > max || s.chars().any(char::is_control) {
+    if n == 0 || n > max || s.chars().any(is_bad_char) {
         return Err(());
     }
     Ok(s.to_string())
@@ -85,7 +104,7 @@ fn clean_line(
         }
         return String::new();
     }
-    if s.chars().count() > max || s.chars().any(char::is_control) {
+    if s.chars().count() > max || s.chars().any(is_bad_char) {
         errors.push(FieldError::new(field, long_msg));
     }
     s

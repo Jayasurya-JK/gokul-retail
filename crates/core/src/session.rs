@@ -78,6 +78,9 @@ pub struct Session {
     pub name: String,
     pub must_change_pin: bool,
     pub last_activity_ms: u64,
+    /// Wall-clock time of the last activity. Catches sleep and hibernate, which the
+    /// monotonic timer may not count.
+    pub last_activity_unix: i64,
 }
 
 /// What the UI is told about the signed-in user.
@@ -139,9 +142,33 @@ fn read_user(conn: &Connection, id: i64) -> Result<Option<LiveUser>> {
     }))
 }
 
-fn idle_expired(conn: &Connection, s: &Session, clock: &dyn Clock, app: AppKind) -> Result<bool> {
+/// How the idle check came out.
+enum Idle {
+    Active,
+    /// Idle for longer than the limit by the monotonic timer.
+    Expired,
+    /// The wall clock says idle for too long but the monotonic timer does not: the PC
+    /// slept, or the date was moved forward. `jump_secs` is the wall-clock gap.
+    ExpiredByWallClock {
+        jump_secs: i64,
+    },
+}
+
+fn idle_state(conn: &Connection, s: &Session, clock: &dyn Clock, app: AppKind) -> Result<Idle> {
     let limit = settings::idle_timeout_secs(conn, app)?;
-    Ok(limit > 0 && clock.mono_ms().saturating_sub(s.last_activity_ms) > (limit as u64) * 1000)
+    if limit <= 0 {
+        return Ok(Idle::Active);
+    }
+    if clock.mono_ms().saturating_sub(s.last_activity_ms) > (limit as u64) * 1000 {
+        return Ok(Idle::Expired);
+    }
+    let wall_gap = clock.unix_secs().saturating_sub(s.last_activity_unix);
+    if wall_gap > limit {
+        return Ok(Idle::ExpiredByWallClock {
+            jump_secs: wall_gap,
+        });
+    }
+    Ok(Idle::Active)
 }
 
 /// Any signed-in user. Re-reads role and active flag, applies idle expiry, refreshes the
@@ -160,7 +187,18 @@ pub fn require_login(
         *slot = None;
         return Err(Error::NotLoggedIn);
     };
-    if idle_expired(conn, s, clock, app)? {
+    let idle = idle_state(conn, s, clock, app)?;
+    if !matches!(idle, Idle::Active) {
+        if let Idle::ExpiredByWallClock { jump_secs } = idle {
+            audit::log(
+                conn,
+                Some(s.user_id),
+                event::CLOCK_ANOMALY,
+                &Detail::new(app)
+                    .str("kind", "forward_jump")
+                    .int("jump_secs", jump_secs),
+            )?;
+        }
         let action = match app {
             AppKind::Pos => event::SESSION_IDLE_LOCK,
             AppKind::Office => event::SESSION_IDLE_LOGOUT,
@@ -173,6 +211,7 @@ pub fn require_login(
     s.name = live.name;
     s.must_change_pin = live.must_change_pin;
     s.last_activity_ms = clock.mono_ms();
+    s.last_activity_unix = clock.unix_secs();
     if s.must_change_pin && !allow_pending_pin_change {
         return Err(Error::PinChangeRequired);
     }
@@ -241,7 +280,7 @@ pub fn peek(
     let Some(live) = read_user(conn, s.user_id)? else {
         return Ok(None);
     };
-    if idle_expired(conn, s, clock, app)? {
+    if !matches!(idle_state(conn, s, clock, app)?, Idle::Active) {
         return Ok(None);
     }
     let fresh = Session {

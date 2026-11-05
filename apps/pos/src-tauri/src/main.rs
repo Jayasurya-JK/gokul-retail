@@ -1,5 +1,7 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// A panic here would close the counter app mid-bill: return errors instead.
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 mod commands;
 
@@ -50,6 +52,19 @@ fn main() {
             let status = ctx.startup_status();
             log::info!("{APP_NAME} started, data file state: {:?}", status.db);
             app.manage(ctx);
+
+            // The window is created here (config has `"create": false`) so that scripts and
+            // links cannot open extra windows or pop-ups.
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("no window is configured")?;
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
+                .build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

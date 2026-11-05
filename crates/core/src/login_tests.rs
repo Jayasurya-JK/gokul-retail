@@ -210,7 +210,7 @@ fn clock_moved_back_stays_locked_and_is_audited_once() {
     w.clock.set_unix(t0 - 3600);
     for _ in 0..3 {
         let e = w.office.login(c, pin(CASHIER_PIN)).expect_err("locked");
-        assert!(locked_secs(e) > 30);
+        assert_eq!(locked_secs(e), 30, "re-anchored to a normal lock");
     }
     assert_eq!(w.audit_count(event::CLOCK_ANOMALY), 1);
     w.clock.set_unix(t0 + 31);
@@ -593,12 +593,12 @@ fn change_pin_rules() {
         .office
         .change_pin(pin(CASHIER_PIN), pin(CASHIER_PIN))
         .expect_err("same");
-    assert!(matches!(e, Error::InvalidPin(PinError::SameAsCurrent)));
+    assert!(matches!(e, Error::InvalidNewPin(PinError::SameAsCurrent)));
     let e = w
         .office
         .change_pin(pin(CASHIER_PIN), pin("1234"))
         .expect_err("weak");
-    assert!(matches!(e, Error::InvalidPin(PinError::TooEasy)));
+    assert!(matches!(e, Error::InvalidNewPin(PinError::TooEasy)));
     // A wrong old PIN counts towards the lockout.
     assert_eq!(
         wrong_left(
@@ -627,7 +627,7 @@ fn owner_pin_must_stay_six_digits() {
         .office
         .change_pin(pin(OWNER_PIN), pin("9051"))
         .expect_err("short");
-    assert!(matches!(e, Error::InvalidPin(PinError::OwnerLength)));
+    assert!(matches!(e, Error::InvalidNewPin(PinError::OwnerLength)));
     w.office
         .change_pin(pin(OWNER_PIN), pin("902846"))
         .expect("ok");
@@ -729,7 +729,7 @@ fn owner_recovery_with_code() {
     ));
     assert!(matches!(
         office.recover_owner_pin(&res.recovery_code, pin("1234")),
-        Err(Error::InvalidPin(_))
+        Err(Error::InvalidNewPin(_))
     ));
     match office.recover_owner_pin("AAAA-BBBB-CCCC-DDDD", pin("902846")) {
         Err(Error::WrongRecoveryCode {
@@ -1139,10 +1139,8 @@ fn errors_map_to_the_closed_code_set_and_camel_case_json() {
     .expect("j");
     assert_eq!(v["attemptsBeforeLock"], 2);
     assert!(v.get("secondsLeft").is_none());
-    let v = serde_json::to_value(
-        AppError::from(Error::InvalidPin(PinError::TooEasy)).with_pin_field("newPin"),
-    )
-    .expect("j");
+    let v =
+        serde_json::to_value(AppError::from(Error::InvalidNewPin(PinError::TooEasy))).expect("j");
     assert_eq!(v["fields"][0]["field"], "newPin");
 }
 
@@ -1368,3 +1366,5 @@ fn database_held_by_another_writer_is_reported_as_busy() {
     pos.login(w.cashier_id, pin(CASHIER_PIN))
         .expect("login after release");
 }
+
+mod fix_tests;

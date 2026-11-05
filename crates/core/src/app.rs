@@ -18,6 +18,7 @@ use crate::{paths, Db};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+use zeroize::Zeroize;
 
 /// Lock a mutex, carrying on after a panic elsewhere (the data is still consistent: SQLite
 /// rolls back an unfinished transaction when it is dropped).
@@ -79,17 +80,49 @@ pub struct StatusBarInfo {
     pub last_backup_at: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Result of first-run setup. The recovery code is shown once; it is wiped from memory when
+/// this value is dropped and never printed by `Debug`.
+#[derive(Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupResult {
     pub recovery_code: String,
     pub session: SessionInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+impl std::fmt::Debug for SetupResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SetupResult")
+            .field("recovery_code", &"***")
+            .field("session", &self.session)
+            .finish()
+    }
+}
+
+impl Drop for SetupResult {
+    fn drop(&mut self) {
+        self.recovery_code.zeroize();
+    }
+}
+
+/// Result of owner PIN recovery: the replacement recovery code (same handling as above).
+#[derive(Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryResult {
     pub recovery_code: String,
+}
+
+impl std::fmt::Debug for RecoveryResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecoveryResult")
+            .field("recovery_code", &"***")
+            .finish()
+    }
+}
+
+impl Drop for RecoveryResult {
+    fn drop(&mut self) {
+        self.recovery_code.zeroize();
+    }
 }
 
 pub struct AppContext {
@@ -189,6 +222,8 @@ impl AppContext {
         command: &str,
         f: impl FnOnce(&mut Db, &Identity) -> Result<T>,
     ) -> Result<T> {
+        // Owner commands exist only in Office, whatever the Tauri layer exposes.
+        self.require_office()?;
         let mut g = lock(&self.db);
         let db = g.as_mut().ok_or_else(db_closed)?;
         let who = {
@@ -227,6 +262,7 @@ impl AppContext {
             name: user.name.clone(),
             must_change_pin: user.must_change_pin,
             last_activity_ms: self.clock.mono_ms(),
+            last_activity_unix: self.clock.unix_secs(),
         };
         let info = s.info(self.kind);
         *lock(&self.session) = Some(s);
@@ -297,6 +333,8 @@ impl AppContext {
         let (user, attempt, lock_secs) = match begin {
             Begin::Unavailable => {
                 self.hasher.dummy_verify(pin.as_str());
+                // Logged without the id or any name, so the log cannot echo input.
+                let _ = self.with_db(|db| auth::log_unavailable(db, self.kind));
                 return Err(Error::UserUnavailable);
             }
             Begin::Proceed {
@@ -382,7 +420,7 @@ impl AppContext {
     /// used up; a new one is returned. Wrong codes count against the owner's lockout.
     pub fn recover_owner_pin(&self, code: &str, new_pin: Pin) -> Result<RecoveryResult> {
         self.require_office()?;
-        validate_pin(new_pin.as_str(), Role::Owner).map_err(Error::InvalidPin)?;
+        validate_pin(new_pin.as_str(), Role::Owner).map_err(Error::InvalidNewPin)?;
         let normalized = recovery::normalize(code);
         let now = self.now();
         let (owner_id, stored) = self.with_db(|db| {
@@ -407,7 +445,9 @@ impl AppContext {
                 lock_secs,
             } => (user, attempt, lock_secs),
         };
-        if !self.hasher.verify(&normalized, &stored) {
+        // A code longer than ours cannot be right: count it as a wrong try without hashing.
+        let oversized = normalized.len() > recovery::CODE_LEN;
+        if oversized || !self.hasher.verify(&normalized, &stored) {
             let err = self.with_db(|db| {
                 auth::finish_failure(db, &user, attempt, lock_secs, self.kind, Via::Recovery)
             })?;
@@ -417,7 +457,7 @@ impl AppContext {
         let new_code = recovery::generate()?;
         let new_code_hash = self.hasher.hash(&recovery::normalize(&new_code))?;
         self.with_db(|db| {
-            auth::finish_recovery(db, owner_id, &pin_hash, &new_code_hash, self.kind)
+            auth::finish_recovery(db, owner_id, &stored, &pin_hash, &new_code_hash, self.kind)
         })?;
         Ok(RecoveryResult {
             recovery_code: new_code,
@@ -439,16 +479,20 @@ impl AppContext {
 
     /// Ctrl+L. Ends the Rust session; resuming means signing in again.
     pub fn lock_session(&self) -> Result<()> {
-        self.as_user_pending(|db, who| {
+        let audited = self.as_user_pending(|db, who| {
             audit::log(
                 db.conn(),
                 Some(who.user_id),
                 event::SESSION_LOCK,
                 &Detail::new(self.kind),
             )
-        })?;
+        });
+        // Locking must always work, even if the audit row could not be written.
         *lock(&self.session) = None;
-        Ok(())
+        match audited {
+            Err(e @ (Error::NotLoggedIn | Error::SessionExpired)) => Err(e),
+            _ => Ok(()),
+        }
     }
 
     /// Key-press heartbeat: refreshes the idle timer (the guard does that).
@@ -460,9 +504,9 @@ impl AppContext {
     pub fn change_pin(&self, old_pin: Pin, new_pin: Pin) -> Result<SessionInfo> {
         let who = self.as_user_pending(|_, who| Ok(who.clone()))?;
         check_pin_format(old_pin.as_str()).map_err(Error::InvalidPin)?;
-        validate_pin(new_pin.as_str(), who.role).map_err(Error::InvalidPin)?;
+        validate_pin(new_pin.as_str(), who.role).map_err(Error::InvalidNewPin)?;
         if old_pin.as_str() == new_pin.as_str() {
-            return Err(Error::InvalidPin(PinError::SameAsCurrent));
+            return Err(Error::InvalidNewPin(PinError::SameAsCurrent));
         }
         let now = self.now();
         let begin = self
@@ -512,6 +556,7 @@ impl AppContext {
 
     /// Office navigation check: cashiers are refused (and audited) for owner-only screens.
     pub fn open_screen(&self, screen: &str) -> Result<()> {
+        self.require_office()?;
         let screen = Screen::parse(screen).ok_or(Error::NotFound("Screen"))?;
         self.as_screen("open_screen", screen, |_, _| Ok(()))
     }
@@ -535,7 +580,7 @@ impl AppContext {
     pub fn reset_pin(&self, user_id: i64, new_pin: Pin) -> Result<UserRow> {
         let now = self.now();
         let target = self.as_owner("reset_pin", |db, _| auth::user_row(db.conn(), user_id, now))?;
-        validate_pin(new_pin.as_str(), target.role).map_err(Error::InvalidPin)?;
+        validate_pin(new_pin.as_str(), target.role).map_err(Error::InvalidNewPin)?;
         let hash = self.hasher.hash(new_pin.as_str())?;
         self.as_owner("reset_pin", |db, who| {
             auth::reset_pin(db, who.user_id, user_id, &hash, now, self.kind)

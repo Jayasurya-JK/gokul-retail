@@ -56,8 +56,13 @@ pub enum Error {
     Pragma(&'static str),
 
     // ---- login, session and permissions (spec 00 step 3) ----
+    /// A bad PIN typed in the "PIN" field (login, first run, new cashier, old PIN).
     #[error("{0}")]
     InvalidPin(PinError),
+
+    /// A bad PIN typed in the "new PIN" field (change, reset, recovery).
+    #[error("{0}")]
+    InvalidNewPin(PinError),
 
     #[error("Wrong PIN.")]
     WrongPin { attempts_before_lock: u32 },
@@ -129,6 +134,7 @@ impl Error {
                 format!("Stock could not be updated: {self}")
             }
             Error::InvalidPin(_)
+            | Error::InvalidNewPin(_)
             | Error::Locked { .. }
             | Error::UserUnavailable
             | Error::NotLoggedIn
