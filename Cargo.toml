@@ -9,6 +9,15 @@ license = "UNLICENSED"
 publish = false
 
 # Small installer, no panic=abort (the panic hook in step 4 needs unwinding).
+# Argon2 is slow when unoptimised; keep dev and test runs close to real timing.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.test.package.argon2]
+opt-level = 3
+# The release profile is size-optimised ("s"); the PIN hash must still run at full speed.
+[profile.release.package.argon2]
+opt-level = 3
+
 [profile.release]
 lto = true
 opt-level = "s"

@@ -5,7 +5,10 @@ use crate::error::{Error, Result};
 use rusqlite::{Connection, TransactionBehavior};
 
 /// (version, SQL). Versions must be 1, 2, 3 ... with no gaps.
-pub const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("../migrations/001_init.sql"))];
+pub const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../migrations/001_init.sql")),
+    (2, include_str!("../migrations/002_login.sql")),
+];
 
 /// Highest schema version this build understands.
 pub fn latest_version() -> i64 {
