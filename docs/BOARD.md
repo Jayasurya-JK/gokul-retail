@@ -48,9 +48,9 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 
 | Role | Task | Branch / worktree | State | Next step |
 |---|---|---|---|---|
-| builder | S0-3 backend fix batch: security M1, M2, L1-L7, L9-L13; QA-7, 8, 9; cargo audit | feat/S0-3-fix-be / .claude/worktrees/agent-a76827da5223d169a | running (resumed after limit) | commit, report -> Head of IT merges into feat/S0-3 |
+| builder | S0-3 backend fix batch DONE (34e27d9, merged 68ea383; cargo audit 0 vulns). Now: fix e2e compile break (SetupResult/RecoveryResult Drop) | feat/S0-3-fix-be2 / .claude/worktrees/agent-a76827da5223d169a | running | commit, report -> merge |
 | ui-builder | S0-3 UI fix batch: QA-2, 3, 4, 5, 6, 8, 10, 11 | feat/S0-3-fix-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running (resumed after limit) | commit, report -> merge |
-| test-automation-engineer | S0-3 Rust e2e flows (8) + dev-only browser preview mode | feat/S0-3-e2e / .claude/worktrees/agent-a9883aa84b28dfc7b | running (resumed, uncommitted work present) | commit, rebase on feat/S0-3, report -> merge |
+| test-automation-engineer | S0-3 Rust e2e flows (11) + dev-only browser preview | feat/S0-3-e2e (f9d6936) | DONE, merged into feat/S0-3 | - |
 | scrum-master | S0-3 retro -> Lessons in docs/IT-TEAM.md | main tree, feat/S0-3 | DONE 5 Nov 2026 (3 Lessons lines) | - |
 | Head of IT | after the 3 branches merge | feat/S0-3 | waiting | npm run check -> verifier + security re-check of fixes -> preview screenshots -> ux-designer review -> merge to main -> technical-writer -> delivery-manager status |
 
