@@ -93,6 +93,9 @@ Every agent finishes its whole job, not part of it. Before reporting back, each 
 | Technical Writer | Staff guide in simple English and Tamil, a counter key card, owner how-to for the feature, release-note lines; written from the built screens, not the spec alone |
 | IT Support (helper) | Exactly the task asked, with paths and a short summary; never touches money, GST or stock logic |
 
+### Stops and restarts (MD direction 5 Nov 2026)
+Plan limits and stops are normal. Like a shift handover, every piece of work must be resumable: the Head of IT records each dispatched task in `docs/BOARD.md` "In flight (handover)" (role, task, branch/worktree, state, next step) before it starts, and updates it when it returns. Builders commit small steps on their branch so a restart loses little. On "continue", resume each row where it stopped; do not redo finished work and do not spend tokens re-explaining.
+
 ### Standard card pipeline
 1. Delivery Manager plans the card and its gates.
 2. Spec and design gates (experts, BA, UX, security) in parallel.
@@ -128,3 +131,6 @@ GitHub (private): https://github.com/Jayasurya-JK/gokul-retail - `main` is alway
 
 ## Lessons
 (scrum-master adds process changes here after retros)
+- 5 Nov 2026 (S0-3, QA + security FAIL): every command contract error code with `fields` states where each field error shows on screen, including fields not on that screen; every one-time secret has a close guard and a compare-and-swap; every PC-clock lock or timer is bounded for clock jumps backwards and forwards.
+- 5 Nov 2026 (S0-3, QA FAIL): UI tests assert behaviour (key press, call made, message shown), never fixture values, and each app's `api.ts` has a contract test on a mocked `invoke`; a new parallel worktree folder is excluded from lint and git in the same card, so the shared `npm run check` gate stays green.
+- 5 Nov 2026 (MD direction): work stopped by the plan limit resumes from the `docs/BOARD.md` "In flight (handover)" section when the MD says "continue", and the Head of IT records each dispatched task there before it starts.

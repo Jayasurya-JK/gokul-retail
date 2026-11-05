@@ -11,7 +11,7 @@ Roles and process: see `docs/IT-TEAM.md`.
 ## Now
 | Card | Spec / step | Who | Status |
 |---|---|---|---|
-| S0-3 | 00 shells and login (migration 002) | builder (core+commands, main tree) + ui-builder (screens, worktree feat/S0-3-ui) in parallel -> verifier | building |
+| S0-3 | 00 shells and login (migration 002) | built: backend ba91a37 + screens fec6aff merged on feat/S0-3. Checks running: verifier, security-engineer, test-automation (e2e + preview); then ux-designer screenshot review | fixing (QA + security FAIL, narrow) |
 
 ### S0-3 plan (remaining pipeline, to contract `docs/specs/00-step3-login-security.md`)
 | # | Step | Role | Runs |
@@ -42,6 +42,17 @@ Roles and process: see `docs/IT-TEAM.md`.
 - POSBean save key and F-keys (spec defaults: F10 and Ctrl+S both work).
 - CA to confirm: GST regular vs composition, and whether GSTIN/FSSAI must print on bills (optional for now).
 - Printer paper width (58 or 80 mm) and Tamil printing on bills.
+
+## In flight (handover) - Head of IT updates this at every dispatch and every return
+If work stops (plan limit, crash, new session), the MD says "continue": the Head of IT reads this table and resumes each row where it stopped - same session: resume the same agent (SendMessage); new session: start the same role on the same branch/worktree with "continue from the branch state and the task below". Never restart finished work.
+
+| Role | Task | Branch / worktree | State | Next step |
+|---|---|---|---|---|
+| builder | S0-3 backend fix batch: security M1, M2, L1-L7, L9-L13; QA-7, 8, 9; cargo audit | feat/S0-3-fix-be / .claude/worktrees/agent-a76827da5223d169a | running (resumed after limit) | commit, report -> Head of IT merges into feat/S0-3 |
+| ui-builder | S0-3 UI fix batch: QA-2, 3, 4, 5, 6, 8, 10, 11 | feat/S0-3-fix-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running (resumed after limit) | commit, report -> merge |
+| test-automation-engineer | S0-3 Rust e2e flows (8) + dev-only browser preview mode | feat/S0-3-e2e / .claude/worktrees/agent-a9883aa84b28dfc7b | running (resumed, uncommitted work present) | commit, rebase on feat/S0-3, report -> merge |
+| scrum-master | S0-3 retro -> Lessons in docs/IT-TEAM.md | main tree, feat/S0-3 | DONE 5 Nov 2026 (3 Lessons lines) | - |
+| Head of IT | after the 3 branches merge | feat/S0-3 | waiting | npm run check -> verifier + security re-check of fixes -> preview screenshots -> ux-designer review -> merge to main -> technical-writer -> delivery-manager status |
 
 ## Done
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
