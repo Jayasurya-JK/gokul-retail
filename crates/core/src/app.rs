@@ -156,6 +156,9 @@ impl Drop for RecoveryResult {
     }
 }
 
+/// Longest recovery-code text accepted from the UI (the code is 16 characters plus dashes).
+const MAX_RECOVERY_INPUT_BYTES: usize = 64;
+
 pub struct AppContext {
     kind: AppKind,
     db_path: Option<PathBuf>,
@@ -365,7 +368,7 @@ impl AppContext {
             Begin::Unavailable => {
                 self.hasher.dummy_verify(pin.as_str());
                 // Logged without the id or any name, so the log cannot echo input.
-                let _ = self.with_db(|db| auth::log_unavailable(db, self.kind));
+                let _ = self.with_db(|db| auth::log_unavailable(db, self.kind, self.now()));
                 return Err(Error::UserUnavailable);
             }
             Begin::Proceed {
@@ -452,7 +455,13 @@ impl AppContext {
     pub fn recover_owner_pin(&self, code: &str, new_pin: Pin) -> Result<RecoveryResult> {
         self.require_office()?;
         validate_pin(new_pin.as_str(), Role::Owner).map_err(Error::InvalidNewPin)?;
-        let normalized = recovery::normalize(code);
+        // Anything over 64 bytes is not a recovery code: do not even normalize it.
+        let too_long = code.len() > MAX_RECOVERY_INPUT_BYTES;
+        let normalized = if too_long {
+            String::new()
+        } else {
+            recovery::normalize(code)
+        };
         let now = self.now();
         let (owner_id, stored) = self.with_db(|db| {
             let id = auth::first_active_owner(db.conn())?.ok_or(Error::NotFound("Owner"))?;
@@ -477,7 +486,7 @@ impl AppContext {
             } => (user, attempt, lock_secs),
         };
         // A code longer than ours cannot be right: count it as a wrong try without hashing.
-        let oversized = normalized.len() > recovery::CODE_LEN;
+        let oversized = too_long || normalized.len() > recovery::CODE_LEN;
         if oversized || !self.hasher.verify(&normalized, &stored) {
             let err = self.with_db(|db| {
                 auth::finish_failure(db, &user, attempt, lock_secs, self.kind, Via::Recovery)
@@ -522,7 +531,11 @@ impl AppContext {
         *lock(&self.session) = None;
         match audited {
             Err(e @ (Error::NotLoggedIn | Error::SessionExpired)) => Err(e),
-            _ => Ok(()),
+            Err(e) => {
+                log::warn!("session locked, but the audit row could not be written: {e}");
+                Ok(())
+            }
+            Ok(()) => Ok(()),
         }
     }
 

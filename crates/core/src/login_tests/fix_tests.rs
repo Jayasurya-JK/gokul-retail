@@ -207,7 +207,13 @@ fn unknown_user_login_is_logged_without_id_or_name() {
         )
         .expect("row");
     assert_eq!(uid, None);
-    assert_eq!(detail, r#"{"app":"office","reason":"unavailable"}"#);
+    assert_eq!(
+        detail,
+        format!(
+            r#"{{"app":"office","reason":"unavailable","at":{}}}"#,
+            w.clock.unix()
+        )
+    );
 }
 
 #[test]

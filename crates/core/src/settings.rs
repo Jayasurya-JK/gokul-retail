@@ -77,12 +77,35 @@ pub(crate) fn is_bad_char(c: char) -> bool {
         )
 }
 
+/// Indic letters and vowel signs (Devanagari to Malayalam blocks, which include Tamil
+/// U+0B80-U+0BFF). Digits, spaces and punctuation do not count.
+fn is_indic_letter_or_mark(c: char) -> bool {
+    (0x0900..=0x0DFF).contains(&(c as u32)) && !c.is_numeric() && !c.is_whitespace()
+}
+
+/// True if the text holds a control or invisible character. The zero-width joiner and
+/// non-joiner (U+200D, U+200C) are allowed only between two Indic letters or marks, where
+/// Tamil and other Indic scripts need them for correct shaping.
+pub(crate) fn has_bad_chars(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    chars.iter().enumerate().any(|(i, &c)| {
+        if c == '\u{200C}' || c == '\u{200D}' {
+            let before = i.checked_sub(1).and_then(|j| chars.get(j));
+            let after = chars.get(i + 1);
+            !matches!((before, after),
+                (Some(&b), Some(&a)) if is_indic_letter_or_mark(b) && is_indic_letter_or_mark(a))
+        } else {
+            is_bad_char(c)
+        }
+    })
+}
+
 /// Trim, then check 1..=max characters and no control or invisible characters.
 /// `Err(())` means invalid.
 pub(crate) fn clean_name(raw: &str, max: usize) -> std::result::Result<String, ()> {
     let s = raw.trim();
     let n = s.chars().count();
-    if n == 0 || n > max || s.chars().any(is_bad_char) {
+    if n == 0 || n > max || has_bad_chars(s) {
         return Err(());
     }
     Ok(s.to_string())
@@ -104,7 +127,7 @@ fn clean_line(
         }
         return String::new();
     }
-    if s.chars().count() > max || s.chars().any(is_bad_char) {
+    if s.chars().count() > max || has_bad_chars(&s) {
         errors.push(FieldError::new(field, long_msg));
     }
     s
@@ -195,7 +218,10 @@ fn normalize_fssai(raw: &str) -> std::result::Result<String, String> {
         return Ok(s);
     }
     let n = s.chars().count();
-    if !s.chars().all(|c| c.is_ascii_digit()) || n != 14 {
+    if !s.chars().all(|c| c.is_ascii_digit()) {
+        return Err("FSSAI number can have digits only.".to_string());
+    }
+    if n != 14 {
         return Err(format!("FSSAI number must be 14 digits. You typed {n}."));
     }
     Ok(s)
@@ -516,6 +542,41 @@ mod tests {
             Err("FSSAI number must be 14 digits. You typed 13.".to_string())
         );
         assert!(normalize_fssai("1234567890123x").is_err());
+    }
+
+    #[test]
+    fn fssai_letters_get_the_digits_only_message() {
+        assert_eq!(
+            normalize_fssai("ABCDEFGHIJKLMN"),
+            Err("FSSAI number can have digits only.".to_string())
+        );
+        assert_eq!(
+            normalize_fssai("1234567890123x"),
+            Err("FSSAI number can have digits only.".to_string())
+        );
+        assert_eq!(
+            normalize_fssai("123"),
+            Err("FSSAI number must be 14 digits. You typed 3.".to_string())
+        );
+    }
+
+    #[test]
+    fn joiners_are_allowed_only_between_indic_letters() {
+        // Tamil conjunct with a joiner / non-joiner after the virama or between letters.
+        assert!(!has_bad_chars("க\u{0BCD}\u{200D}ஷ"));
+        assert!(!has_bad_chars("க\u{200C}ஷ"));
+        assert!(!has_bad_chars("செல்வி Gokul"));
+        // At the start, at the end, next to a space, a digit or Latin letters: refused.
+        assert!(has_bad_chars("\u{200D}க"));
+        assert!(has_bad_chars("க\u{200D}"));
+        assert!(has_bad_chars("க \u{200D}ஷ"));
+        assert!(has_bad_chars("க\u{200D} ஷ"));
+        assert!(has_bad_chars("a\u{200D}b"));
+        assert!(has_bad_chars("\u{0BE7}\u{200C}ஷ"));
+        // Everything else invisible stays refused, even between Tamil letters.
+        assert!(has_bad_chars("க\u{200B}ஷ"));
+        assert!(has_bad_chars("க\u{202E}ஷ"));
+        assert!(has_bad_chars("க\u{FEFF}ஷ"));
     }
 
     #[test]
