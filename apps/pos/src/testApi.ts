@@ -24,8 +24,8 @@ export function makeApi(over: Partial<Record<keyof Api, unknown>> = {}): Api & R
     startupStatus: vi.fn(() => Promise.resolve(okStatus)),
     listLoginUsers: vi.fn(() =>
       Promise.resolve([
-        { id: 1, name: "Gokul" },
-        { id: 2, name: "Ravi Kumar" },
+        { id: 1, name: "Gokul", role: "owner" as const },
+        { id: 2, name: "Ravi Kumar", role: "cashier" as const },
       ]),
     ),
     login: vi.fn(() => Promise.resolve(cashier)),

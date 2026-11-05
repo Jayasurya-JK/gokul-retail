@@ -228,7 +228,7 @@ function Root({ api }: { api: Api }) {
           login={api.login}
           onSignedIn={signedIn}
           notice={phase.notice ? <Banner kind="ok">{phase.notice}</Banner> : null}
-          extraKeys={[{ keys: ["F4"], label: "Forgot owner PIN", run: () => setPhase({ kind: "recover" }) }]}
+          ownerKey={{ keys: ["F4"], label: "Forgot owner PIN", run: () => setPhase({ kind: "recover" }) }}
         />
       );
       break;

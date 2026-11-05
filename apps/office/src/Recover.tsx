@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banner,
   Button,
   FormGrid,
   LAYER,
+  LockedNotice,
   PinField,
   TextField,
   beep,
@@ -31,10 +32,17 @@ export function Recover({ onRecovered, onBack }: RecoverProps) {
   const [errors, setErrors] = useState<{ code?: string; pin?: string; confirm?: string }>({});
   const [general, setGeneral] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [lockSecs, setLockSecs] = useState<number | null>(null);
   const busy = useRef(false);
+  const wasLocked = useRef(false);
   const codeRef = useRef<HTMLInputElement | null>(null);
   const pinRef = useRef<HTMLInputElement | null>(null);
   useInitialFocus(() => codeRef.current);
+  useEffect(() => {
+    // The lock ended: the cursor goes back to the code box.
+    if (lockSecs === null && wasLocked.current) codeRef.current?.focus();
+    wasLocked.current = lockSecs !== null;
+  }, [lockSecs]);
 
   const keys = useMemo<Binding[]>(
     () => [
@@ -71,11 +79,18 @@ export function Recover({ onRecovered, onBack }: RecoverProps) {
         setConfirm("");
         pinRef.current?.focus();
       } else {
-        setGeneral(backendMessage(err)); // e.g. the recovery-code message, never "Wrong PIN"
-        if (err.code === "WRONG_PIN" || err.code === "PERMISSION_DENIED") {
+        if (err.code === "LOCKED") {
+          setCode("");
+          setLockSecs(err.secondsLeft ?? 30);
+          beep();
+        } else if (err.code === "WRONG_PIN") {
+          const n = err.attemptsBeforeLock;
+          setGeneral(typeof n === "number" ? `Wrong recovery code. ${n} ${n === 1 ? "try" : "tries"} left.` : "Wrong recovery code.");
           setCode("");
           beep();
           codeRef.current?.focus();
+        } else {
+          setGeneral(backendMessage(err));
         }
       }
     } finally {
@@ -89,6 +104,18 @@ export function Recover({ onRecovered, onBack }: RecoverProps) {
       <h1 className="gk-content-title">Forgot the owner PIN</h1>
       <p>Type the 16-character recovery code that was written down when Gokul Office was first set up.</p>
       {general ? <Banner kind="error">{general}</Banner> : null}
+      {lockSecs !== null ? (
+        <LockedNotice
+          key={lockSecs}
+          userName="The owner"
+          what="recovery codes"
+          advice="Wait, then try again."
+          seconds={lockSecs}
+          onDone={() => {
+            setLockSecs(null);
+          }}
+        />
+      ) : null}
       <FormGrid onLast={() => void submit()}>
         <TextField
           label="Recovery code"

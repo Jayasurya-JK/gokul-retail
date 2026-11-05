@@ -30,6 +30,21 @@ const shop: ShopSettings = {
 const ids = (b: ReturnType<typeof createFakeBackend>) => Object.fromEntries(b.listLoginUsers().map((u) => [u.name, u.id])) as Record<string, number>;
 
 describe("preview fake backend mirrors the contract", () => {
+  it("login list carries the role; a wrong recovery code returns tries left", () => {
+    const b = createFakeBackend({ kind: "office", scenario: "ready" });
+    const list = b.listLoginUsers();
+    expect(list.some((u) => u.role === "owner")).toBe(true);
+    expect(list.every((u) => u.role === "owner" || u.role === "cashier")).toBe(true);
+    let err: AppError | undefined;
+    try {
+      b.recoverOwnerPin("WRONGCODE0000000", "135790");
+    } catch (e) {
+      err = e as AppError;
+    }
+    expect(err?.code).toBe("WRONG_PIN");
+    expect(err?.attemptsBeforeLock).toBeGreaterThan(0);
+  });
+
   it("first run: POS refuses until Office has set up the shop", async () => {
     const pos = createFakeBackend({ kind: "pos", scenario: "fresh" });
     expect(pos.startupStatus()).toMatchObject({ setupComplete: false, usersExist: false });

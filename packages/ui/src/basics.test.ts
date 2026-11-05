@@ -112,6 +112,11 @@ describe("theme.css (design system section 10)", () => {
     expect(css).not.toMatch(/transform/);
     expect(css).not.toMatch(/box-shadow/);
   });
+  it("a focused selected row shows every muted cell in the selection text colour (UX Must 1)", () => {
+    expect(css).toMatch(/\.gk-list:focus \.gk-list-row\[aria-selected="true"\] \.gk-muted[\s\S]*?color:\s*var\(--gk-select-text\)/);
+    expect(css).toMatch(/--gk-select-bg: #003a9b/);
+    expect(css).toMatch(/--gk-select-text: #ffffff/);
+  });
   it("uses only weights 400 and 600", () => {
     const weights = [...css.matchAll(/font-weight:\s*(\d+)/g)].map((m) => m[1]);
     for (const w of weights) expect(["400", "600"]).toContain(w);

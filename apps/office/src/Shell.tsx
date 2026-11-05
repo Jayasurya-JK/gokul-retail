@@ -35,6 +35,10 @@ import { Settings } from "./Settings";
 import { Users } from "./Users";
 
 const SIGNED_OUT_NOTICE = "You have been signed out. Please sign in again.";
+const HELP_EXTRA = [
+  { keys: "Alt+D / I / S / P / K / C / R / U / T", label: "Go to Dashboard, Items, Stock, Production, Packing, Purchases, Reports, Users, Settings" },
+];
+
 const IDLE_NOTICE = "Logged out after 10 minutes idle.";
 
 const ALL_ITEMS: (MenuItem & { id: Screen })[] = [
@@ -310,7 +314,7 @@ export function Shell({
           getUnsaved={() => (unsavedWhat() ? S.titles[screen] : null)}
         />
       ) : null}
-      {help ? <HelpOverlay onClose={closeHelp} /> : null}
+      {help ? <HelpOverlay onClose={closeHelp} extra={HELP_EXTRA} /> : null}
       {prompt ? (
         <Dialog title="Owner account created" buttons={promptButtons} onCancel={() => setPrompt(false)} cancelLabel="Later">
           <p>Next, enter your shop details (name, address, phone, GSTIN).</p>

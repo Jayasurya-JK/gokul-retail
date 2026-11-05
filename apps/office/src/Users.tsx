@@ -30,12 +30,11 @@ type Modal =
   | { kind: "deactivate"; user: UserRow }
   | null;
 
-function statusText(u: UserRow): string {
+/** `elapsed` = seconds since the list was read; the countdown starts from the backend's seconds left. */
+function statusText(u: UserRow, elapsed: number): string {
   if (!u.active) return "Switched off";
-  if (u.lockedSecondsLeft > 0) {
-    const m = Math.ceil(u.lockedSecondsLeft / 60);
-    return `Locked (about ${m} min)`;
-  }
+  const left = u.lockedSecondsLeft - elapsed;
+  if (left > 0) return left < 60 ? `Locked (${left} s left)` : `Locked (${Math.ceil(left / 60)} min left)`;
   return u.mustChangePin ? "Must change PIN" : "Active";
 }
 
@@ -54,6 +53,8 @@ export interface UsersProps {
 export function Users({ focusMenu, onApiError }: UsersProps) {
   const api = useApi();
   const [rows, setRows] = useState<UserRow[] | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const loadedAt = useRef(0);
   const [loadError, setLoadError] = useState(false);
   const [reload, setReload] = useState(0);
   const [selectedId, setSelectedId] = useState<number | string | null>(null);
@@ -68,6 +69,8 @@ export function Users({ focusMenu, onApiError }: UsersProps) {
     api.listUsers().then(
       (list) => {
         if (cancelled) return;
+        loadedAt.current = Date.now();
+        setElapsed(0);
         setRows(list);
         setLoadError(false);
         setSelectedId((cur) => (cur !== null && list.some((u) => u.id === cur) ? cur : (list[0]?.id ?? null)));
@@ -83,6 +86,14 @@ export function Users({ focusMenu, onApiError }: UsersProps) {
   }, [api, reload, onApiError]);
 
   useInitialFocus(() => listRef.current, [rows !== null]);
+
+  // Tick once a second, only while this screen is open and someone is still locked.
+  const anyLocked = (rows ?? []).some((r) => r.active && r.lockedSecondsLeft - elapsed > 0);
+  useEffect(() => {
+    if (!anyLocked) return;
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - loadedAt.current) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [anyLocked]);
 
   const selected = rows?.find((u) => u.id === selectedId) ?? null;
 
@@ -170,7 +181,7 @@ export function Users({ focusMenu, onApiError }: UsersProps) {
   const items: ListItem[] = (rows ?? []).map((u) => ({
     id: u.id,
     label: u.name,
-    right: `${u.role === "owner" ? "Owner" : "Cashier"}  -  ${statusText(u)}`,
+    right: `${u.role === "owner" ? "Owner" : "Cashier"}  -  ${statusText(u, elapsed)}`,
   }));
 
   const closeModal = () => setModal(null);

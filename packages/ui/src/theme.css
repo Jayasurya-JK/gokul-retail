@@ -442,6 +442,17 @@ textarea:focus {
   padding-left: calc(var(--gk-s3) - 0px);
 }
 
+/* A selected row never shows muted text: every cell takes the selection text colour at full strength. */
+.gk-list:focus .gk-list-row[aria-selected="true"] .gk-muted,
+.gk-list:focus-within .gk-list-row[aria-selected="true"] .gk-muted {
+  color: var(--gk-select-text);
+}
+
+.gk-help-table td:first-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
 .gk-list-empty {
   padding: var(--gk-s3);
   color: var(--gk-text-muted);

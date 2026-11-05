@@ -84,21 +84,33 @@ export interface PinPromptProps {
   onLockedChange?: (locked: boolean) => void;
   /** The backend says this user no longer exists or was switched off. */
   onUserGone?: () => void;
-  pinRef?: React.Ref<HTMLInputElement>;
+  pinRef?: (el: HTMLInputElement | null) => void;
 }
 
-function LockedNotice({ userName, seconds, onDone }: { userName: string; seconds: number; onDone: () => void }) {
+/** "Too many wrong PINs. Ravi cannot sign in for 30 more seconds." Ticks every second, ends at 0. */
+export function LockedNotice({
+  userName,
+  seconds,
+  onDone,
+  what = "PINs",
+  advice = "Ask the owner to unlock, or choose another name.",
+}: {
+  userName: string;
+  seconds: number;
+  onDone: () => void;
+  what?: string;
+  advice?: string;
+}) {
   const left = useCountdown(seconds);
   const [until] = useState(() => new Date(Date.now() + seconds * 1000));
   useEffect(() => {
     if (left <= 0) onDone();
   }, [left, onDone]);
-  const mins = Math.floor(left / 60);
-  const rest = left % 60;
-  const remaining = left >= 120 ? `${Math.ceil(left / 60)} minutes` : mins >= 1 ? `${mins} min ${rest} s` : `${left} s`;
+  const long = left >= 120;
+  const amount = long ? `${Math.ceil(left / 60)} more minutes` : `${left} more ${left === 1 ? "second" : "seconds"}`;
   return (
     <div role="alert" className="gk-banner gk-banner-error">
-      {`Too many wrong PINs. ${userName} cannot sign in until ${formatTime(until)} (${remaining} left). Ask the owner to unlock, or choose another name.`}
+      {`Too many wrong ${what}. ${userName} cannot sign in for ${amount}${long ? ` (until ${formatTime(until)})` : ""}. ${advice}`}
     </div>
   );
 }
@@ -114,6 +126,20 @@ export function PinPrompt({ userName, check, onEscape, onLockedChange, onUserGon
   const [lock, setLock] = useState<number | null>(null);
   const busy = useRef(false);
   const lockRef = useLatest(onLockedChange);
+  const inputEl = useRef<HTMLInputElement | null>(null);
+  const wasLocked = useRef(false);
+  const setInput = (el: HTMLInputElement | null) => {
+    inputEl.current = el;
+    pinRef?.(el);
+  };
+  useEffect(() => {
+    // The lock ended: the PIN box is back, put the cursor in it.
+    if (lock === null && wasLocked.current) {
+      wasLocked.current = false;
+      inputEl.current?.focus();
+    }
+    if (lock !== null) wasLocked.current = true;
+  }, [lock]);
 
   const submit = async () => {
     if (busy.current) return; // double Enter while checking sends one check only
@@ -189,7 +215,7 @@ export function PinPrompt({ userName, check, onEscape, onLockedChange, onUserGon
         onScan={() => setMessage({ kind: "error", text: "That looked like a barcode scan. Type your PIN." })}
         onNumLockOff={() => setMessage({ kind: "error", text: "Num Lock is off - press Num Lock to type numbers." })}
         readOnly={checking}
-        inputRef={pinRef}
+        inputRef={setInput}
       />
       <div
         className={message?.kind === "error" ? "gk-message gk-message-error" : "gk-message"}
@@ -214,15 +240,18 @@ export interface LoginScreenProps {
   notice?: ReactNode;
   /** Extra keys for this app (Office: forgot owner PIN). */
   extraKeys?: Binding[];
+  /** A key only the owner can use (Office: forgot PIN). Shown in the legend only while an owner is chosen. */
+  ownerKey?: { keys: string[]; label: string; run: () => void };
 }
 
 type UsersState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; users: LoginUser[] };
 
-export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, notice, extraKeys = [] }: LoginScreenProps) {
+export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, notice, extraKeys = [], ownerKey }: LoginScreenProps) {
   const [state, setState] = useState<UsersState>({ kind: "loading" });
   const [reload, setReload] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [ownerOnly, setOwnerOnly] = useState(false);
   const [gone, setGone] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const pinRef = useRef<HTMLInputElement | null>(null);
@@ -293,9 +322,37 @@ export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, n
   useKeymap(hints, { layer: LAYER.app });
   useKeymap(extraKeys, { layer: LAYER.screen });
 
+
   const users = state.kind === "ready" ? state.users : [];
-  const items: ListItem[] = users.map((u) => ({ id: u.id, label: u.name }));
+  const items: ListItem[] = users.map((u) => ({ id: u.id, label: u.name, right: u.role === "owner" ? "Owner" : "Cashier" }));
   const selected = users.find((u) => u.id === selectedId);
+  useEffect(() => {
+    selectedRef.current = selected;
+  });
+  const ownerChosen = selected?.role === "owner";
+  const selectedRef = useRef<LoginUser | undefined>(undefined);
+  const ownerBindings = useMemo<Binding[]>(
+    () =>
+      ownerKey
+        ? [
+            {
+              keys: ownerKey.keys,
+              label: ownerKey.label,
+              showInLegend: () => ownerChosen,
+              run: () => {
+                if (selectedRef.current?.role === "owner") ownerKey.run();
+                else {
+                  beep();
+                  setOwnerOnly(true);
+                }
+              },
+            },
+          ]
+        : [],
+    [ownerKey, ownerChosen],
+  );
+  // Registered on the app layer before the app's own F1, so the legend shows it after F1.
+  useKeymap(ownerBindings, { layer: LAYER.app });
 
   return (
     <div className="gk-center">
@@ -318,6 +375,7 @@ export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, n
               onSelect={(id) => {
                 setSelectedId(Number(id));
                 setHint(null);
+                setOwnerOnly(false);
               }}
               onChoose={(id) => {
                 setSelectedId(Number(id));
@@ -332,10 +390,13 @@ export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, n
             {hint ? <p className="gk-warn-text">{hint}</p> : null}
           </div>
           {selected ? (
+            <div>
             <PinPrompt
               key={selected.id}
               userName={selected.name}
-              pinRef={pinRef}
+              pinRef={(el) => {
+                pinRef.current = el;
+              }}
               check={async (pin) => {
                 const session = await login(selected.id, pin);
                 onSignedIn(session);
@@ -351,6 +412,12 @@ export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, n
                 setReload((n) => n + 1);
               }}
             />
+            {ownerOnly ? (
+              <div className="gk-message gk-message-error" role="alert">
+                ! Only the owner uses a recovery code. Ask the owner to reset your PIN.
+              </div>
+            ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -420,7 +487,9 @@ export function LockScreen({
           <p className="gk-muted">{`Locked at ${formatTime(lockedAt)}`}</p>
           <PinPrompt
             userName={userName}
-            pinRef={pinRef}
+            pinRef={(el) => {
+                pinRef.current = el;
+              }}
             check={async (pin) => {
               const session = await login(userId, pin);
               onUnlocked(session);

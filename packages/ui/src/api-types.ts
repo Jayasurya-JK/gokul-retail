@@ -25,6 +25,7 @@ export interface SessionInfo {
 export interface LoginUser {
   id: number;
   name: string;
+  role: Role;
 }
 
 export interface StartupStatus {
