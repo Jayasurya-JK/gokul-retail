@@ -50,13 +50,19 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 |---|---|---|---|---|
 | builder (Sonnet) | S0-3 final batch BE: queued (a)-(e), (g); UX 7, 9, 22 check; LoginUser.role | feat/S0-3-final-be / .claude/worktrees/agent-a76827da5223d169a | running | commit, report -> merge |
 | ui-builder (Sonnet) | S0-3 final batch UI: UX Must 1, 2; UX 3, 6, 7, 15 (role column); queued (e) hint, (f) test | feat/S0-3-final-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running | commit, report -> merge |
-| verifier (Sonnet) | short re-check of the final batch | feat/S0-3 | waiting | PASS/FAIL |
-| Head of IT | after PASS | feat/S0-3 | waiting | merge to main, push -> technical-writer (Haiku) -> delivery-manager status (Sonnet) |
+| Head of IT | merge both branches, `npm run check` (no agent re-review; QA + security already PASS) | feat/S0-3 | waiting | merge to main, push. Staff guide deferred until billing works. |
 | Deferred to B-6/B-7 | UX review items 4, 5, 8, 10-14, 15 (rest), 16-22 (see docs/design/00-shells-and-login-review.md); item 21 into spec 03 | - | parked | - |
 | Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
 
 ## Done
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
+
+## Lean plan (MD, 6 Nov 2026) - budgets: small < 300k, medium < 800k tokens per card
+| Card | Team | Budget |
+|---|---|---|
+| S0-4+5+6 combined: crash safety, backup/restore, speed proof | 1 builder (Sonnet) + 1 review (Sonnet) | medium |
+| B-1+B-2: billing maths + bill save/returns/hold | 1 builder (Sonnet) + QA once (Opus, money) + GST expert spec review (Sonnet) | medium |
+| B-6 + login look: visual mock first -> MD yes -> build | ux-designer mock (Sonnet) + 1 ui-builder (Sonnet) + 1 review | small + medium |
 
 ## Next (one at a time - foundation)
 | S0-4 | 00 crash safety and errors | builder | waiting |
