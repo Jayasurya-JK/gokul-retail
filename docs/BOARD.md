@@ -51,11 +51,12 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 | builder | S0-3 backend fixes + integration fix | feat/S0-3-fix-be, -fix-be2 | DONE, merged (c3b5a15) | waits for UX/QA findings |
 | ui-builder | S0-3 UI fixes (QA-2..11) | feat/S0-3-fix-ui (71956c0) | DONE, merged (d1a6146) | waits for UX/QA findings |
 | test-automation-engineer (Sonnet) | rename demo owner Selvi -> Gokul; full screenshot set Office + POS -> .playwright-mcp/shots/s0-3/ + INDEX.md | feat/S0-3-shots / .claude/worktrees/agent-a9883aa84b28dfc7b | running | commit rename, report -> ux-designer review |
-| verifier (Sonnet, re-check) | confirm QA findings 1-11 fixed, no new issues | feat/S0-3 (main tree, read-only) | running | PASS/FAIL |
-| security-engineer (Sonnet, re-check) | confirm M1, M2, L1-L13 fixed | feat/S0-3 (main tree, read-only) | running | PASS/FAIL |
+| verifier (Sonnet, re-check) | confirm QA findings 1-11 fixed, no new issues | feat/S0-3 | PASS 5 Nov 2026 | - |
+| security-engineer (Sonnet, re-check) | confirm M1, M2, L1-L13 fixed | feat/S0-3 | PASS 5 Nov 2026 (cargo audit 0 vulns) | - |
 | ux-designer (Sonnet, review) | review screenshots vs design | - | waiting for screenshots | PASS / fix list |
 | Head of IT | after all PASS | feat/S0-3 | waiting | merge to main, push -> technical-writer (Haiku) -> delivery-manager status |
-| Known small fix (batch with UX findings) | Users list shows new owner "Never signed in" while signed in (setup_owner sets no last_login_at) | - | queued | builder |
+| Known small fixes (batch with UX findings) | (a) new owner shows "Never signed in" (setup_owner sets no last_login_at); (b) coalesce `login_failed` unavailable audit rows (max 1/min) - security low 1; (c) reject recovery input > 64 bytes before normalize - security info 3; (d) allow U+200C/U+200D only between Tamil/Indic letters or marks + Tamil ligature test (QA low 1, Head of IT decision: shop is Tamil); (e) FSSAI non-digit message in Rust + matching digits-only hint in UI, test with 14 letters (QA low 2); (f) UI test: bad old-PIN error shows under old-PIN box (QA low 3); (g) lock_session audit-write failure surfaced to the app log (QA low 4) | - | queued | builder (a-e, g backend) + ui-builder (e hint, f) |
+| Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
 
 ## Done
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
