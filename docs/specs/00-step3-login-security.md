@@ -41,7 +41,7 @@ Parent: `docs/specs/00-skeleton.md` Step 3. Screens: `docs/design/00-shells-and-
 12. `users.failed_attempts`, `locked_until` (unix s UTC, 0 = unlocked), `last_failed_at`. Time from an injectable `Clock` trait.
 13. Reserve the attempt before hashing: in one IMMEDIATE transaction, if `locked_until > now` return `Locked{seconds_left}` (no hashing); else increment `failed_attempts`, commit, then verify. Success resets counters and sets `last_login_at`; failure applies the ladder.
 14. Ladder (**OWNER**): 1-4 fails none; 5 -> 30 s; 6 -> 2 min; 7 -> 10 min; 8+ -> 30 min cashier / 5 min owner. Per user, never global. Counter older than 24 h counts as 0.
-15. Clock moved back (`now < last_failed_at`): lock for the full ladder duration from `last_failed_at`; audit `clock_anomaly` once.
+15. Clock moved back (amended after security review M1: re-anchor the lock to the corrected time, so it lasts at most the ladder duration) (`now < last_failed_at`): lock for the full ladder duration from `last_failed_at`; audit `clock_anomaly` once.
 16. `unlock_user(id)` owner-only. Cashier sees "Locked - ask the owner" with countdown.
 17. Forgotten owner PIN (**OWNER**): Option A (recommended) one-time 16-char recovery code at first run, shown once, only its argon2 hash stored in `settings.owner_recovery_hash`, usable on Office login only, under the same lockout, audited. Option B: no recovery; IT team fixes the DB.
 18. UI only learns "Wrong PIN" or "Locked for N s". Unknown/inactive user gets a dummy-hash verify (equal timing). `list_login_users` returns active users as `{id, name}` only.
@@ -147,3 +147,8 @@ UI wraps every call in one typed module per app (`src/api.ts`, shared types in `
 7. Extra audit event `session_lock` (Ctrl+L). `set_user_role` exists in core, not exposed until B-3.
 8. Webview capabilities: only the app's own `allow-*` command permissions + `core:event:allow-listen/unlisten`, `core:window:allow-close/destroy`. UI needing more must ask Head of IT.
 9. Settings keys in the DB use underscores (`shop_name`, `shop_address1`..., `shop_phone`, `shop_gstin`, `shop_fssai`, `bill_footer`).
+
+### Known limits (security review 5 Nov 2026)
+- Clock moved **forward** ends a lock early (and > 24 h resets the counter). Exploitable only where staff are Windows administrators. Mitigation: shop PC staff account is a standard (non-admin) Windows user - IT setup checklist. Forward jumps inside a running process are audited (`clock_anomaly`).
+- Tauri `core:window:allow-destroy` stays in both apps: the close-requested listener needs it to finish a confirmed close (QA confirmed). The billing card adds a Rust-side close guard.
+- `settings.setup_complete` is written at owner creation but is NOT the "shop set up" check; that is `is_shop_set_up` (shop name, address line 1, valid phone).

@@ -4,3 +4,6 @@ dist/
 *.log
 .vite/
 apps/*/src-tauri/gen/
+
+# Agent worktrees (parallel builders)
+.claude/worktrees/
