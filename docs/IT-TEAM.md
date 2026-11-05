@@ -75,6 +75,14 @@ Experts cost tokens only when called. The Delivery Manager picks only the gates 
 | Release | delivery-manager | devops-engineer | verifier (+ security before go-live) |
 | AI ideas | ai-solutions-expert (on request only) | - | MD decides |
 
+## Lean operating rules (MD, 6 Nov 2026 - overrides anything below that costs more)
+Tokens are company money. Every card must show value on screen for the money spent.
+1. **MD sees a picture before any screen is built.** The UX designer (Sonnet) makes one visual mock-up (static HTML page / screenshot) of each new screen; the MD approves it. No approval, no build. Text wireframes alone are not enough.
+2. **Small team by default:** 1 builder + 1 reviewer, both Sonnet. Parallel builders, extra experts and Opus only when the card touches money, stock or GST, or is large. The Head of IT writes the reason on the board when going bigger.
+3. **One review round.** Re-check only Must-fix items; Should/Could items are batched into the next card, not re-reviewed.
+4. **Token budget per card** written on the board before start (small / medium / large); actual cost reported to the MD at the end of the card.
+5. **Head of IT coordinates only** (no hands-on testing) and runs on Sonnet for routine days.
+
 ## Definition of done per role (MD direction 5 Nov 2026: "each must complete their role perfectly")
 Every agent finishes its whole job, not part of it. Before reporting back, each role checks its own row. A report that skips a row item must say which item and why. The Head of IT sends back any work that does not meet its row.
 
