@@ -14,6 +14,8 @@ serde = { version = "1", features = ["derive"] }
 argon2 = { version = "0.5", features = ["std"] }
 # Wipes PINs from memory when dropped.
 zeroize = "1"
+# Log facade only (the apps already use it): warnings from core reach the app log.
+log = "0.4"
 
 [dev-dependencies]
 # Tests only: checks the exact JSON the UI receives. Already in the build via Tauri.

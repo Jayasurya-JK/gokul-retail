@@ -295,15 +295,18 @@ pub fn finish_login_success(
 pub struct LoginUser {
     pub id: i64,
     pub name: String,
+    pub role: Role,
 }
 
-/// Active users, name only (login screen list).
+/// Active users: id, name and role only (login screen list).
 pub fn list_login_users(conn: &Connection) -> Result<Vec<LoginUser>> {
-    let mut st = conn.prepare("SELECT id, name FROM users WHERE active = 1 ORDER BY name")?;
+    let mut st = conn.prepare("SELECT id, name, role FROM users WHERE active = 1 ORDER BY name")?;
     let rows = st.query_map([], |r| {
+        let role: String = r.get(2)?;
         Ok(LoginUser {
             id: r.get(0)?,
             name: r.get(1)?,
+            role: Role::parse(&role).unwrap_or(Role::Cashier),
         })
     })?;
     Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
@@ -667,12 +670,25 @@ pub fn finish_recovery(
 }
 
 /// A login attempt for an id that is unknown or switched off. No user id and no name are
-/// stored, so the log cannot be used to echo names.
-pub fn log_unavailable(db: &mut Db, app: AppKind) -> Result<()> {
+/// stored, so the log cannot be used to echo names. At most one such row per app per minute,
+/// so a script guessing ids cannot flood the audit log.
+pub fn log_unavailable(db: &mut Db, app: AppKind, now: i64) -> Result<()> {
+    let recent: i64 = db.conn().query_row(
+        "SELECT COUNT(*) FROM audit_log
+         WHERE action = ?1 AND user_id IS NULL
+           AND json_extract(detail_json, '$.reason') = 'unavailable'
+           AND json_extract(detail_json, '$.app') = ?2
+           AND json_extract(detail_json, '$.at') > ?3",
+        params![event::LOGIN_FAILED, app.as_str(), now - 60],
+        |r| r.get(0),
+    )?;
+    if recent > 0 {
+        return Ok(());
+    }
     audit::log(
         db.conn(),
         None,
         event::LOGIN_FAILED,
-        &Detail::new(app).str("reason", "unavailable"),
+        &Detail::new(app).str("reason", "unavailable").int("at", now),
     )
 }

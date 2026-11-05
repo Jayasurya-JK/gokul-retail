@@ -47,6 +47,19 @@ mod tests {
     }
 
     #[test]
+    fn codes_never_contain_look_alike_characters() {
+        for _ in 0..3000 {
+            let code = generate().expect("code");
+            for bad in ['0', 'O', '1', 'I'] {
+                assert!(!code.contains(bad), "{code} contains {bad}");
+            }
+        }
+        for bad in *b"0O1I" {
+            assert!(!ALPHABET.contains(&bad));
+        }
+    }
+
+    #[test]
     fn normalize_accepts_typing_variations() {
         assert_eq!(normalize(" abcd-efgh-jklm-npqr "), "ABCDEFGHJKLMNPQR");
     }

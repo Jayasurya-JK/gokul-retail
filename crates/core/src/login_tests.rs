@@ -1368,3 +1368,5 @@ fn database_held_by_another_writer_is_reported_as_busy() {
 }
 
 mod fix_tests;
+
+mod final_tests;
