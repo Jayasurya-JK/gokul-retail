@@ -152,3 +152,9 @@ UI wraps every call in one typed module per app (`src/api.ts`, shared types in `
 - Clock moved **forward** ends a lock early (and > 24 h resets the counter). Exploitable only where staff are Windows administrators. Mitigation: shop PC staff account is a standard (non-admin) Windows user - IT setup checklist. Forward jumps inside a running process are audited (`clock_anomaly`).
 - Tauri `core:window:allow-destroy` stays in both apps: the close-requested listener needs it to finish a confirmed close (QA confirmed). The billing card adds a Rust-side close guard.
 - `settings.setup_complete` is written at owner creation but is NOT the "shop set up" check; that is `is_shop_set_up` (shop name, address line 1, valid phone).
+
+### Contract amendments 2 (Head of IT, after UX review 5 Nov 2026)
+10. `LoginUser` becomes `{ id: number; name: string; role: Role }` (needed so F4 "Forgot owner PIN" shows only for the owner). Rule 18 relaxed for role only: revealing who is the owner at the counter is accepted; existence/active status is still not revealed beyond the list itself.
+11. `recover_owner_pin` wrong code -> `WRONG_PIN` with `attemptsBeforeLock` set (same ladder as PIN); locked -> `LOCKED` with `secondsLeft`.
+12. `setup_owner` stamps `last_login_at` for the new owner (the owner is signed in from that moment).
+Scope decision (MD, 5 Nov 2026): UX review items 1, 2, 3, 6, 7, 9 and 15 (role column only) are fixed in S0-3; items 4, 5, 8, 10-14, 15 (rest), 16-22 move to card B-6 (POS UI) / B-7 (Office UI) polish. Item 21 is carried into spec 03.

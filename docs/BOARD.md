@@ -48,14 +48,11 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 
 | Role | Task | Branch / worktree | State | Next step |
 |---|---|---|---|---|
-| builder | S0-3 backend fixes + integration fix | feat/S0-3-fix-be, -fix-be2 | DONE, merged (c3b5a15) | waits for UX/QA findings |
-| ui-builder | S0-3 UI fixes (QA-2..11) | feat/S0-3-fix-ui (71956c0) | DONE, merged (d1a6146) | waits for UX/QA findings |
-| test-automation-engineer (Sonnet) | rename demo owner Selvi -> Gokul; full screenshot set Office + POS -> .playwright-mcp/shots/s0-3/ + INDEX.md | feat/S0-3-shots / .claude/worktrees/agent-a9883aa84b28dfc7b | running | commit rename, report -> ux-designer review |
-| verifier (Sonnet, re-check) | confirm QA findings 1-11 fixed, no new issues | feat/S0-3 | PASS 5 Nov 2026 | - |
-| security-engineer (Sonnet, re-check) | confirm M1, M2, L1-L13 fixed | feat/S0-3 | PASS 5 Nov 2026 (cargo audit 0 vulns) | - |
-| ux-designer (Sonnet, review) | review screenshots vs design | - | waiting for screenshots | PASS / fix list |
-| Head of IT | after all PASS | feat/S0-3 | waiting | merge to main, push -> technical-writer (Haiku) -> delivery-manager status |
-| Known small fixes (batch with UX findings) | (a) new owner shows "Never signed in" (setup_owner sets no last_login_at); (b) coalesce `login_failed` unavailable audit rows (max 1/min) - security low 1; (c) reject recovery input > 64 bytes before normalize - security info 3; (d) allow U+200C/U+200D only between Tamil/Indic letters or marks + Tamil ligature test (QA low 1, Head of IT decision: shop is Tamil); (e) FSSAI non-digit message in Rust + matching digits-only hint in UI, test with 14 letters (QA low 2); (f) UI test: bad old-PIN error shows under old-PIN box (QA low 3); (g) lock_session audit-write failure surfaced to the app log (QA low 4) | - | queued | builder (a-e, g backend) + ui-builder (e hint, f) |
+| builder (Sonnet) | S0-3 final batch BE: queued (a)-(e), (g); UX 7, 9, 22 check; LoginUser.role | feat/S0-3-final-be / .claude/worktrees/agent-a76827da5223d169a | running | commit, report -> merge |
+| ui-builder (Sonnet) | S0-3 final batch UI: UX Must 1, 2; UX 3, 6, 7, 15 (role column); queued (e) hint, (f) test | feat/S0-3-final-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running | commit, report -> merge |
+| verifier (Sonnet) | short re-check of the final batch | feat/S0-3 | waiting | PASS/FAIL |
+| Head of IT | after PASS | feat/S0-3 | waiting | merge to main, push -> technical-writer (Haiku) -> delivery-manager status (Sonnet) |
+| Deferred to B-6/B-7 | UX review items 4, 5, 8, 10-14, 15 (rest), 16-22 (see docs/design/00-shells-and-login-review.md); item 21 into spec 03 | - | parked | - |
 | Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
 
 ## Done
