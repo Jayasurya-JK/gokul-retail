@@ -21,6 +21,13 @@ Modern, clean, professional retail software. Light theme. Segoe UI with Nirmala 
 | `--gk-ok` | `#1e7b34` | Success |
 | `--gk-warn` | `#b45309` | Warnings |
 | `--gk-amber` | `#ffd54a` | Accent on navy (net amount, brand) |
+| `--gk-primary-strong` | `#0a4f98` | Primary hover / pressed |
+| `--gk-navy-muted` | `#b9c9db` | Muted text on navy / net-amount panel |
+| `--gk-keycap-bg` | `#ffffff` | F-key caps |
+| `--gk-keycap-border` | `#c3ccd5` | F-key cap border |
+| `--gk-focus-ring` | `0 0 0 3px #e8f1fb` | Focus ring (3px soft ring of primary-soft) |
+| `--gk-shadow-card` | `0 18px 44px rgba(15,23,42,.14)` | Card / dialog shadow |
+| `--gk-cta-height` | `56px` | Height of the single primary action (Pay) |
 
 ## Typography
 
@@ -39,12 +46,14 @@ Modern, clean, professional retail software. Light theme. Segoe UI with Nirmala 
 
 ## Components
 
-- **Button**: primary (navy/blue fill, white text), secondary (white, 1px border), danger (red). Height 40px, label shows its key (`Save  (F10)`).
+- **Button**: primary (navy/blue fill, white text), secondary (white, 1px border), danger (red). Height 40px, label shows its key (`Save  (F10)`). The single primary action (Pay) is taller: `--gk-cta-height` 56px, 20px/700 label, full width of the right panel, always directly below the TotalPanel.
+- **DataGrid** (POS): square corners; 1px `--gk-divider` row lines only — no vertical rules, no header fill. Header row: 12px uppercase `--gk-muted`, 32px tall. Body rows: min 34px (use 38px where a Tamil name is shown), 13px tabular numerals right-aligned, item name 15px/600 with Tamil 13px `--gk-muted` underneath at `line-height: 1.55`. Totals row: 1px `--gk-border` top border, label left, right-aligned sums.
+- **TotalPanel**: `--gk-navy-dark` card, 10px radius, white 14px label, 40px/700 `--gk-amber` amount (the bill total — the focal number), one line of muted stats underneath.
 - **Input**: 1px border, focus = blue border + 3px soft ring. Error = 2px red border + `! message` below.
 - **SelectList** (login user picker): rows with name + role; selected row solid blue with white text; type-to-filter.
 - **Dialog**: centered card, 2px radius, dimmed backdrop, focus trapped, Enter = default, Esc = cancel.
 - **StatusBar**: navy top bar — shop name left, user · date · backup right.
-- **KeyLegend**: bottom bar of key-cap + label, always matches the live keymap.
+- **KeyLegend**: bottom bar of key-cap + label, always matches the live keymap. Key cap: 11px/600 label on `--gk-keycap-bg`, 1px `--gk-keycap-border`, 2px radius, 3px side padding. Primary key (F10 Pay) uses `--gk-primary` fill with white label.
 
 ## Screens
 

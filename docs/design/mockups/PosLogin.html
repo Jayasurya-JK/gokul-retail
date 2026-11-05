@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Login — Gokul Oils</title>
+<style>
+:root{
+  --gk-bg:#eef1f4;
+  --gk-surface:#ffffff;
+  --gk-panel:#f6f8fa;
+  --gk-text:#1f2933;
+  --gk-muted:#4a5560;
+  --gk-border:#b8c2cc;
+  --gk-divider:#e3e8ed;
+  --gk-navy:#1e3a5f;
+  --gk-navy-dark:#102a43;
+  --gk-primary:#0b5cad;
+  --gk-primary-strong:#0a4f98;
+  --gk-primary-soft:#e8f1fb;
+  --gk-danger:#d92d20;
+  --gk-ok:#1e7b34;
+  --gk-amber:#ffd54a;
+  --gk-navy-muted:#b9c9db;
+  --gk-keycap-bg:#ffffff;
+  --gk-keycap-border:#c3ccd5;
+  --gk-focus-ring:0 0 0 3px #e8f1fb;
+  --gk-shadow-card:0 18px 44px rgba(15,23,42,.14);
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0}
+body{
+  background:#d9dee3;
+  display:flex;justify-content:center;align-items:center;
+  font-family:'Segoe UI','Nirmala UI',sans-serif;
+  color:var(--gk-text);
+}
+.ta{font-family:'Nirmala UI','Segoe UI',sans-serif;line-height:1.55}
+.app{width:1366px;height:768px;flex:none;display:flex;overflow:hidden}
+
+/* brand panel */
+.brand{width:42%;flex:none;background:linear-gradient(160deg,var(--gk-navy) 0%,var(--gk-navy-dark) 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:0 64px}
+.brand .logo{display:flex;align-items:center;gap:18px;margin-bottom:26px}
+.drop{width:46px;height:46px;flex:none;background:var(--gk-amber);border-radius:50% 50% 50% 0;transform:rotate(-45deg)}
+.brand h1{font-size:34px;font-weight:700;margin:0;letter-spacing:.3px}
+.brand .tag{font-size:16px;color:var(--gk-navy-muted);margin-top:6px}
+.brand .foot{margin-top:44px;font-size:13px;color:var(--gk-navy-muted)}
+
+/* right */
+.right{flex:1;display:flex;align-items:center;justify-content:center;background:var(--gk-bg)}
+.card{width:440px;background:var(--gk-surface);border-radius:10px;box-shadow:var(--gk-shadow-card);padding:28px 28px 24px}
+.card h2{font-size:20px;font-weight:700;margin:0 0 4px}
+.card .sub{font-size:14px;color:var(--gk-muted);margin:0 0 18px}
+.userlist{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.user{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:6px;border:1px solid var(--gk-divider);font-size:15px}
+.user .name{font-weight:600}
+.user .role{font-size:13px;color:var(--gk-muted)}
+.user.sel{background:var(--gk-primary);border-color:var(--gk-primary);color:#fff}
+.user.sel .role{color:rgba(255,255,255,.8)}
+.pinrow{display:flex;align-items:center;gap:10px}
+.pinbox{flex:1;display:flex;align-items:center;height:46px;border:2px solid var(--gk-primary);border-radius:6px;box-shadow:var(--gk-focus-ring);padding:0 14px}
+.pinbox input{flex:1;border:0;outline:0;font-size:20px;letter-spacing:6px;font-family:inherit;color:var(--gk-text);background:transparent;caret-color:var(--gk-primary)}
+.btn{height:46px;flex:none;border:0;border-radius:6px;font-family:inherit;font-weight:600;font-size:15px;padding:0 20px;background:var(--gk-primary);color:#fff;cursor:default}
+.hint{font-size:13px;color:var(--gk-muted);margin-top:10px}
+.key{display:inline-block;font-size:11px;font-weight:600;color:var(--gk-primary);border:1px solid var(--gk-primary-soft);background:var(--gk-primary-soft);border-radius:4px;padding:1px 6px}
+
+/* legend */
+.legend{position:absolute;left:0;right:0;bottom:0;height:42px;background:var(--gk-surface);border-top:1px solid var(--gk-border);display:flex;align-items:center;gap:10px;padding:0 16px;font-size:13px}
+.kitem{display:flex;align-items:center;gap:5px}
+.kcap{font-size:11px;font-weight:600;color:var(--gk-text);background:var(--gk-keycap-bg);border:1px solid var(--gk-keycap-border);border-radius:3px;padding:3px 7px}
+.kcap.primary{background:var(--gk-primary);border-color:var(--gk-primary);color:#fff}
+</style>
+</head>
+<body>
+<div class="app" style="position:relative">
+
+  <div class="brand">
+    <div class="logo">
+      <span class="drop"></span>
+      <div>
+        <h1>Gokul Oils</h1>
+        <div class="tag">Wood-pressed oils · Point of Sale</div>
+      </div>
+    </div>
+    <div class="foot">Counter 1 · 06 Nov 2026 · 11:50 PM · Backup OK</div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <h2>Sign in</h2>
+      <p class="sub">Choose your name, then type your PIN.</p>
+
+      <div class="userlist">
+        <div class="user sel"><span class="name">Ravi Kumar</span><span class="role">Cashier</span></div>
+        <div class="user"><span class="name">Meena Lakshmi</span><span class="role">Cashier</span></div>
+        <div class="user"><span class="name">Senthil</span><span class="role">Manager</span></div>
+        <div class="user"><span class="name">R. Gokulnath</span><span class="role">Owner</span></div>
+      </div>
+
+      <div class="pinrow">
+        <div class="pinbox"><input value="••••" placeholder="PIN"></div>
+        <button class="btn">Enter</button>
+      </div>
+      <div class="hint">PIN is 4 to 6 digits. <span class="key">Ctrl+L</span> lock · <span class="key">Esc</span> clear</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="kitem"><span class="kcap">↑ ↓</span>Choose name</span>
+    <span class="kitem"><span class="kcap primary">Enter</span>Sign in</span>
+    <span class="kitem"><span class="kcap">Esc</span>Clear PIN</span>
+    <span class="kitem"><span class="kcap">Ctrl+L</span>Lock</span>
+  </div>
+
+</div>
+</body>
+</html>
