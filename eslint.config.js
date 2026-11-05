@@ -12,6 +12,7 @@ export default tseslint.config(
       "**/src-tauri/**",
       "**/gen/**",
       ".claude/**",
+      ".dsh-themes/**",
     ],
   },
   js.configs.recommended,

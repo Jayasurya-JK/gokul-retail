@@ -355,72 +355,87 @@ export function LoginScreen({ title, loadUsers, login, onSignedIn, lastUserId, n
   useKeymap(ownerBindings, { layer: LAYER.app });
 
   return (
-    <div className="gk-center">
-      <h1 className="gk-content-title">{title}</h1>
-      {notice}
-      {state.kind === "loading" && slow ? <p>Loading users...</p> : null}
-      {state.kind === "error" ? <Banner kind="error">Could not read the user list. Press Enter to try again.</Banner> : null}
-      {gone ? <Banner kind="warn">{gone}</Banner> : null}
-      {state.kind === "ready" ? (
-        <div className="gk-split">
-          <div>
-            <p className="gk-section-title">Who are you?</p>
-            <SelectList
-              items={items}
-              selectedId={selectedId}
-              ariaLabel="Users"
-              listRef={(el) => {
-                listRef.current = el;
-              }}
-              onSelect={(id) => {
-                setSelectedId(Number(id));
-                setHint(null);
-                setOwnerOnly(false);
-              }}
-              onChoose={(id) => {
-                setSelectedId(Number(id));
-                setGone(null);
-                // focus the PIN box once the prompt for this user has rendered
-                setFocusTarget((t) => ({ to: "pin", n: (t?.n ?? 0) + 1 }));
-              }}
-              onDigit={() => setHint("Choose your name first, then type your PIN.")}
-              emptyText={(f) => (users.length === 0 ? "No users." : `No name starts with '${f}'. Press Backspace.`)}
-            />
-            <p className="gk-hint">Name not in the list? Ask the owner.</p>
-            {hint ? <p className="gk-warn-text">{hint}</p> : null}
-          </div>
-          {selected ? (
-            <div>
-            <PinPrompt
-              key={selected.id}
-              userName={selected.name}
-              pinRef={(el) => {
-                pinRef.current = el;
-              }}
-              check={async (pin) => {
-                const session = await login(selected.id, pin);
-                onSignedIn(session);
-              }}
-              onEscape={() => listRef.current?.focus()}
-              onLockedChange={(locked) => {
-                if (locked) listRef.current?.focus();
-                else pinRef.current?.focus();
-              }}
-              onUserGone={() => {
-                setGone(`${selected.name} has been switched off by the owner. Choose another name.`);
-                setSelectedId(null);
-                setReload((n) => n + 1);
-              }}
-            />
-            {ownerOnly ? (
-              <div className="gk-message gk-message-error" role="alert">
-                ! Only the owner uses a recovery code. Ask the owner to reset your PIN.
-              </div>
-            ) : null}
-            </div>
+    <div className="gk-login">
+      <aside className="gk-login-brand">
+        <div className="gk-login-brand-inner">
+          <svg className="gk-login-logo" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.2C12 2.2 5.2 9.8 5.2 14.3a6.8 6.8 0 0 0 13.6 0C18.8 9.8 12 2.2 12 2.2Z" fill="currentColor" />
+          </svg>
+          <div className="gk-login-brand-name">Gokul Oils</div>
+          <p className="gk-login-brand-tag">Wood-pressed oils · Point of Sale</p>
+        </div>
+      </aside>
+
+      <main className="gk-login-form">
+        <div className="gk-login-form-inner">
+          <h1 className="gk-login-title">{title}</h1>
+          <p className="gk-login-sub">Choose your name, then type your PIN.</p>
+          {notice}
+          {state.kind === "loading" && slow ? <p className="gk-muted">Loading users...</p> : null}
+          {state.kind === "error" ? (
+            <Banner kind="error">Could not read the user list. Press Enter to try again.</Banner>
+          ) : null}
+          {gone ? <Banner kind="warn">{gone}</Banner> : null}
+          {state.kind === "ready" ? (
+            <>
+              <p className="gk-section-title gk-login-choose">Who are you?</p>
+              <SelectList
+                items={items}
+                selectedId={selectedId}
+                ariaLabel="Users"
+                listRef={(el) => {
+                  listRef.current = el;
+                }}
+                onSelect={(id) => {
+                  setSelectedId(Number(id));
+                  setHint(null);
+                  setOwnerOnly(false);
+                }}
+                onChoose={(id) => {
+                  setSelectedId(Number(id));
+                  setGone(null);
+                  // focus the PIN box once the prompt for this user has rendered
+                  setFocusTarget((t) => ({ to: "pin", n: (t?.n ?? 0) + 1 }));
+                }}
+                onDigit={() => setHint("Choose your name first, then type your PIN.")}
+                emptyText={(f) => (users.length === 0 ? "No users." : `No name starts with '${f}'. Press Backspace.`)}
+              />
+              <p className="gk-hint">Name not in the list? Ask the owner.</p>
+              {hint ? <p className="gk-warn-text">{hint}</p> : null}
+              {selected ? (
+                <div className="gk-login-pin">
+                  <PinPrompt
+                    key={selected.id}
+                    userName={selected.name}
+                    pinRef={(el) => {
+                      pinRef.current = el;
+                    }}
+                    check={async (pin) => {
+                      const session = await login(selected.id, pin);
+                      onSignedIn(session);
+                    }}
+                    onEscape={() => listRef.current?.focus()}
+                    onLockedChange={(locked) => {
+                      if (locked) listRef.current?.focus();
+                      else pinRef.current?.focus();
+                    }}
+                    onUserGone={() => {
+                      setGone(`${selected.name} has been switched off by the owner. Choose another name.`);
+                      setSelectedId(null);
+                      setReload((n) => n + 1);
+                    }}
+                  />
+                  {ownerOnly ? (
+                    <div className="gk-message gk-message-error" role="alert">
+                      ! Only the owner uses a recovery code. Ask the owner to reset your PIN.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
-      ) : null}
+      </main>
     </div>
   );
 }

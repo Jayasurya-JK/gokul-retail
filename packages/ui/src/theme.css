@@ -1,42 +1,44 @@
 /*
- * Gokul theme. Tokens from docs/design/00-design-system.md.
- * Rules: light theme only, no animation or transition, no shadows, no text opacity,
- * no font weight below 400, focus ring always visible.
+ * Gokul Retail design system — one professional navy+blue language for POS and
+ * Office. Light theme, Segoe UI (Nirmala UI for Tamil), square-ish corners,
+ * no animation. Auth screens centre themselves; billing uses the same navy/blue.
  */
 :root {
-  --gk-bg: #ffffff;
-  --gk-panel: #f0eee9;
-  --gk-text: #111111;
-  --gk-text-muted: #4d4d4d;
-  --gk-border: #767676;
-  --gk-divider: #bdbdbd;
-  --gk-primary: #8a3b00;
+  --gk-bg: #eef1f4;
+  --gk-panel: #f6f8fa;
+  --gk-text: #1f2933;
+  --gk-text-muted: #4a5560;
+  --gk-text-faint: #52606d;
+  --gk-border: #b8c2cc;
+  --gk-divider: #e3e8ed;
+  --gk-primary: #0b5cad;
+  --gk-primary-hover: #08518f;
   --gk-primary-text: #ffffff;
-  --gk-focus: #0a4fd1;
-  --gk-select-bg: #003a9b;
+  --gk-focus: #0b5cad;
+  --gk-focus-soft: #e8f1fb;
+  --gk-select-bg: #0b5cad;
   --gk-select-text: #ffffff;
-  --gk-danger: #b00020;
-  --gk-danger-bg: #fde8e8;
-  --gk-warn-text: #6b4700;
-  --gk-warn-bg: #fff4cc;
-  --gk-ok: #0b6623;
+  --gk-danger: #d92d20;
+  --gk-danger-bg: #fdecea;
+  --gk-warn-text: #b45309;
+  --gk-warn-bg: #fff4e5;
+  --gk-ok: #1e7b34;
   --gk-ok-bg: #e6f4ea;
-  --gk-disabled-text: #5f5f5f;
-  --gk-disabled-bg: #ececec;
-  --gk-bar-bg: #1f1f1f;
+  --gk-disabled-text: #8a94a0;
+  --gk-disabled-bg: #eceff3;
+  --gk-bar-bg: #1e3a5f;
   --gk-bar-text: #ffffff;
-  --gk-bar-warn: #ffd24d;
-  --gk-bar-danger: #ff8a8a;
-  --gk-backdrop: rgba(0, 0, 0, 0.55);
+  --gk-bar-warn: #ffd54a;
+  --gk-bar-danger: #ff9b9b;
+  --gk-backdrop: rgba(15, 23, 42, 0.55);
 
-  --gk-font: "Segoe UI", "Nirmala UI", "Latha", sans-serif;
-  --gk-fs-caption: 0.875rem;
-  --gk-fs-body: 1rem;
-  --gk-fs-input: 1.125rem;
-  --gk-fs-h2: 1.25rem;
-  --gk-fs-h1: 1.5rem;
-  --gk-fs-display: 2rem;
-  --gk-fs-total: 4rem;
+  --gk-font: "Segoe UI", "Nirmala UI", Tahoma, sans-serif;
+  --gk-fs-caption: 0.8125rem;
+  --gk-fs-body: 0.9375rem;
+  --gk-fs-input: 1rem;
+  --gk-fs-h2: 1.125rem;
+  --gk-fs-h1: 1.375rem;
+  --gk-fs-display: 1.75rem;
 
   --gk-s1: 4px;
   --gk-s2: 8px;
@@ -44,21 +46,14 @@
   --gk-s4: 16px;
   --gk-s5: 24px;
   --gk-s6: 32px;
-  --gk-s7: 48px;
 
   --gk-control-h: 2.5rem;
   --gk-row-h: 2.25rem;
   --gk-statusbar-h: 2rem;
   --gk-legend-h: 2.25rem;
   --gk-menu-w: 13rem;
-  --gk-radius: 4px;
+  --gk-radius: 5px;
   --gk-border-w: 1px;
-}
-
-@media (min-width: 1600px) {
-  html {
-    font-size: 18px;
-  }
 }
 
 * {
@@ -80,7 +75,7 @@ body {
   color: var(--gk-text);
   font-family: var(--gk-font);
   font-size: var(--gk-fs-body);
-  line-height: 1.4;
+  line-height: 1.45;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
 }
@@ -101,14 +96,15 @@ p {
 
 :focus-visible,
 input:focus,
-textarea:focus {
-  outline: 3px solid var(--gk-focus);
-  outline-offset: 2px;
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--gk-focus);
+  outline-offset: 1px;
 }
 
 [tabindex="-1"]:focus {
-  outline: 3px solid var(--gk-focus);
-  outline-offset: -3px;
+  outline: 2px solid var(--gk-focus);
+  outline-offset: -2px;
 }
 
 /* ---------- frame ---------- */
@@ -134,13 +130,29 @@ textarea:focus {
   overflow-x: hidden;
   padding: var(--gk-s5);
   line-height: 1.5;
+  background: var(--gk-bg);
+}
+
+/* centre the single-column auth screens (login, change PIN, recovery) */
+.gk-content:has(> .gk-center) {
+  display: flex;
+}
+.gk-center {
+  margin: auto;
+  width: 100%;
+  max-width: 46rem;
+  padding: var(--gk-s6) var(--gk-s6);
+  background: #ffffff;
+  border: 1px solid var(--gk-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
 
 .gk-content-title {
   font-size: var(--gk-fs-h1);
   font-weight: 600;
-  color: var(--gk-primary);
-  margin-bottom: var(--gk-s4);
+  color: #102a43;
+  margin-bottom: var(--gk-s2);
 }
 
 .gk-section-title {
@@ -151,10 +163,6 @@ textarea:focus {
 
 .gk-muted {
   color: var(--gk-text-muted);
-}
-
-.gk-center {
-  max-width: 44rem;
 }
 
 /* ---------- status bar ---------- */
@@ -203,8 +211,8 @@ textarea:focus {
   height: var(--gk-legend-h);
   flex: none;
   padding: 0 var(--gk-s3);
-  background: var(--gk-panel);
-  border-top: var(--gk-border-w) solid var(--gk-divider);
+  background: #e4e9ee;
+  border-top: var(--gk-border-w) solid var(--gk-border);
   font-size: var(--gk-fs-caption);
   overflow: hidden;
   white-space: nowrap;
@@ -226,7 +234,7 @@ textarea:focus {
 
 .gk-legend-slot-empty .gk-keycap {
   color: var(--gk-text-muted);
-  border-color: var(--gk-divider);
+  border-color: var(--gk-border);
   font-weight: 400;
 }
 
@@ -238,10 +246,10 @@ textarea:focus {
   display: inline-block;
   padding: 0 var(--gk-s1);
   background: #ffffff;
-  border: var(--gk-border-w) solid var(--gk-text);
-  border-radius: var(--gk-radius);
+  border: var(--gk-border-w) solid #9aa4b0;
+  border-radius: 3px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 /* ---------- side menu ---------- */
@@ -251,7 +259,7 @@ textarea:focus {
   margin: 0;
   padding: var(--gk-s2) 0;
   list-style: none;
-  background: var(--gk-panel);
+  background: #ffffff;
   border-right: var(--gk-border-w) solid var(--gk-divider);
   overflow-y: auto;
 }
@@ -261,11 +269,18 @@ textarea:focus {
   padding: var(--gk-s2) var(--gk-s4);
   min-height: var(--gk-row-h);
   cursor: pointer;
-  border-left: 4px solid transparent;
+  border-left: 3px solid transparent;
+  color: var(--gk-text);
 }
 
 .gk-menu-item u {
-  text-decoration: underline;
+  text-decoration: none;
+  color: var(--gk-primary);
+  font-weight: 600;
+}
+
+.gk-menu-item:hover {
+  background: var(--gk-focus-soft);
 }
 
 .gk-menu-item[aria-current="page"] {
@@ -273,17 +288,12 @@ textarea:focus {
   color: var(--gk-select-text);
 }
 
+.gk-menu-item[aria-current="page"] u {
+  color: inherit;
+}
+
 .gk-menu:focus-within .gk-menu-item[aria-current="page"] {
-  border-left-color: var(--gk-focus);
-}
-
-.gk-menu:focus {
-  outline-offset: -3px;
-}
-
-.gk-menu:focus .gk-menu-item[data-cursor="true"] {
-  outline: 3px solid var(--gk-focus);
-  outline-offset: -3px;
+  border-left-color: #ffffff;
 }
 
 /* ---------- buttons ---------- */
@@ -298,10 +308,18 @@ textarea:focus {
   cursor: pointer;
 }
 
+.gk-btn:hover:not(:disabled) {
+  background: var(--gk-panel);
+}
+
 .gk-btn-primary {
   background: var(--gk-primary);
   border-color: var(--gk-primary);
   color: var(--gk-primary-text);
+}
+
+.gk-btn-primary:hover:not(:disabled) {
+  background: var(--gk-primary-hover);
 }
 
 .gk-btn-danger {
@@ -312,7 +330,7 @@ textarea:focus {
 
 .gk-btn:disabled {
   background: var(--gk-disabled-bg);
-  border-color: var(--gk-disabled-text);
+  border-color: var(--gk-divider);
   color: var(--gk-disabled-text);
   cursor: default;
 }
@@ -361,13 +379,19 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.gk-input:focus {
+  border-color: var(--gk-primary);
+  box-shadow: 0 0 0 3px var(--gk-focus-soft);
+}
+
 .gk-input[readonly] {
   background: var(--gk-panel);
 }
 
 .gk-input-pin {
   max-width: 12rem;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.18em;
+  font-weight: 600;
 }
 
 .gk-input[aria-invalid="true"] {
@@ -401,11 +425,12 @@ textarea:focus {
 }
 
 .gk-checkbox input {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  accent-color: var(--gk-primary);
 }
 
-/* ---------- list ---------- */
+/* ---------- list (login user list) ---------- */
 .gk-list {
   border: var(--gk-border-w) solid var(--gk-border);
   border-radius: var(--gk-radius);
@@ -421,28 +446,29 @@ textarea:focus {
   gap: var(--gk-s4);
   align-items: center;
   min-height: var(--gk-row-h);
-  padding: var(--gk-s1) var(--gk-s3);
+  padding: var(--gk-s2) var(--gk-s3);
   font-size: var(--gk-fs-input);
   line-height: 1.5;
   border-bottom: var(--gk-border-w) solid var(--gk-divider);
-  border-left: 4px solid transparent;
   cursor: pointer;
 }
 
+.gk-list-row:hover {
+  background: var(--gk-focus-soft);
+}
+
 .gk-list-row[aria-selected="true"] {
-  border: 2px solid var(--gk-select-bg);
+  border-left: 4px solid var(--gk-select-bg);
+  background: #ffffff;
 }
 
 .gk-list:focus .gk-list-row[aria-selected="true"],
 .gk-list:focus-within .gk-list-row[aria-selected="true"] {
   background: var(--gk-select-bg);
   color: var(--gk-select-text);
-  border: none;
-  border-left: 4px solid var(--gk-focus);
-  padding-left: calc(var(--gk-s3) - 0px);
+  border-left: 4px solid #ffffff;
 }
 
-/* A selected row never shows muted text: every cell takes the selection text colour at full strength. */
 .gk-list:focus .gk-list-row[aria-selected="true"] .gk-muted,
 .gk-list:focus-within .gk-list-row[aria-selected="true"] .gk-muted {
   color: var(--gk-select-text);
@@ -470,14 +496,16 @@ textarea:focus {
   width: 100%;
   border-collapse: collapse;
   border: var(--gk-border-w) solid var(--gk-border);
+  background: #ffffff;
 }
 
 .gk-table th {
   text-align: left;
   padding: var(--gk-s2) var(--gk-s3);
-  background: var(--gk-panel);
+  background: #dde3ea;
   border-bottom: var(--gk-border-w) solid var(--gk-border);
   font-weight: 600;
+  color: #102a43;
 }
 
 .gk-table td {
@@ -493,7 +521,7 @@ textarea:focus {
 }
 
 .gk-table-wrap:focus {
-  outline: 3px solid var(--gk-focus);
+  outline: 2px solid var(--gk-focus);
   outline-offset: 2px;
 }
 
@@ -507,8 +535,8 @@ textarea:focus {
 }
 
 .gk-banner-info {
-  background: var(--gk-panel);
-  color: var(--gk-text);
+  background: var(--gk-focus-soft);
+  color: var(--gk-primary);
 }
 
 .gk-banner-warn {
@@ -557,14 +585,15 @@ textarea:focus {
   overflow-y: auto;
   padding: var(--gk-s5);
   background: #ffffff;
-  border: 2px solid var(--gk-text);
-  border-radius: var(--gk-radius);
+  border-radius: 8px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.3);
 }
 
 .gk-dialog-title {
   font-size: var(--gk-fs-h2);
   font-weight: 600;
   margin-bottom: var(--gk-s3);
+  color: #102a43;
 }
 
 .gk-dialog-buttons {
@@ -576,7 +605,7 @@ textarea:focus {
 
 /* ---------- blocking and lock screens ---------- */
 .gk-blocking {
-  padding: var(--gk-s6) var(--gk-s7);
+  padding: var(--gk-s6);
   max-width: 48rem;
 }
 
@@ -585,6 +614,7 @@ textarea:focus {
   font-weight: 600;
   line-height: 1.4;
   margin-bottom: var(--gk-s4);
+  color: #102a43;
 }
 
 .gk-blocking ol {
@@ -602,30 +632,35 @@ textarea:focus {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #ffffff;
+  background: #eef1f4;
 }
 
 .gk-lock-body {
-  padding: var(--gk-s7);
+  padding: var(--gk-s6);
+  max-width: 26rem;
+  margin: 0 auto;
 }
 
 .gk-lock-name {
   font-size: var(--gk-fs-display);
   font-weight: 600;
   line-height: 1.5;
+  color: #102a43;
 }
 
 .gk-recovery-code {
   font-family: Consolas, "Courier New", monospace;
   font-size: var(--gk-fs-display);
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   padding: var(--gk-s4);
-  border: 2px solid var(--gk-text);
+  border: 2px solid var(--gk-primary);
   border-radius: var(--gk-radius);
+  background: var(--gk-focus-soft);
   display: inline-block;
   margin: var(--gk-s3) 0;
   user-select: all;
+  color: var(--gk-primary);
 }
 
 .gk-message {
@@ -675,9 +710,8 @@ textarea:focus {
   color: var(--gk-text-muted);
 }
 
-/* shop name, user names: Tamil needs room above and below */
 .gk-tamil-safe {
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .gk-fill {
@@ -687,3 +721,98 @@ textarea:focus {
 .gk-form {
   max-width: 52rem;
 }
+
+/* ---------- login: split brand panel + form ---------- */
+.gk-content:has(> .gk-login) {
+  padding: 0;
+  overflow: hidden;
+}
+.gk-login {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--gk-bg);
+}
+.gk-login-brand {
+  flex: 0 0 42%;
+  max-width: 600px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gk-s6);
+  background: linear-gradient(160deg, #102a43 0%, #1e3a5f 55%, #26507e 100%);
+  color: #e8eef5;
+  position: relative;
+  overflow: hidden;
+}
+.gk-login-brand::after {
+  content: "";
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 50%;
+  right: -200px;
+  bottom: -240px;
+}
+.gk-login-brand-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 22rem;
+}
+.gk-login-logo {
+  width: 52px;
+  height: 52px;
+  color: #ffd54a;
+  display: block;
+  margin-bottom: var(--gk-s4);
+}
+.gk-login-brand-name {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+.gk-login-brand-tag {
+  margin-top: var(--gk-s2);
+  font-size: 0.95rem;
+  color: #a8c0d8;
+  line-height: 1.5;
+}
+.gk-login-form {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-y: auto;
+  padding: var(--gk-s6);
+  background: var(--gk-bg);
+}
+.gk-login-form-inner {
+  margin: auto;
+  width: 100%;
+  max-width: 26rem;
+  background: #ffffff;
+  border: 1px solid var(--gk-border);
+  border-radius: 10px;
+  padding: var(--gk-s6);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+}
+.gk-login-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #102a43;
+}
+.gk-login-sub {
+  margin-top: var(--gk-s1);
+  color: var(--gk-text-muted);
+  font-size: 0.95rem;
+}
+.gk-login-choose {
+  margin-top: var(--gk-s5);
+}
+.gk-login-pin {
+  margin-top: var(--gk-s4);
+  padding-top: var(--gk-s4);
+  border-top: 1px solid var(--gk-divider);
+}
+

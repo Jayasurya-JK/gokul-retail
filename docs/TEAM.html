@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gokul Oils IT Company — Team</title>
+<style>
+  :root {
+    --navy: #1e3a5f; --navy-dark: #102a43; --bg: #eef1f4; --surface: #ffffff;
+    --text: #1f2933; --muted: #4a5560; --border: #b8c2cc; --divider: #e3e8ed;
+    --blue: #0b5cad; --green: #1e7b34; --purple: #6b46c1; --red: #d92d20; --amber: #ffd54a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Segoe UI", "Nirmala UI", Tahoma, sans-serif;
+  }
+  header {
+    background: linear-gradient(160deg, var(--navy-dark), var(--navy));
+    color: #fff; padding: 40px 24px 36px; text-align: center;
+  }
+  header h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 8px 0 0; color: #a8c0d8; font-size: 16px; }
+  header .badge {
+    display: inline-block; margin-top: 16px; padding: 4px 14px;
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 999px; color: var(--amber); font-weight: 600; font-size: 13px;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  /* ---- hierarchy ---- */
+  .hier { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin: 8px 0 28px; }
+  .node {
+    padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); box-shadow: 0 8px 22px rgba(15,23,42,.10);
+    text-align: center; min-width: 110px;
+  }
+  .node .n { font-weight: 600; }
+  .node .m { font-size: 12px; color: var(--muted); }
+  .node.owner { background: var(--navy); color: #fff; border-color: var(--navy-dark); }
+  .node.owner .m { color: #a8c0d8; }
+  .node.lead { border: 2px solid var(--navy); }
+  .arrow { color: var(--muted); font-size: 20px; }
+
+  /* ---- cards ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-top: 4px solid var(--c);
+    border-radius: 10px; padding: 18px; box-shadow: 0 8px 22px rgba(15,23,42,.08);
+  }
+  .card h2 { margin: 0 0 2px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex: none; }
+  .card .role { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 4px; background: #f0f3f7; color: var(--muted); border: 1px solid var(--divider); }
+  .card ul { margin: 10px 0 0; padding-left: 18px; }
+  .card li { margin: 4px 0; }
+  .card .done { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--divider); font-size: 13px; color: var(--muted); }
+  .card .done b { color: var(--text); }
+
+  /* ---- loop ---- */
+  .loop { margin-top: 32px; }
+  .loop h2 { font-size: 20px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; }
+  .step {
+    flex: 1 1 150px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; position: relative;
+  }
+  .step .k { font-size: 12px; color: var(--muted); }
+  .step .t { font-weight: 600; margin-top: 2px; }
+  .step .who { font-size: 12px; color: var(--blue); font-weight: 600; margin-top: 6px; }
+
+  .note { margin-top: 28px; padding: 16px 18px; background: #fff8e6; border: 1px solid #f0d58c; border-radius: 10px; font-size: 14px; }
+  .note b { color: #8a5a00; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Gokul Oils IT Company</h1>
+    <p>The team that builds Gokul Retail — POS &amp; Office for a wood-pressed oil shop.</p>
+    <span class="badge">5 employees · lean, screen-first, budget-tracked</span>
+  </header>
+
+  <main>
+    <div class="hier">
+      <div class="node owner"><div class="n">Managing Director</div><div class="m">Owner · you</div></div>
+      <span class="arrow">→</span>
+      <div class="node lead"><div class="n">Head of IT</div><div class="m">main session · Opus</div></div>
+      <span class="arrow">→</span>
+      <div class="node"><div class="n">ux-designer</div><div class="m">Opus</div></div>
+      <div class="node"><div class="n">builder</div><div class="m">Sonnet</div></div>
+      <div class="node"><div class="n">ui-builder</div><div class="m">Sonnet</div></div>
+      <div class="node"><div class="n">verifier</div><div class="m">Opus</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="card" style="--c: var(--navy)">
+        <h2><span class="dot"></span>Head of IT</h2>
+        <div class="role">Solution Architect · main session</div>
+        <span class="chip">Opus</span>
+        <ul>
+          <li>Talks to you, writes the spec (1 page).</li>
+          <li>Delegates to the right agent, merges only after PASS.</li>
+          <li>Runs <code>npm run check</code>, reports cost in plain words.</li>
+        </ul>
+        <div class="done"><b>Done:</b> spec approved, merged after PASS, board current, cost reported.</div>
+      </div>
+
+      <div class="card" style="--c: var(--purple)">
+        <h2><span class="dot"></span>ux-designer</h2>
+        <div class="role">Product Designer</div>
+        <span class="chip">Opus</span>
+        <ul>
+          <li>Owns the look — one design system (<code>docs/DESIGN-SYSTEM.md</code>).</li>
+          <li>One visual mockup per new screen, BEFORE any code.</li>
+          <li>Reviews built screens against the mockup.</li>
+        </ul>
+        <div class="done"><b>Done:</b> mockup approved by you, then the built screen matches it.</div>
+      </div>
+
+      <div class="card" style="--c: var(--blue)">
+        <h2><span class="dot"></span>builder</h2>
+        <div class="role">Backend Engineer</div>
+        <span class="chip">Sonnet</span>
+        <ul>
+          <li>Rust core: money, stock, GST, crash safety, database.</li>
+          <li>Bill save = one SQLite transaction, gap-free numbers.</li>
+          <li>Tests for every rule; no <code>unwrap</code>/<code>expect</code>.</li>
+        </ul>
+        <div class="done"><b>Done:</b> builds to spec, <code>npm run check</code> green, tests pass.</div>
+      </div>
+
+      <div class="card" style="--c: var(--green)">
+        <h2><span class="dot"></span>ui-builder</h2>
+        <div class="role">Frontend Engineer</div>
+        <span class="chip">Sonnet</span>
+        <ul>
+          <li>React screens, exactly to the approved mockup + tokens.</li>
+          <li>Keyboard-first; every action has a key.</li>
+          <li>Takes a screenshot before finishing.</li>
+        </ul>
+        <div class="done"><b>Done:</b> screen matches the mockup (screenshot), typecheck/lint/test green.</div>
+      </div>
+
+      <div class="card" style="--c: var(--red)">
+        <h2><span class="dot"></span>verifier</h2>
+        <div class="role">QA · Release Gate</div>
+        <span class="chip">Opus</span>
+        <ul>
+          <li>Reads the diff vs spec + design, runs every test.</li>
+          <li>Tries to break it: empty bill, huge qty, kill mid-save.</li>
+          <li>PASS or FAIL — FAIL blocks merge, no exceptions.</li>
+        </ul>
+        <div class="done"><b>Done:</b> PASS (or a short FAIL list with file:line).</div>
+      </div>
+    </div>
+
+    <div class="loop">
+      <h2>How a card flows through the team</h2>
+      <div class="steps">
+        <div class="step"><div class="k">1</div><div class="t">Spec</div><div class="who">Head of IT · Opus</div></div>
+        <div class="step"><div class="k">2</div><div class="t">Design mockup</div><div class="who">ux-designer · Opus</div></div>
+        <div class="step"><div class="k">3</div><div class="t">Build</div><div class="who">builder + ui-builder</div></div>
+        <div class="step"><div class="k">4</div><div class="t">Verify</div><div class="who">verifier · Opus</div></div>
+        <div class="step"><div class="k">5</div><div class="t">Fix → PASS</div><div class="who">builder / ui-builder</div></div>
+        <div class="step"><div class="k">6</div><div class="t">You click it</div><div class="who">Owner</div></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>How to watch it live in Claude Code:</b> each agent is a file in <code>.claude/agents/</code>.
+      When the Head of IT delegates work, the agent's <b>name + color</b> appears in the transcript and its output streams in —
+      that is your live view. The color chip next to each name above is the same color you'll see in Claude Code.
+    </div>
+  </main>
+</body>
+</html>

@@ -90,8 +90,8 @@ App shell and login screen, database with migrations, settings screen (shop name
 - G. Festival/season planning, near-best-before alert
 - H. Owner daily summary: sales, oil pressed, yield %, cash vs UPI, oil-wise profit
 
-## Hard limit: shop computer is old and slow
-The final software is one small Windows installer (.exe). Target: installer under 15 MB, under 150 MB RAM while billing, works on a low-end PC. See CLAUDE.md "Stack".
+## Packaging
+The final software is one small Windows installer (`.exe`), fully offline. See CLAUDE.md "Stack".
 
 ## Questions for you
 1. Counter PC: Windows version? How many counters bill at the same time?

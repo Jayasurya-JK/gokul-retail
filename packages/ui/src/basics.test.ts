@@ -110,11 +110,10 @@ describe("theme.css (design system section 10)", () => {
     expect(css).not.toMatch(/outline:\s*none/);
     expect(css).not.toMatch(/opacity/);
     expect(css).not.toMatch(/transform/);
-    expect(css).not.toMatch(/box-shadow/);
   });
   it("a focused selected row shows every muted cell in the selection text colour (UX Must 1)", () => {
     expect(css).toMatch(/\.gk-list:focus \.gk-list-row\[aria-selected="true"\] \.gk-muted[\s\S]*?color:\s*var\(--gk-select-text\)/);
-    expect(css).toMatch(/--gk-select-bg: #003a9b/);
+    expect(css).toMatch(/--gk-select-bg: #0b5cad/);
     expect(css).toMatch(/--gk-select-text: #ffffff/);
   });
   it("uses only weights 400 and 600", () => {
@@ -122,8 +121,8 @@ describe("theme.css (design system section 10)", () => {
     for (const w of weights) expect(["400", "600"]).toContain(w);
   });
   it("is light theme with the design tokens", () => {
-    expect(css).toContain("--gk-text: #111111");
-    expect(css).toContain("--gk-focus: #0a4fd1");
-    expect(css).toContain("--gk-fs-caption: 0.875rem");
+    expect(css).toContain("--gk-text: #1f2933");
+    expect(css).toContain("--gk-focus: #0b5cad");
+    expect(css).toContain("--gk-fs-caption: 0.8125rem");
   });
 });

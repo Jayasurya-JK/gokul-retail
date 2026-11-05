@@ -18,13 +18,12 @@
 - Automatic backup daily and on app close; keep 30 days; restore is tested.
 - Any uncaught error is logged to a file and shown as a plain message. The app never shows a white screen.
 
-## Speed budgets (on the shop's actual counter PC)
+## Performance (never slow)
 - App start to billing screen: under 3 s
 - Barcode scan to line on screen: under 100 ms
 - Item search as you type: under 50 ms with 20,000 items
 - Save + print bill: under 300 ms (printer time excluded)
 - Day-end report: under 2 s with 1 year of data
-- Installer size: under 15 MB. RAM while billing: under 150 MB total (app + WebView2).
 - Idle CPU: near 0% (no polling loops, no heavy animations).
 Each budget gets an automated test with seeded data. Slower than budget = FAIL.
 

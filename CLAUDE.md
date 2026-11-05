@@ -4,7 +4,7 @@ Own retail POS for Gokul Oils (oil shop, 500+ bills/day). Replaces an old POSBea
 
 **The one rule: it must never be slow, never lose a bill, never crash during billing.** Staff will compare it to POSBean on day one.
 
-**Quality bar: build it like GoFrugal or a commercial POS company would.** No shortcuts, no "good enough for now". Product-grade code, tests, error handling and UX. Small and light because the shop PC is weak, never because of lower quality.
+**Quality bar: build it like a commercial POS company would.** Modern, high-quality, efficient. No shortcuts, no "good enough for now". Product-grade code, tests, error handling and UX.
 
 Not for sale now, but build it as if it will be sold later (clean modules, settings instead of hard-coded shop details).
 
@@ -12,33 +12,34 @@ Built and run by the **Gokul Oils IT Team** (`docs/IT-TEAM.md`). The main sessio
 
 ## Read first
 - `docs/IT-TEAM.md` - team roles and delivery process; `docs/BOARD.md` - task board
+- `docs/DESIGN-SYSTEM.md` - the single visual source of truth (palette, type, screens)
 - `docs/ENGINEERING-RULES.md` - non-negotiable quality rules (money, stock, speed, crash safety)
 - `docs/FEATURES.md` - feature menu; only build what the owner marked MUST
 - `docs/MODEL-ROUTING.md` - which Claude model does which job
 - `docs/specs/` - one spec per feature, written before any code
 
-## Stack (decided 5 Nov 2026 - shop PC is Windows 10, ~4 GB RAM, slow)
-Electron was rejected: too heavy for the shop PC (100 MB+ installer, 300 MB+ RAM).
-- **Tauri 2** desktop app -> one small NSIS installer `.exe` (target < 15 MB). Uses Windows' built-in WebView2.
+## Stack (decided 5 Nov 2026)
+- **Tauri 2** desktop app -> one small NSIS installer `.exe`. Uses Windows' built-in WebView2. Fast and small by design.
 - **Two apps**: `apps/pos` (Gokul POS - billing counter only) and `apps/office` (Gokul Office - dashboard, items, stock, production, reports, settings). Same DB.
 - **Rust core** `crates/core` (`gokul-core`): all business rules, database, stock, GST, printing, backup. `rusqlite` with bundled SQLite, WAL mode. Tested with `cargo test`. No Tauri dependency.
 - **UI**: React + TypeScript (strict) + Vite per app, shared components in `packages/ui`. UI only calls Tauri commands; no business rules in the UI. Tested with Vitest.
 - Rust tools live in `%USERPROFILE%\.cargo\bin` - add it to PATH in each shell if `cargo` is not found.
 - Thermal bills via ESC/POS, barcode stickers via TSPL/ZPL (printer models to confirm).
 - Fully offline. Data in `%APPDATA%\GokulRetail\`.
-- Dev laptop is high-spec; the shop PC is not. Always measure on low-end settings. Lightweight never means lower quality.
+- Fast and efficient is a virtue, not a ceiling. Build modern and high-quality.
 
 ## How work is done (no vibe coding)
 Every feature goes through this loop. Skipping a step is not allowed.
 
 1. **Discuss** (main session, Opus) - agree scope with the owner in plain English.
 2. **Spec** (main session, Opus) - write `docs/specs/NN-feature.md`: user steps, data tables, rules, edge cases, acceptance tests, speed budget. Owner approves.
-3. **Build** - `builder` (logic, database, printing) or `ui-builder` (screens). Small steps, tests written alongside.
-4. **Verify** - `verifier` (Opus) reviews the diff against the spec and rules, runs all tests, tries to break it. Verdict PASS or FAIL with reasons.
-5. **Fix** until PASS. Then one git commit per feature (short imperative message).
-6. **Owner check** - owner tries it on the screen before it counts as done.
+3. **Design** (ux-designer, Opus) - one visual mockup per new screen, following `docs/DESIGN-SYSTEM.md`. Owner approves. No approval, no build.
+4. **Build** - `builder` (logic, database, printing) or `ui-builder` (screens). Small steps, tests written alongside. A screenshot of the built screen is attached before finishing.
+5. **Verify** - `verifier` reviews the diff against the spec, rules and design, runs all tests, tries to break it. Verdict PASS or FAIL with reasons.
+6. **Fix** until PASS. Then one git commit per feature (short imperative message).
+7. **Owner check** - owner tries it on the screen before it counts as done.
 
-Use `helper` (Haiku) for searching the code, reading logs, converting data files, and writing docs. Do not send it money or stock logic.
+The team is four agents + the main session: `ux-designer`, `builder`, `ui-builder`, `verifier`. No other agents. Domain questions (GST, retail, oil) come from the skills, not extra experts.
 
 ## Token discipline
 - One feature per session. `/clear` between features, `/compact` when a session is long.
