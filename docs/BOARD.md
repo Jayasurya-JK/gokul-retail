@@ -48,9 +48,10 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 
 | Role | Task | Branch / worktree | State | Next step |
 |---|---|---|---|---|
-| builder (Sonnet) | S0-3 final batch BE: queued (a)-(e), (g); UX 7, 9, 22 check; LoginUser.role | feat/S0-3-final-be / .claude/worktrees/agent-a76827da5223d169a | running | commit, report -> merge |
+| builder (Sonnet) | S0-3 final batch BE | feat/S0-3-final-be (e1a27c5) | DONE, merged (5bb8ea2) | - |
 | ui-builder (Sonnet) | S0-3 final batch UI: UX Must 1, 2; UX 3, 6, 7, 15 (role column); queued (e) hint, (f) test | feat/S0-3-final-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running | commit, report -> merge |
 | Head of IT | merge both branches, `npm run check` (no agent re-review; QA + security already PASS) | feat/S0-3 | waiting | merge to main, push. Staff guide deferred until billing works. |
+| ux-designer (Sonnet) | visual mock-up of all 17 app screens for MD approval | scratchpad/screens -> Artifact "Gokul Retail Screens" | running | Head of IT publishes, MD approves look |
 | Deferred to B-6/B-7 | UX review items 4, 5, 8, 10-14, 15 (rest), 16-22 (see docs/design/00-shells-and-login-review.md); item 21 into spec 03 | - | parked | - |
 | Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
 
