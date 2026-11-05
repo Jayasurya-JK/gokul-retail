@@ -39,8 +39,13 @@ const api = {
   unlockUser: (userId: number) => ok(() => fake.unlockUser(userId)),
   deactivateUser: (userId: number) => ok(() => fake.deactivateUser(userId)),
   onCloseRequested: (handler: () => void): Promise<() => void> => {
-    void handler; // a browser tab has no app window to intercept
-    return Promise.resolve(() => undefined);
+    // A browser tab has no app window to intercept. Tests and screenshots call
+    // window.__previewClose() to act like Alt+F4 / the window X button.
+    const w = window as unknown as { __previewClose?: () => void };
+    w.__previewClose = handler;
+    return Promise.resolve(() => {
+      if (w.__previewClose === handler) delete w.__previewClose; // StrictMode re-registers first
+    });
   },
   closeWindow: (): Promise<void> => Promise.resolve(),
 } satisfies typeof RealApi;

@@ -226,7 +226,11 @@ export function createFakeBackend(opts: FakeOptions) {
     mustChangePin: u.mustChangePin,
     lastLoginAt: u.lastLoginAt,
   });
-  const stamp = () => new Date(now() * 1000).toISOString().slice(0, 19);
+  // ISO local time without a zone, like the Rust side ("2026-11-05T23:12:58").
+  const stamp = () => {
+    const d = new Date(now() * 1000);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  };
 
   /** Idle limit: POS never, Office 10 minutes. */
   const requireLogin = (allowPending = false): FakeUser => {
