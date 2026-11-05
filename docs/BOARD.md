@@ -11,7 +11,7 @@ Roles and process: see `docs/IT-TEAM.md`.
 ## Now
 | Card | Spec / step | Who | Status |
 |---|---|---|---|
-| S0-3 | 00 shells and login (migration 002) | built: backend ba91a37 + screens fec6aff merged on feat/S0-3. Checks running: verifier, security-engineer, test-automation (e2e + preview); then ux-designer screenshot review | fixing (QA + security FAIL, narrow) |
+| S0-3 | 00 shells and login (migration 002) - DONE 6 Nov 2026, merged to main; restyle waits for MD mock-up approval | built: backend ba91a37 + screens fec6aff merged on feat/S0-3. Checks running: verifier, security-engineer, test-automation (e2e + preview); then ux-designer screenshot review | fixing (QA + security FAIL, narrow) |
 
 ### S0-3 plan (remaining pipeline, to contract `docs/specs/00-step3-login-security.md`)
 | # | Step | Role | Runs |
@@ -49,13 +49,14 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 | Role | Task | Branch / worktree | State | Next step |
 |---|---|---|---|---|
 | builder (Sonnet) | S0-3 final batch BE | feat/S0-3-final-be (e1a27c5) | DONE, merged (5bb8ea2) | - |
-| ui-builder (Sonnet) | S0-3 final batch UI: UX Must 1, 2; UX 3, 6, 7, 15 (role column); queued (e) hint, (f) test | feat/S0-3-final-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running | commit, report -> merge |
+| ui-builder (Sonnet) | S0-3 final batch UI | ae425dd | DONE, merged | - |
 | Head of IT | merge both branches, `npm run check` (no agent re-review; QA + security already PASS) | feat/S0-3 | waiting | merge to main, push. Staff guide deferred until billing works. |
-| ux-designer (Sonnet) | visual mock-up of all 17 app screens for MD approval | scratchpad/screens -> Artifact "Gokul Retail Screens" | running | Head of IT publishes, MD approves look |
+| ux-designer | visual mock-up of all 17 screens: https://claude.ai/artifact/UR1AbGtBtXPmPb4qrKZszo (copy in docs/design/mockups/) | - | published, WAITING MD approval | if approved: 1 ui-builder restyles login + shells; else new Lead Product Designer redoes 3 key screens |
 | Deferred to B-6/B-7 | UX review items 4, 5, 8, 10-14, 15 (rest), 16-22 (see docs/design/00-shells-and-login-review.md); item 21 into spec 03 | - | parked | - |
 | Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
 
 ## Done
+| S0-3 | 00 shells and login: 98 core + 11 e2e + 4 app + 226 UI tests; QA + security PASS | builder, ui-builder, test-automation | merged 6 Nov 2026 |
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
 
 ## Lean plan (MD, 6 Nov 2026) - budgets: small < 300k, medium < 800k tokens per card

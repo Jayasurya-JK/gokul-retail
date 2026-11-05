@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>POS Payment</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#8a5a12}a:hover{color:#5c3c0c}
+</style>
+</helmet>
+<div style="width:1366px;height:768px;box-sizing:border-box;overflow:hidden;font-family:'Noto Sans','Noto Sans Tamil',sans-serif;background:#FBF7EF;color:#1F1A14;display:flex;flex-direction:column">
+<div style="height:40px;flex:none;background:#3B2A1A;color:#F5E9D2;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:14px"><div style="display:flex;gap:20px"><b style="font-size:16px;color:#F2B84B">Gokul Oils</b><span>Payment - Bill GK-2026-000123</span></div><div style="display:flex;gap:24px"><span>Ravi Kumar (Cashier)</span><span>06 Nov 2026, 11:50 PM</span><span style="color:#9BE0B5">Backup OK 11:30 PM</span></div></div>
+<div style="flex:1;display:flex;gap:24px;padding:24px 40px;min-height:0">
+<div style="flex:1;display:flex;flex-direction:column;gap:14px">
+<div style="background:#3B2A1A;color:#FFFFFF;border-radius:10px;padding:18px 28px">
+<div style="font-size:15px;color:#F2D9A6">Amount to pay (Rs)</div>
+<div style="font-size:72px;font-weight:700;line-height:1.1">1,521.00</div>
+<div style="font-size:14px;color:#F5E9D2">6 lines - GST included 72.40 - round-off +0.50</div>
+</div>
+<div style="font-size:14px;font-weight:600">Payment mode</div>
+<div style="display:flex;gap:10px">
+<button type="button" style="flex:1;height:64px;background:#FFF1D6;box-shadow:inset 4px 0 0 #C8861A;border:2px solid #C8861A;border-radius:8px;font-size:20px;font-weight:700;color:#1F1A14;font-family:inherit">Cash <span style="font-size:12px;border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px">F1</span></button>
+<button type="button" style="flex:1;height:64px;background:#FFFFFF;border:1px solid #D9CBB0;border-radius:8px;font-size:20px;color:#1F1A14;font-family:inherit">UPI <span style="font-size:12px;border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px">F2</span></button>
+<button type="button" style="flex:1;height:64px;background:#FFFFFF;border:1px solid #D9CBB0;border-radius:8px;font-size:20px;color:#1F1A14;font-family:inherit">Card <span style="font-size:12px;border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px">F3</span></button>
+<button type="button" style="flex:1;height:64px;background:#FFFFFF;border:1px solid #D9CBB0;border-radius:8px;font-size:20px;color:#1F1A14;font-family:inherit">Split <span style="font-size:12px;border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px">F4</span></button>
+</div>
+<div style="background:#FFFFFF;border:1px solid #D9CBB0;border-radius:8px;padding:14px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><label for="tender" style="font-size:18px;font-weight:600">Cash given</label><input id="tender" type="text" value="2,000.00" style="width:240px;height:52px;box-sizing:border-box;text-align:right;font-size:28px;font-weight:700;padding:0 12px;border:2px solid #C8861A;border-radius:6px;outline:3px solid #F2D9A6;font-family:inherit;color:#1F1A14"></div>
+<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #EEE4D0;padding-top:8px"><span style="font-size:18px;font-weight:600">Change to give back</span><span style="font-size:44px;font-weight:700;color:#2E7D4F">479.00</span></div>
+</div>
+</div>
+<div style="width:380px;display:flex;flex-direction:column;gap:12px">
+<div style="background:#FFFFFF;border:1px solid #D9CBB0;border-radius:8px;padding:14px 18px;font-size:15px">
+<div style="font-weight:700;font-size:16px;margin-bottom:6px">Bill summary</div>
+<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Subtotal</span><span>1,520.50</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Discount</span><span>0.00</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Round-off</span><span>+0.50</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Customer</span><span>Walk-in</span></div>
+</div>
+<div style="background:#E7F3EB;border:1px solid #2E7D4F;color:#1B4D31;border-radius:8px;padding:12px 18px;font-size:15px">Bill is saved the moment you confirm. Printing happens after, and never blocks the next bill.</div>
+<button type="button" style="margin-top:auto;height:68px;background:#C8861A;color:#1F1A14;border:0;border-radius:8px;font-size:24px;font-weight:700;font-family:inherit">Confirm and print  (Enter)</button>
+<button type="button" style="height:48px;background:#FFFFFF;color:#1F1A14;border:1px solid #8A6A3A;border-radius:8px;font-size:17px;font-family:inherit">Back to bill  (Esc)</button>
+</div>
+</div>
+<div style="height:44px;flex:none;background:#EFE3CB;border-top:1px solid #D9CBB0;display:flex;align-items:center;gap:18px;padding:0 16px;font-size:14px"><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">F1-F4</b> Mode</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Enter</b> Confirm and print</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Esc</b> Back to bill</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">F5</b> Reprint last</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1366,"height":768}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
