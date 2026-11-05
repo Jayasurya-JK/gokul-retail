@@ -24,6 +24,7 @@ import {
 import { useApi } from "./apiContext";
 import { BACKUP_CONFIGURED } from "./constants";
 import { S } from "./strings";
+import { Billing } from "./Billing";
 
 export interface ShellProps {
   session: SessionInfo;
@@ -121,10 +122,8 @@ export function Shell({ session, startupShopName, onSwitchUser, onPinChangeRequi
           }
           legend={<KeyLegend mode="slots" />}
         >
-          <div ref={contentRef} tabIndex={-1} className="gk-tamil-safe">
-            <h1 className="gk-content-title">Billing</h1>
-            <p>{S.billingSoon}</p>
-            <p>{S.counterReady}</p>
+          <div ref={contentRef} tabIndex={-1} className="gk-tamil-safe gk-fill">
+            <Billing />
           </div>
         </AppFrame>
       </div>

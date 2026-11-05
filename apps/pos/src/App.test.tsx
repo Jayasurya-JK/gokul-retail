@@ -93,8 +93,9 @@ describe("login", () => {
     await signIn();
     expect(api.login).toHaveBeenCalledWith(2, "2468");
     expect(api.saveLastUserId).toHaveBeenCalledWith(2);
-    expect(pageText()).toContain("Billing");
-    expect(pageText()).toContain("The billing screen comes in the next update.");
+    expect(pageText()).toContain("Sales Billing");
+    expect(pageText()).toContain("Sales Billing");
+    expect(pageText()).toContain("Net amount");
     expect(document.querySelector(".gk-statusbar")?.textContent).toContain("Ravi Kumar (Cashier)");
     expect(document.querySelector(".gk-statusbar")?.textContent).toContain("Gokul Oils");
     expect(document.querySelector(".gk-statusbar")?.textContent).toContain("Backup: not set up yet");
@@ -112,7 +113,7 @@ describe("login", () => {
     await press("Enter");
     await flush(4);
     expect(api.changePin).toHaveBeenCalledWith("2468", "1357");
-    expect(pageText()).toContain("Billing");
+    expect(pageText()).toContain("Sales Billing");
   });
 });
 
@@ -137,7 +138,7 @@ describe("POS shell (test 20)", () => {
     }
     await press("Escape");
     expect(document.activeElement).toBe(before);
-    expect(pageText()).toContain("Billing");
+    expect(pageText()).toContain("Sales Billing");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 

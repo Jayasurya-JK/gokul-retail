@@ -101,6 +101,10 @@ pub enum Error {
     #[error("{0} was not found.")]
     NotFound(&'static str),
 
+    /// A billing money rule was broken (spec 03): bad discount, negative amount, MRP exceeded.
+    #[error("{0}")]
+    Billing(String),
+
     /// Hashing or random-number failure. Never contains a PIN.
     #[error("internal error: {0}")]
     Internal(String),
@@ -144,7 +148,8 @@ impl Error {
             | Error::AlreadySetup
             | Error::ShopNotSetUp
             | Error::Validation(_)
-            | Error::NotFound(_) => self.to_string(),
+            | Error::NotFound(_)
+            | Error::Billing(_) => self.to_string(),
             Error::WrongPin {
                 attempts_before_lock,
             } => format!("Wrong PIN. {attempts_before_lock} tries left."),
