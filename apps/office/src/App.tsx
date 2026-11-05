@@ -3,6 +3,7 @@ import {
   AppFrame,
   Banner,
   BlockingScreen,
+  Dialog,
   ChangePinScreen,
   HelpOverlay,
   KeyLegend,
@@ -83,6 +84,7 @@ function Root({ api }: { api: Api }) {
   const [phase, setPhase] = useState<Phase>({ kind: "starting" });
   const [shopName, setShopName] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [closeAsk, setCloseAsk] = useState(false);
   const closeRef = useRef<(() => void) | null>(null);
   const registerClose = useCallback((fn: (() => void) | null) => {
     closeRef.current = fn;
@@ -126,6 +128,14 @@ function Root({ api }: { api: Api }) {
       off?.();
     };
   }, [api]);
+
+  // Closing while the recovery code is on screen would lose it for ever: ask first.
+  const showingCode = phase.kind === "recoveryCode";
+  useEffect(() => {
+    if (!showingCode) return;
+    registerClose(() => setCloseAsk(true));
+    return () => registerClose(null);
+  }, [showingCode, registerClose]);
 
   const inMain = phase.kind === "main";
   const helpKeys = useMemo<Binding[]>(() => [{ keys: ["F1"], label: "Help", run: () => setHelp(true) }], []);
@@ -259,6 +269,19 @@ function Root({ api }: { api: Api }) {
         {body}
       </AppFrame>
       {help ? <HelpOverlay onClose={() => setHelp(false)} /> : null}
+      {closeAsk ? (
+        <Dialog
+          title="Close without the recovery code?"
+          buttons={[
+            { label: "Stay", isDefault: true, onPress: () => setCloseAsk(false) },
+            { label: "Close anyway", keys: ["C"], variant: "danger", onPress: () => void api.closeWindow() },
+          ]}
+          onCancel={() => setCloseAsk(false)}
+          cancelLabel="Stay"
+        >
+          <p>You have not confirmed you wrote down the recovery code. Close anyway?</p>
+        </Dialog>
+      ) : null}
     </>
   );
 }

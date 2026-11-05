@@ -226,12 +226,13 @@ describe("POS shell (test 20)", () => {
   });
 
   it("Esc on the lock screen switches user", async () => {
-    await boot();
+    const api = await boot();
     await signIn();
     await press("l", { ctrl: true });
     await flush(2);
     await press("Escape");
     await flush(3);
+    expect(api.logout).toHaveBeenCalledTimes(1);
     expect(pageText()).toContain("Gokul POS - Sign in");
   });
 });

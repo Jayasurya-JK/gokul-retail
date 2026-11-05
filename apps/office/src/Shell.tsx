@@ -34,6 +34,7 @@ import { S } from "./strings";
 import { Settings } from "./Settings";
 import { Users } from "./Users";
 
+const SIGNED_OUT_NOTICE = "You have been signed out. Please sign in again.";
 const IDLE_NOTICE = "Logged out after 10 minutes idle.";
 
 const ALL_ITEMS: (MenuItem & { id: Screen })[] = [
@@ -105,7 +106,7 @@ export function Shell({
   const onApiError = useCallback(
     (err: AppError): boolean => {
       if (isSessionGone(err)) {
-        onSignedOut(IDLE_NOTICE);
+        onSignedOut(err.code === "SESSION_EXPIRED" ? IDLE_NOTICE : SIGNED_OUT_NOTICE);
         return true;
       }
       if (err.code === "PIN_CHANGE_REQUIRED") {
@@ -136,7 +137,15 @@ export function Shell({
   useHeartbeat(() => {
     if (lockRef.current.locked === null) api.heartbeat().catch((raw: unknown) => onApiError(toAppError(raw)));
   });
-  useIdleTimer(OFFICE_IDLE_MS, () => onSignedOut(IDLE_NOTICE), true);
+  useIdleTimer(
+    OFFICE_IDLE_MS,
+    () => {
+      // Best effort: lets Rust write the logout audit row. Errors do not matter, the session is ending anyway.
+      api.logout().catch(() => undefined);
+      onSignedOut(IDLE_NOTICE);
+    },
+    true,
+  );
 
   // The owner-only / not-allowed message goes away on the next key press.
   useEffect(() => {
@@ -292,7 +301,11 @@ export function Shell({
             lock.release();
             refresh();
           }}
-          onSwitchUser={onSwitchUser}
+          onSwitchUser={() => {
+            // Rust cleared the session at lock; this is best effort so a logout is still recorded if it can be.
+            api.logout().catch(() => undefined);
+            onSwitchUser();
+          }}
           onHelp={() => setHelp(true)}
           getUnsaved={() => (unsavedWhat() ? S.titles[screen] : null)}
         />

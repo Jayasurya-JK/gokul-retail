@@ -29,7 +29,7 @@ export const FIELDS: FieldSpec[] = [
 const REQUIRED_MESSAGE: Partial<Record<SettingsKey, string>> = {
   shopName: "Enter the shop name.",
   addressLine1: "Enter the first address line.",
-  phone: "Enter the phone number.",
+  phone: "Enter the shop phone number.",
 };
 
 export function hintFor(key: SettingsKey, rawValue: string): string | undefined {
@@ -41,8 +41,7 @@ export function hintFor(key: SettingsKey, rawValue: string): string | undefined 
     if (g.length !== 15) return `GSTIN must be 15 characters. You typed ${g.length}.`;
   }
   if (key === "fssaiNo") {
-    if (!/^\d+$/.test(value)) return "FSSAI number can have digits only.";
-    if (value.length !== 14) return `FSSAI number must be 14 digits. You typed ${value.length}.`;
+        if (value.length !== 14) return `FSSAI number must be 14 digits. You typed ${value.length}.`;
   }
   return undefined;
 }

@@ -134,7 +134,11 @@ export function Shell({ session, startupShopName, onSwitchUser, onPinChangeRequi
             lock.release();
             refresh();
           }}
-          onSwitchUser={onSwitchUser}
+          onSwitchUser={() => {
+            // Rust cleared the session at lock; this is best effort so a logout is still recorded if it can be.
+            api.logout().catch(() => undefined);
+            onSwitchUser();
+          }}
           onHelp={() => setHelp(true)}
           getUnsaved={() => null}
         />

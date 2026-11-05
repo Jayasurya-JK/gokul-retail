@@ -1,10 +1,10 @@
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appError, flush, mount, pageText, press, typeText, unmountAll } from "@gokul/ui/testing";
-import { resetKeymapsForTests } from "@gokul/ui";
+import { installBrowserKeyBlock, resetKeymapsForTests } from "@gokul/ui";
 import type { UserRow } from "@gokul/ui";
 import { App } from "./App";
-import { cashierSession, makeApi, okStatus, ownerSession, readySettings } from "./testApi";
+import { cashierSession, makeApi, okStatus, readySettings } from "./testApi";
 
 afterEach(async () => {
   await unmountAll();
@@ -228,6 +228,7 @@ describe("login and shells (tests 17, 18, 19)", () => {
   it("a PIN change is required: the change-PIN screen comes first", async () => {
     const api = makeApi({
       login: vi.fn(() => Promise.resolve({ ...cashierSession, mustChangePin: true })),
+      changePin: vi.fn(() => Promise.resolve(cashierSession)),
     });
     await boot(api);
     await signIn("cashier");
@@ -240,7 +241,7 @@ describe("login and shells (tests 17, 18, 19)", () => {
     await press("Enter");
     await flush(4);
     expect(api.changePin).toHaveBeenCalledWith("2468", "1357");
-    expect(menuLabels()).toEqual(["Dashboard", "Items", "Stock", "Production", "Packing", "Purchases", "Reports", "Users", "Settings"]);
+    expect(menuLabels()).toEqual(["Dashboard", "Items", "Stock"]);
   });
 
   it("when Rust says PIN_CHANGE_REQUIRED mid-session, the change-PIN screen opens", async () => {
@@ -503,13 +504,54 @@ describe("session end", () => {
   });
 
   it("heartbeat goes out when keys are pressed, at most every 30 s", async () => {
+    vi.useFakeTimers();
     const api = makeApi();
     await boot(api);
     await signIn("owner");
+    expect(api.heartbeat).toHaveBeenCalledTimes(0); // no keys in the shell yet
     await press("Escape");
     await press("Escape");
     await press("Escape");
-    expect(api.heartbeat.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(api.heartbeat).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(api.heartbeat).toHaveBeenCalledTimes(1); // time alone sends nothing
+    await press("Escape");
+    expect(api.heartbeat).toHaveBeenCalledTimes(2);
+  });
+
+  it("idle logout also tells Rust (best effort) so the logout is audited", async () => {
+    vi.useFakeTimers();
+    const api = makeApi({ logout: vi.fn(() => Promise.reject(appError("NOT_LOGGED_IN", ""))) });
+    await boot(api);
+    await signIn("owner");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60_000 + 100);
+    });
+    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(pageText()).toContain("Logged out after 10 minutes idle.");
+  });
+
+  it("NOT_LOGGED_IN mid-session gives a neutral message, not the idle one", async () => {
+    const api = makeApi({ openScreen: vi.fn(() => Promise.reject(appError("NOT_LOGGED_IN", ""))) });
+    await boot(api);
+    await signIn("owner");
+    await press("i", { alt: true });
+    await flush(4);
+    expect(pageText()).toContain("You have been signed out. Please sign in again.");
+    expect(pageText()).not.toContain("10 minutes idle");
+  });
+
+  it("Esc on the lock screen (switch user) also calls logout", async () => {
+    const api = await boot();
+    await signIn("owner");
+    await press("l", { ctrl: true });
+    await flush(2);
+    await press("Escape");
+    await flush(3);
+    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(pageText()).toContain("Sign in");
   });
 });
 
@@ -602,9 +644,37 @@ describe("Users screen (minimal)", () => {
   });
 });
 
-describe("blocked keys", () => {
-  it("settings fields keep their text when F5 or Ctrl+R is pressed (handler installed in main.tsx, tested in ui)", () => {
-    expect(readySettings.shopName).toBe("Gokul Oils");
+describe("blocked keys (test 21)", () => {
+  it("F5, Ctrl+R, Ctrl+P and friends do nothing while a form has unsaved text", async () => {
+    const off = installBrowserKeyBlock({ dev: false });
+    try {
+      const api = makeApi();
+      await boot(api);
+      await signIn("owner");
+      await press("t", { alt: true });
+      await flush(4);
+      await typeText("x");
+      const opened = api.openScreen.mock.calls.length;
+      for (const [key, opts] of [
+        ["F5", {}],
+        ["r", { ctrl: true }],
+        ["R", { ctrl: true, shift: true }],
+        ["p", { ctrl: true }],
+        ["f", { ctrl: true }],
+        ["F12", {}],
+        ["ArrowLeft", { alt: true }],
+      ] as const) {
+        const ev = await press(key, opts);
+        expect(ev.defaultPrevented, key).toBe(true);
+      }
+      expect(input("shopName")?.value).toBe("Gokul Oilsx");
+      expect(heading()).toContain("Settings");
+      expect(api.openScreen.mock.calls.length).toBe(opened);
+      expect(api.saveShopSettings).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    } finally {
+      off();
+    }
   });
 });
 
@@ -612,7 +682,108 @@ describe("api contract use", () => {
   it("login sends only the user id and PIN", async () => {
     const api = await boot();
     await signIn("owner");
-    expect(api.login).toHaveBeenCalledWith(1, "135790");
-    expect(ownerSession.allowedScreens).toHaveLength(9);
+    expect(api.login.mock.calls[0]).toEqual([1, "135790"]);
+  });
+});
+
+describe("QA fixes", () => {
+  const row = (over: Partial<UserRow>): UserRow => ({
+    id: 1,
+    name: "Selvi",
+    role: "owner",
+    active: true,
+    lockedSecondsLeft: 0,
+    mustChangePin: false,
+    lastLoginAt: null,
+    ...over,
+  });
+  const lastOwner = appError("VALIDATION", "", {
+    fields: [{ field: "name", message: "At least one active owner is required." }],
+  });
+
+  async function usersScreen(api: FakeApi) {
+    await boot(api);
+    await signIn("owner");
+    await press("u", { alt: true });
+    await flush(4);
+  }
+
+  it("switching off the last owner shows the backend's words in the banner (QA-2)", async () => {
+    const api = makeApi({
+      listUsers: vi.fn(() => Promise.resolve([row({})])),
+      deactivateUser: vi.fn(() => Promise.reject(lastOwner)),
+    });
+    await usersScreen(api);
+    await press("F9");
+    await press("s");
+    await flush(3);
+    expect(pageText()).toContain("At least one active owner is required.");
+    expect(pageText()).not.toContain("Some fields need fixing");
+  });
+
+  it("reset PIN with an error on a field not in the dialog shows it in the dialog (QA-2)", async () => {
+    const api = makeApi({
+      listUsers: vi.fn(() => Promise.resolve([row({})])),
+      resetPin: vi.fn(() =>
+        Promise.reject(appError("VALIDATION", "", { fields: [{ field: "name", message: "The owner PIN cannot be reset here." }] })),
+      ),
+    });
+    await usersScreen(api);
+    await press("F6");
+    await typeText("246802");
+    await press("Enter");
+    await typeText("246802");
+    await press("Enter");
+    await flush(4);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("The owner PIN cannot be reset here.");
+  });
+
+  it("a wrong recovery code shows the backend's recovery-code message, not 'Wrong PIN' (QA-3)", async () => {
+    const api = makeApi({
+      recoverOwnerPin: vi.fn(() =>
+        Promise.reject(appError("WRONG_PIN", "That recovery code is not right. 3 tries left.", { attemptsBeforeLock: 3 })),
+      ),
+    });
+    await boot(api);
+    await press("F4");
+    await typeText("AAAABBBBCCCCDDDD");
+    await press("Enter");
+    await typeText("246802");
+    await press("Enter");
+    await typeText("246802");
+    await press("Enter");
+    await flush(4);
+    expect(pageText()).toContain("That recovery code is not right. 3 tries left.");
+    expect(pageText()).not.toContain("Wrong PIN");
+  });
+
+  it("closing while the recovery code is shown asks first (QA-5)", async () => {
+    const api = makeApi({
+      startupStatus: vi.fn(() => Promise.resolve({ ...okStatus, usersExist: false, setupComplete: false })),
+    });
+    let closeHandler: () => void = () => undefined;
+    api.onCloseRequested.mockImplementation((h: () => void) => {
+      closeHandler = h;
+      return Promise.resolve(() => undefined);
+    });
+    await boot(api);
+    await typeText("Gokul Oils");
+    await press("Enter");
+    await typeText("Selvi");
+    await press("Enter");
+    await typeText("135790");
+    await press("Enter");
+    await typeText("135790");
+    await press("Enter");
+    await flush(4);
+    expect(pageText()).toContain("ABCD-1234-EFGH-5678");
+    await act(async () => closeHandler());
+    expect(pageText()).toContain("You have not confirmed you wrote down the recovery code. Close anyway?");
+    await press("Enter"); // safe default: Stay
+    expect(api.closeWindow).not.toHaveBeenCalled();
+    expect(pageText()).toContain("ABCD-1234-EFGH-5678");
+    await act(async () => closeHandler());
+    await press("c");
+    expect(api.closeWindow).toHaveBeenCalledTimes(1);
   });
 });
