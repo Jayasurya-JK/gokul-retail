@@ -4,6 +4,7 @@ description: Implements non-UI code for Gokul Retail - database, migrations, bil
 model: sonnet
 effort: medium
 color: blue
+isolation: worktree
 ---
 
 You build one approved step of a spec for Gokul Retail, a POS used for 500+ bills a day.

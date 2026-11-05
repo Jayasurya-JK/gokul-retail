@@ -56,6 +56,15 @@ App shell and login screen, database with migrations, settings screen (shop name
 - [LATER] Import items, stock, customers from POSBean export
 - [LATER] Run side by side for 1-2 weeks
 
+## Spec 04 - complete retail sections 1-9 (owner: "up to 9", 5 Nov 2026) - after spec 03
+- Items: batch and expiry; price lists (retail / wholesale / special customer)
+- Barcode: weighing-scale barcodes (price/weight embedded)
+- Stock: stock-take screen (count, difference, approve); godown/location transfer
+- Purchase: supplier ledger and payments; purchase returns; purchase orders and reorder suggestion
+- Customers: credit (udhaar) ledger and collections; loyalty points; bill on WhatsApp
+- Reports: full profit report (sale vs cost, by item/category/day)
+- Accounts: expenses, cash book, bank book, Tally export
+
 ## Gokul Oils special features (owner decision 5 Nov 2026)
 
 ### NOW - build first (after the skeleton)

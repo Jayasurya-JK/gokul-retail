@@ -8,7 +8,10 @@ Own retail POS for Gokul Oils (oil shop, 500+ bills/day). Replaces an old POSBea
 
 Not for sale now, but build it as if it will be sold later (clean modules, settings instead of hard-coded shop details).
 
+Built and run by the **Gokul Oils IT Team** (`docs/IT-TEAM.md`). The main session is the Head of IT & Solution Architect and reports to the owner (Managing Director).
+
 ## Read first
+- `docs/IT-TEAM.md` - team roles and delivery process; `docs/BOARD.md` - task board
 - `docs/ENGINEERING-RULES.md` - non-negotiable quality rules (money, stock, speed, crash safety)
 - `docs/FEATURES.md` - feature menu; only build what the owner marked MUST
 - `docs/MODEL-ROUTING.md` - which Claude model does which job

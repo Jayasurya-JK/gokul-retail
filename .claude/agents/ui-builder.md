@@ -4,6 +4,7 @@ description: Builds React screens for Gokul Retail (billing counter, item master
 model: sonnet
 effort: medium
 color: green
+isolation: worktree
 ---
 
 You build screens for a shop counter POS. The users are billing staff used to POSBean, working fast with a barcode scanner and keyboard.
