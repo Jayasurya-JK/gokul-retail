@@ -7,12 +7,15 @@
   "scripts": {
     "build:ui": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "preview:office": "npm run preview --workspace apps/office",
+    "preview:pos": "npm run preview --workspace apps/pos",
+    "verify:bundle": "node tools/verifyNoMock.mjs",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
     "fmt:check": "cargo fmt --all --check",
     "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "test:rust": "cargo test --workspace",
-    "check": "npm run build:ui && npm run fmt:check && npm run clippy && npm run test:rust && npm run typecheck && npm run lint && npm run test",
+    "check": "npm run build:ui && npm run verify:bundle && npm run fmt:check && npm run clippy && npm run test:rust && npm run typecheck && npm run lint && npm run test",
     "tauri:pos": "npm run tauri --workspace apps/pos --",
     "tauri:office": "npm run tauri --workspace apps/office --"
   },
