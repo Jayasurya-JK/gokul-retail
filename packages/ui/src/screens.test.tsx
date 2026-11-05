@@ -15,7 +15,7 @@ afterEach(async () => {
 const users: LoginUser[] = [
   { id: 1, name: "Ravi Kumar" },
   { id: 2, name: "Rajesh" },
-  { id: 3, name: "Selvi" },
+  { id: 3, name: "Gokul" },
 ];
 
 const session = (over: Partial<SessionInfo> = {}): SessionInfo => ({
@@ -67,7 +67,7 @@ describe("matchesFilter", () => {
 describe("login, keyboard only (spec 30, tests 9 and 10)", () => {
   it("lists active users and focuses the list when several can sign in", async () => {
     await renderLogin();
-    expect(rows()).toEqual(["Ravi Kumar", "Rajesh", "Selvi"]);
+    expect(rows()).toEqual(["Ravi Kumar", "Rajesh", "Gokul"]);
     expect(document.activeElement?.getAttribute("role")).toBe("listbox");
     expect(pageText()).toContain("Name not in the list? Ask the owner.");
   });
@@ -109,7 +109,7 @@ describe("login, keyboard only (spec 30, tests 9 and 10)", () => {
   });
 
   it("signs in: masked PIN, Enter checks it, success is reported", async () => {
-    const { login, onSignedIn } = await renderLogin({ list: [{ id: 7, name: "Selvi" }] });
+    const { login, onSignedIn } = await renderLogin({ list: [{ id: 7, name: "Gokul" }] });
     expect(document.activeElement).toBe(pinInput()); // single user: straight to PIN
     expect(pinInput()?.type).toBe("password");
     await typeText("2468");

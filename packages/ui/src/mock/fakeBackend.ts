@@ -201,7 +201,7 @@ export function createFakeBackend(opts: FakeOptions) {
 
   if ((opts.scenario ?? "ready") === "ready") {
     settings = { ...READY_SETTINGS };
-    addUser("Selvi", "owner", DEMO.ownerPin, false);
+    addUser("Gokul", "owner", DEMO.ownerPin, false);
     addUser(DEMO.ravi.name, "cashier", DEMO.ravi.pin, false);
     addUser(DEMO.anu.name, "cashier", DEMO.anu.pin, true);
     recoveryCode = "DEMOCODE23456789";

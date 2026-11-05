@@ -36,7 +36,7 @@ describe("preview fake backend mirrors the contract", () => {
     expect((await err(() => pos.login(1, "739158"))).code).toBe("SHOP_NOT_SET_UP");
 
     const office = createFakeBackend({ kind: "office", scenario: "fresh" });
-    const r = office.setupOwner("Gokul Oils", "Selvi", "739158");
+    const r = office.setupOwner("Gokul Oils", "Gokul", "739158");
     expect(r.recoveryCode).toHaveLength(16);
     expect(r.session.allowedScreens).toHaveLength(9);
     expect((await err(() => office.setupOwner("X", "Y", "739158"))).code).toBe("ALREADY_SETUP");
@@ -104,7 +104,7 @@ describe("preview fake backend mirrors the contract", () => {
   it("owner admin: create, reset, unlock, deactivate; last owner is protected", async () => {
     const c = clock();
     const b = createFakeBackend({ kind: "office", now: c.now });
-    const owner = ids(b)["Selvi"] ?? 0;
+    const owner = ids(b)["Gokul"] ?? 0;
     const ravi = ids(b)["Ravi"] ?? 0;
     for (let i = 0; i < 5; i++) await err(() => b.login(ravi, "1357"));
     b.login(owner, DEMO.ownerPin);
@@ -121,7 +121,7 @@ describe("preview fake backend mirrors the contract", () => {
 
   it("owner recovery: code works once, new code returned, old PIN dead", async () => {
     const b = createFakeBackend({ kind: "office", scenario: "fresh" });
-    const r = b.setupOwner("Gokul Oils", "Selvi", "739158");
+    const r = b.setupOwner("Gokul Oils", "Gokul", "739158");
     b.logout();
     expect((await err(() => b.recoverOwnerPin("AAAA-BBBB-CCCC-DDDD", "586204"))).code).toBe("WRONG_PIN");
     const next = b.recoverOwnerPin(r.recoveryCode, "586204");
@@ -136,7 +136,7 @@ describe("preview fake backend mirrors the contract", () => {
   it("Office idle logout after 10 minutes; POS never idles; lock ends the session", async () => {
     const c = clock();
     const o = createFakeBackend({ kind: "office", now: c.now });
-    o.login(ids(o)["Selvi"] ?? 0, DEMO.ownerPin);
+    o.login(ids(o)["Gokul"] ?? 0, DEMO.ownerPin);
     c.advance(601);
     expect((await err(() => o.getShopSettings())).code).toBe("SESSION_EXPIRED");
     const p = createFakeBackend({ kind: "pos", now: c.now });
