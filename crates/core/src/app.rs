@@ -98,6 +98,26 @@ impl std::fmt::Debug for SetupResult {
     }
 }
 
+impl SetupResult {
+    /// The one-time code, to show on screen.
+    pub fn recovery_code(&self) -> &str {
+        &self.recovery_code
+    }
+
+    pub fn session(&self) -> &SessionInfo {
+        &self.session
+    }
+
+    /// Take the code out (the type wipes its own copy on drop, so it cannot be moved out
+    /// of the field directly).
+    pub fn into_parts(mut self) -> (String, SessionInfo) {
+        (
+            std::mem::take(&mut self.recovery_code),
+            self.session.clone(),
+        )
+    }
+}
+
 impl Drop for SetupResult {
     fn drop(&mut self) {
         self.recovery_code.zeroize();
@@ -116,6 +136,17 @@ impl std::fmt::Debug for RecoveryResult {
         f.debug_struct("RecoveryResult")
             .field("recovery_code", &"***")
             .finish()
+    }
+}
+
+impl RecoveryResult {
+    pub fn recovery_code(&self) -> &str {
+        &self.recovery_code
+    }
+
+    /// Take the code out (see `SetupResult::into_parts`).
+    pub fn into_code(mut self) -> String {
+        std::mem::take(&mut self.recovery_code)
     }
 }
 
