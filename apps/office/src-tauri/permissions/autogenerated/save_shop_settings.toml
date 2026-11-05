@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-shop-settings"
+description = "Enables the save_shop_settings command without any pre-configured scope."
+commands.allow = ["save_shop_settings"]
+
+[[permission]]
+identifier = "deny-save-shop-settings"
+description = "Denies the save_shop_settings command without any pre-configured scope."
+commands.deny = ["save_shop_settings"]

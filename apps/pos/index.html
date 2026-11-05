@@ -4,9 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gokul POS</title>
+    <style>
+      /* No white flash and no blank window before React loads. Same colour as the Tauri window. */
+      html,
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #4d4d4d;
+        font-family: "Segoe UI", "Nirmala UI", "Latha", sans-serif;
+      }
+      #root > p {
+        padding: 32px;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><p>Starting Gokul POS...</p></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

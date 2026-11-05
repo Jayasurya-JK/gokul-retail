@@ -11,7 +11,7 @@ Roles and process: see `docs/IT-TEAM.md`.
 ## Now
 | Card | Spec / step | Who | Status |
 |---|---|---|---|
-| S0-3 | 00 shells and login (migration 002) | builder (core+commands, main tree) + ui-builder (screens, worktree feat/S0-3-ui) in parallel -> verifier | building |
+| S0-3 | 00 shells and login (migration 002) - DONE 6 Nov 2026, merged to main; restyle waits for MD mock-up approval | built: backend ba91a37 + screens fec6aff merged on feat/S0-3. Checks running: verifier, security-engineer, test-automation (e2e + preview); then ux-designer screenshot review | fixing (QA + security FAIL, narrow) |
 
 ### S0-3 plan (remaining pipeline, to contract `docs/specs/00-step3-login-security.md`)
 | # | Step | Role | Runs |
@@ -43,8 +43,28 @@ Roles and process: see `docs/IT-TEAM.md`.
 - CA to confirm: GST regular vs composition, and whether GSTIN/FSSAI must print on bills (optional for now).
 - Printer paper width (58 or 80 mm) and Tamil printing on bills.
 
+## In flight (handover) - Head of IT updates this at every dispatch and every return
+If work stops (plan limit, crash, new session), the MD says "continue": the Head of IT reads this table and resumes each row where it stopped - same session: resume the same agent (SendMessage); new session: start the same role on the same branch/worktree with "continue from the branch state and the task below". Never restart finished work.
+
+| Role | Task | Branch / worktree | State | Next step |
+|---|---|---|---|---|
+| builder (Sonnet) | S0-3 final batch BE | feat/S0-3-final-be (e1a27c5) | DONE, merged (5bb8ea2) | - |
+| ui-builder (Sonnet) | S0-3 final batch UI | ae425dd | DONE, merged | - |
+| Head of IT | merge both branches, `npm run check` (no agent re-review; QA + security already PASS) | feat/S0-3 | waiting | merge to main, push. Staff guide deferred until billing works. |
+| ux-designer | visual mock-up of all 17 screens: https://claude.ai/artifact/UR1AbGtBtXPmPb4qrKZszo (copy in docs/design/mockups/) | - | published, WAITING MD approval | if approved: 1 ui-builder restyles login + shells; else new Lead Product Designer redoes 3 key screens |
+| Deferred to B-6/B-7 | UX review items 4, 5, 8, 10-14, 15 (rest), 16-22 (see docs/design/00-shells-and-login-review.md); item 21 into spec 03 | - | parked | - |
+| Carry to billing card B-2 | idle lock (if owner enables POS idle) must keep the draft bill; IT setup checklist: Windows time sync on, staff Windows account non-admin | - | noted | Head of IT |
+
 ## Done
+| S0-3 | 00 shells and login: 98 core + 11 e2e + 4 app + 226 UI tests; QA + security PASS | builder, ui-builder, test-automation | merged 6 Nov 2026 |
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
+
+## Lean plan (MD, 6 Nov 2026) - budgets: small < 300k, medium < 800k tokens per card
+| Card | Team | Budget |
+|---|---|---|
+| S0-4+5+6 combined: crash safety, backup/restore, speed proof | 1 builder (Sonnet) + 1 review (Sonnet) | medium |
+| B-1+B-2: billing maths + bill save/returns/hold | 1 builder (Sonnet) + QA once (Opus, money) + GST expert spec review (Sonnet) | medium |
+| B-6 + login look: visual mock first -> MD yes -> build | ux-designer mock (Sonnet) + 1 ui-builder (Sonnet) + 1 review | small + medium |
 
 ## Next (one at a time - foundation)
 | S0-4 | 00 crash safety and errors | builder | waiting |

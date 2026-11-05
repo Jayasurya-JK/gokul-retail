@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Office Reports</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600&display=swap">
+<style>
+body{margin:0}
+a{color:#8a5a12}a:hover{color:#5c3c0c}
+</style>
+</helmet>
+<div style="width:1366px;height:768px;box-sizing:border-box;overflow:hidden;font-family:'Noto Sans','Noto Sans Tamil',sans-serif;background:#FBF7EF;color:#1F1A14;display:flex;flex-direction:column">
+<div style="height:40px;flex:none;background:#3B2A1A;color:#F5E9D2;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:14px"><div style="display:flex;gap:20px"><b style="font-size:16px;color:#F2B84B">Gokul Oils - Office</b><span>Reports</span></div><div style="display:flex;gap:24px"><span>Gokul (Owner)</span><span>06 Nov 2026, 11:50 PM</span><span style="color:#9BE0B5">Backup OK 11:30 PM</span></div></div>
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:200px;flex:none;background:#F3EADB;border-right:1px solid #D9CBB0;padding:10px 0;font-size:16px">
+<div style="padding:11px 16px"><u>D</u>ashboard</div>
+<div style="padding:11px 16px"><u>I</u>tems</div>
+<div style="padding:11px 16px"><u>S</u>tock</div>
+<div style="padding:11px 16px"><u>P</u>roduction</div>
+<div style="padding:11px 16px">Pac<u>k</u>ing</div>
+<div style="padding:11px 16px">Pur<u>c</u>hases</div>
+<div style="padding:11px 16px;background:#FFF1D6;box-shadow:inset 4px 0 0 #C8861A;font-weight:700"><u>R</u>eports</div>
+<div style="padding:11px 16px"><u>U</u>sers</div>
+<div style="padding:11px 16px">Set<u>t</u>ings</div>
+</div>
+<div style="flex:1;padding:16px 24px;display:flex;gap:18px;min-width:0">
+<div style="width:250px;flex:none;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:26px;font-weight:700;margin-bottom:4px">Reports</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">Day summary</div>
+<div style="padding:10px 14px;background:#FFF1D6;box-shadow:inset 4px 0 0 #C8861A;border-radius:4px;font-weight:700;color:#1F1A14">Item-wise sales</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">Bill list</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">Cashier-wise</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">Payment modes</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">Production yield</div>
+<div style="padding:10px 14px;border:1px solid #D9CBB0;border-radius:4px;background:#FFFFFF">GST summary</div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">
+<div style="display:flex;gap:10px;align-items:flex-end">
+<div><label for="from" style="font-size:13px;font-weight:600">From</label><input id="from" type="text" value="01 Nov 2026" style="display:block;width:150px;box-sizing:border-box;height:40px;margin-top:3px;font-size:15px;padding:0 10px;border:1px solid #8A6A3A;border-radius:6px;font-family:inherit;color:#1F1A14"></div>
+<div><label for="to" style="font-size:13px;font-weight:600">To</label><input id="to" type="text" value="06 Nov 2026" style="display:block;width:150px;box-sizing:border-box;height:40px;margin-top:3px;font-size:15px;padding:0 10px;border:1px solid #8A6A3A;border-radius:6px;font-family:inherit;color:#1F1A14"></div>
+<button type="button" style="height:40px;padding:0 18px;background:#C8861A;color:#1F1A14;border:0;border-radius:6px;font-weight:700;font-size:15px;font-family:inherit">Show  (Enter)</button>
+<button type="button" style="height:40px;padding:0 18px;background:#FFFFFF;color:#1F1A14;border:1px solid #8A6A3A;border-radius:6px;font-size:15px;font-family:inherit;margin-left:auto">Export to Excel  (F9)</button>
+</div>
+<div style="flex:1;border:1px solid #D9CBB0;border-radius:6px;background:#FFFFFF;overflow:hidden">
+<table style="width:100%;border-collapse:collapse;font-size:15px">
+<thead><tr style="background:#EFE3CB;font-size:13px;text-align:left"><th style="padding:9px 8px 9px 14px">Item</th><th style="padding:9px 8px;text-align:right">Qty sold</th><th style="padding:9px 8px">Unit</th><th style="padding:9px 8px;text-align:right">Sales</th><th style="padding:9px 14px 9px 8px;text-align:right">GST in sales</th></tr></thead>
+<tbody>
+<tr style="background:#FFF1D6;box-shadow:inset 4px 0 0 #C8861A;color:#1F1A14;border-bottom:1px solid #EEE4D0"><td style="padding:9px 8px 9px 14px"><b>Groundnut oil 1 L</b><div style="font-size:13px;color:#4A3A28">கடலை எண்ணெய்</div></td><td style="padding:9px 8px;text-align:right">842</td><td style="padding:9px 8px">Pcs</td><td style="padding:9px 8px;text-align:right;font-weight:700">2,39,970.00</td><td style="padding:9px 14px 9px 8px;text-align:right">11,427.14</td></tr>
+<tr style="border-bottom:1px solid #EEE4D0"><td style="padding:9px 8px 9px 14px"><b>Gingelly oil 500 ml</b><div style="font-size:13px;color:#5A4A38">நல்லெண்ணெய்</div></td><td style="padding:9px 8px;text-align:right">516</td><td style="padding:9px 8px">Pcs</td><td style="padding:9px 8px;text-align:right;font-weight:700">1,75,440.00</td><td style="padding:9px 14px 9px 8px;text-align:right">8,354.29</td></tr>
+<tr style="border-bottom:1px solid #EEE4D0"><td style="padding:9px 8px 9px 14px"><b>Coconut oil (loose)</b><div style="font-size:13px;color:#5A4A38">தேங்காய் எண்ணெய்</div></td><td style="padding:9px 8px;text-align:right">318.250</td><td style="padding:9px 8px">L</td><td style="padding:9px 8px;text-align:right;font-weight:700">1,01,840.00</td><td style="padding:9px 14px 9px 8px;text-align:right">4,849.52</td></tr>
+<tr style="border-bottom:1px solid #EEE4D0"><td style="padding:9px 8px 9px 14px"><b>Groundnut oil cake</b><div style="font-size:13px;color:#5A4A38">கடலை புண்ணாக்கு</div></td><td style="padding:9px 8px;text-align:right">1,204.500</td><td style="padding:9px 8px">kg</td><td style="padding:9px 8px;text-align:right;font-weight:700">57,816.00</td><td style="padding:9px 14px 9px 8px;text-align:right">2,753.14</td></tr>
+<tr><td style="padding:9px 8px 9px 14px"><b>Palm jaggery</b><div style="font-size:13px;color:#5A4A38">பனை வெல்லம்</div></td><td style="padding:9px 8px;text-align:right">96.750</td><td style="padding:9px 8px">kg</td><td style="padding:9px 8px;text-align:right;font-weight:700">34,830.00</td><td style="padding:9px 14px 9px 8px;text-align:right">1,658.57</td></tr>
+</tbody></table>
+</div>
+</div>
+</div>
+</div>
+<div style="height:44px;flex:none;background:#EFE3CB;border-top:1px solid #D9CBB0;display:flex;align-items:center;gap:18px;padding:0 16px;font-size:14px"><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Up / Down</b> Choose report</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Tab</b> Dates</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Enter</b> Show</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">F9</b> Export</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">F5</b> Print</span><span><b style="border:1px solid #8A6A3A;border-radius:4px;padding:1px 6px;background:#FFFFFF;font-size:12px">Esc</b> Back</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1366,"height":768}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

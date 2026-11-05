@@ -75,6 +75,14 @@ Experts cost tokens only when called. The Delivery Manager picks only the gates 
 | Release | delivery-manager | devops-engineer | verifier (+ security before go-live) |
 | AI ideas | ai-solutions-expert (on request only) | - | MD decides |
 
+## Lean operating rules (MD, 6 Nov 2026 - overrides anything below that costs more)
+Tokens are company money. Every card must show value on screen for the money spent.
+1. **MD sees a picture before any screen is built.** The UX designer (Sonnet) makes one visual mock-up (static HTML page / screenshot) of each new screen; the MD approves it. No approval, no build. Text wireframes alone are not enough.
+2. **Small team by default:** 1 builder + 1 reviewer, both Sonnet. Parallel builders, extra experts and Opus only when the card touches money, stock or GST, or is large. The Head of IT writes the reason on the board when going bigger.
+3. **One review round.** Re-check only Must-fix items; Should/Could items are batched into the next card, not re-reviewed.
+4. **Token budget per card** written on the board before start (small / medium / large); actual cost reported to the MD at the end of the card.
+5. **Head of IT coordinates only** (no hands-on testing) and runs on Sonnet for routine days.
+
 ## Definition of done per role (MD direction 5 Nov 2026: "each must complete their role perfectly")
 Every agent finishes its whole job, not part of it. Before reporting back, each role checks its own row. A report that skips a row item must say which item and why. The Head of IT sends back any work that does not meet its row.
 
@@ -92,6 +100,9 @@ Every agent finishes its whole job, not part of it. Before reporting back, each 
 | QA Lead (verifier) | Reads the diff against spec, contract and ENGINEERING-RULES; runs every test; tries to break it; PASS or FAIL with reasons and file:line. FAIL blocks merge |
 | Technical Writer | Staff guide in simple English and Tamil, a counter key card, owner how-to for the feature, release-note lines; written from the built screens, not the spec alone |
 | IT Support (helper) | Exactly the task asked, with paths and a short summary; never touches money, GST or stock logic |
+
+### Stops and restarts (MD direction 5 Nov 2026)
+Plan limits and stops are normal. Like a shift handover, every piece of work must be resumable: the Head of IT records each dispatched task in `docs/BOARD.md` "In flight (handover)" (role, task, branch/worktree, state, next step) before it starts, and updates it when it returns. Builders commit small steps on their branch so a restart loses little. On "continue", resume each row where it stopped; do not redo finished work and do not spend tokens re-explaining.
 
 ### Standard card pipeline
 1. Delivery Manager plans the card and its gates.
@@ -128,3 +139,6 @@ GitHub (private): https://github.com/Jayasurya-JK/gokul-retail - `main` is alway
 
 ## Lessons
 (scrum-master adds process changes here after retros)
+- 5 Nov 2026 (S0-3, QA + security FAIL): every command contract error code with `fields` states where each field error shows on screen, including fields not on that screen; every one-time secret has a close guard and a compare-and-swap; every PC-clock lock or timer is bounded for clock jumps backwards and forwards.
+- 5 Nov 2026 (S0-3, QA FAIL): UI tests assert behaviour (key press, call made, message shown), never fixture values, and each app's `api.ts` has a contract test on a mocked `invoke`; a new parallel worktree folder is excluded from lint and git in the same card, so the shared `npm run check` gate stays green.
+- 5 Nov 2026 (MD direction): work stopped by the plan limit resumes from the `docs/BOARD.md` "In flight (handover)" section when the MD says "continue", and the Head of IT records each dispatched task there before it starts.
