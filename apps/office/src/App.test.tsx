@@ -79,7 +79,7 @@ describe("first run (tests 6 and 7)", () => {
   async function fill(pin: string, confirm: string) {
     await typeText("Gokul Oils");
     await press("Enter");
-    await typeText("Selvi Gokul");
+    await typeText("Gokul Gokul");
     await press("Enter");
     await typeText(pin);
     await press("Enter");
@@ -114,7 +114,7 @@ describe("first run (tests 6 and 7)", () => {
     const api = firstRunApi();
     await boot(api);
     await fill("135790", "135790");
-    expect(api.setupOwner).toHaveBeenCalledWith("Gokul Oils", "Selvi Gokul", "135790");
+    expect(api.setupOwner).toHaveBeenCalledWith("Gokul Oils", "Gokul Gokul", "135790");
     expect(pageText()).toContain("ABCD-1234-EFGH-5678");
     await press("Enter");
     expect(pageText()).toContain("ABCD-1234-EFGH-5678"); // not confirmed yet
@@ -151,7 +151,7 @@ describe("login and shells (tests 17, 18, 19)", () => {
     await signIn("owner");
     expect(menuLabels()).toEqual(["Dashboard", "Items", "Stock", "Production", "Packing", "Purchases", "Reports", "Users", "Settings"]);
     expect(document.querySelectorAll(".gk-menu-item u")).toHaveLength(9);
-    expect(document.querySelector(".gk-statusbar")?.textContent).toContain("Selvi (Owner)");
+    expect(document.querySelector(".gk-statusbar")?.textContent).toContain("Gokul (Owner)");
     expect(document.activeElement?.parentElement?.querySelector(".gk-content-title")?.textContent).toBe("Dashboard");
   });
 
@@ -474,7 +474,7 @@ describe("Settings (tests 23 to 27)", () => {
     await press("l", { ctrl: true });
     await flush(2);
     await press("Escape");
-    expect(pageText()).toContain("Selvi has unsaved changes in Settings. Switching user will throw them away.");
+    expect(pageText()).toContain("Gokul has unsaved changes in Settings. Switching user will throw them away.");
     await press("d");
     await flush(3);
     expect(pageText()).toContain("Sign in");
@@ -568,7 +568,7 @@ describe("Users screen (minimal)", () => {
   });
 
   it("lists users, adds a cashier, resets a PIN, unlocks, switches off", async () => {
-    const owner = row({ id: 1, name: "Selvi", role: "owner" });
+    const owner = row({ id: 1, name: "Gokul", role: "owner" });
     const ravi = row({ lockedSecondsLeft: 120 });
     const api = makeApi({
       listUsers: vi.fn(() => Promise.resolve([owner, ravi])),
@@ -623,7 +623,7 @@ describe("Users screen (minimal)", () => {
 
   it("shows the backend's reason when a new cashier PIN is refused", async () => {
     const api = makeApi({
-      listUsers: vi.fn(() => Promise.resolve([row({ id: 1, name: "Selvi", role: "owner" })])),
+      listUsers: vi.fn(() => Promise.resolve([row({ id: 1, name: "Gokul", role: "owner" })])),
       createUser: vi.fn(() =>
         Promise.reject(appError("PIN_INVALID", "", { fields: [{ field: "pin", message: "This PIN is too easy to guess. Choose another." }] })),
       ),
@@ -689,7 +689,7 @@ describe("api contract use", () => {
 describe("QA fixes", () => {
   const row = (over: Partial<UserRow>): UserRow => ({
     id: 1,
-    name: "Selvi",
+    name: "Gokul",
     role: "owner",
     active: true,
     lockedSecondsLeft: 0,
@@ -769,7 +769,7 @@ describe("QA fixes", () => {
     await boot(api);
     await typeText("Gokul Oils");
     await press("Enter");
-    await typeText("Selvi");
+    await typeText("Gokul");
     await press("Enter");
     await typeText("135790");
     await press("Enter");
