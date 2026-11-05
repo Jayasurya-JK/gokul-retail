@@ -9,6 +9,10 @@ describe("settings hints use the backend wording (QA-11)", () => {
     expect(hintFor("fssaiNo", "1234567890123")).toBe("FSSAI number must be 14 digits. You typed 13.");
     expect(hintFor("fssaiNo", "12345678901234")).toBeUndefined();
   });
+  it("FSSAI with letters says digits only, even at 14 characters", () => {
+    expect(hintFor("fssaiNo", "ABCDEFGHIJKLMN")).toBe("FSSAI number can have digits only.");
+    expect(hintFor("fssaiNo", "1234567890123A")).toBe("FSSAI number can have digits only.");
+  });
   it("GSTIN length and state check", () => {
     expect(hintFor("gstin", "33ABCDE1234F1Z")).toBe("GSTIN must be 15 characters. You typed 14.");
     expect(gstinStateHint("33ABCDE1234F1Z5")).toBe("33 = Tamil Nadu");

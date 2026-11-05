@@ -21,6 +21,8 @@ export interface Binding {
   run?: (e: KeyboardEvent) => void;
   /** Show in the bottom key legend (default true when there is a label). */
   legend?: boolean;
+  /** Show in the legend only while this returns true (the key still works either way). */
+  showInLegend?: () => boolean;
   /** Never show anywhere (e.g. reserved keys that must do nothing). */
   silent?: boolean;
   /** Binding is active only when this returns true. */
@@ -152,7 +154,7 @@ function detachIfEmpty(): void {
 
 function signature(bindings: Binding[]): string {
   return bindings
-    .map((b) => `${b.keys.join("|")}:${b.label}:${b.legend === false ? 0 : 1}:${b.silent ? 1 : 0}:${b.run ? 1 : 0}`)
+    .map((b) => `${b.keys.join("|")}:${b.label}:${b.legend === false ? 0 : b.showInLegend ? (b.showInLegend() ? 1 : 0) : 1}:${b.silent ? 1 : 0}:${b.run ? 1 : 0}`)
     .join(";");
 }
 
@@ -215,7 +217,7 @@ export function getActiveBindings(): ActiveBinding[] {
       const id = b.keys.map(canonCombo).join("|") + "/" + b.label;
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ keys: b.keys, label: b.label, legend: b.legend !== false });
+      out.push({ keys: b.keys, label: b.label, legend: b.legend !== false && (b.showInLegend ? b.showInLegend() : true) });
     }
     if (entry.modal) break;
   }

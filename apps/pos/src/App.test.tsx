@@ -183,7 +183,7 @@ describe("POS shell (test 20)", () => {
     await typeText("1111");
     await press("Enter");
     await flush(3);
-    expect(pageText()).toContain("cannot sign in until");
+    expect(pageText()).toContain("cannot sign in for");
   });
 
   it("POS never locks by itself, and the heartbeat is rare (spec decision)", async () => {
@@ -234,5 +234,50 @@ describe("POS shell (test 20)", () => {
     await flush(3);
     expect(api.logout).toHaveBeenCalledTimes(1);
     expect(pageText()).toContain("Gokul POS - Sign in");
+  });
+});
+
+/** F1 must list at least every key the legend shows (UX Must 2). Returns the help rows. */
+async function helpCoversLegend(): Promise<string[]> {
+  const legend = Array.from(document.querySelectorAll(".gk-legend-item")).map((item) => {
+    const key = item.querySelector(".gk-keycap")?.textContent ?? "";
+    return { key, label: (item.textContent ?? "").slice(key.length) };
+  });
+  expect(legend.length).toBeGreaterThan(0);
+  await press("F1");
+  const rows = Array.from(document.querySelectorAll(".gk-help-table tbody tr")).map((r) => r.textContent ?? "");
+  for (const { key, label } of legend) {
+    expect(rows.some((r) => r.includes(key) && r.endsWith(label)), `${key} ${label}`).toBe(true);
+  }
+  expect(document.querySelector(".gk-help-table")?.closest('[role="dialog"]')?.textContent).toContain("Esc Close");
+  await press("Escape");
+  expect(document.querySelector(".gk-help-table")).toBeNull();
+  return rows;
+}
+
+describe("final UX batch (POS)", () => {
+  it("F1 lists the legend keys on login and on the shell, plus reserved F-keys and Alt+F4", async () => {
+    await boot();
+    await helpCoversLegend();
+    await signIn();
+    const rows = (await helpCoversLegend()).join("|");
+    expect(rows).toContain("Ctrl+L");
+    expect(rows).toContain("Alt+F4Close Gokul POS");
+    expect(rows).toContain("F2 to F12Used by billing, not active yet");
+  });
+
+  it("F1 works on the lock screen too", async () => {
+    await boot();
+    await signIn();
+    await press("l", { ctrl: true });
+    await flush(2);
+    await helpCoversLegend();
+  });
+
+  it("login shows the role at the right of each name and POS has no recovery key", async () => {
+    await boot();
+    expect(Array.from(document.querySelectorAll('[role="option"]')).map((e) => e.lastElementChild?.textContent)).toEqual(["Owner", "Cashier"]);
+    await press("F4");
+    expect(pageText()).not.toContain("Only the owner uses a recovery code");
   });
 });

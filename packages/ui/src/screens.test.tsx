@@ -13,9 +13,9 @@ afterEach(async () => {
 });
 
 const users: LoginUser[] = [
-  { id: 1, name: "Ravi Kumar" },
-  { id: 2, name: "Rajesh" },
-  { id: 3, name: "Gokul" },
+  { id: 1, name: "Ravi Kumar", role: "cashier" },
+  { id: 2, name: "Rajesh", role: "cashier" },
+  { id: 3, name: "Gokul", role: "owner" },
 ];
 
 const session = (over: Partial<SessionInfo> = {}): SessionInfo => ({
@@ -52,7 +52,7 @@ async function renderLogin(
 }
 
 const pinInput = () => document.querySelector<HTMLInputElement>('input[name="pin"]');
-const rows = () => Array.from(document.querySelectorAll('[role="option"]')).map((e) => e.textContent);
+const rows = () => Array.from(document.querySelectorAll('[role="option"]')).map((e) => e.querySelector("span")?.textContent);
 
 describe("matchesFilter", () => {
   it("matches the start of any word, case-insensitive, Tamil too", () => {
@@ -102,14 +102,14 @@ describe("login, keyboard only (spec 30, tests 9 and 10)", () => {
   it("Up/Down move, Enter moves to the PIN of the chosen user", async () => {
     await renderLogin();
     await press("ArrowDown");
-    expect(document.querySelector('[aria-selected="true"]')?.textContent).toBe("Rajesh");
+    expect(document.querySelector('[aria-selected="true"] span')?.textContent).toBe("Rajesh");
     expect(pageText()).toContain("PIN for Rajesh");
     await press("Enter");
     expect(document.activeElement).toBe(pinInput());
   });
 
   it("signs in: masked PIN, Enter checks it, success is reported", async () => {
-    const { login, onSignedIn } = await renderLogin({ list: [{ id: 7, name: "Gokul" }] });
+    const { login, onSignedIn } = await renderLogin({ list: [{ id: 7, name: "Gokul", role: "owner" }] });
     expect(document.activeElement).toBe(pinInput()); // single user: straight to PIN
     expect(pinInput()?.type).toBe("password");
     await typeText("2468");
@@ -212,8 +212,9 @@ describe("PIN messages and rules", () => {
     await typeText("1357");
     await press("Enter");
     await flush();
-    expect(pageText()).toContain("Too many wrong PINs. Ravi Kumar cannot sign in until 2:32 PM (30 s left).");
+    expect(pageText()).toContain("Too many wrong PINs. Ravi Kumar cannot sign in for 30 more seconds.");
     expect(pageText()).toContain("Ask the owner to unlock, or choose another name.");
+    expect(pageText()).not.toContain("until"); // under 2 minutes: no clock time
     expect(pinInput()).toBeNull();
     expect(document.activeElement?.getAttribute("role")).toBe("listbox");
     await press("ArrowDown"); // pick another user: PIN box is there for them
@@ -232,16 +233,21 @@ describe("PIN messages and rules", () => {
     await typeText("1357");
     await press("Enter");
     await flush();
-    expect(pageText()).toContain("(3 s left)");
+    expect(pageText()).toContain("for 3 more seconds");
     await act(async () => {
       vi.advanceTimersByTime(1000);
     });
-    expect(pageText()).toContain("(2 s left)");
+    expect(pageText()).toContain("for 2 more seconds");
     await act(async () => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(1000);
+    });
+    expect(pageText()).toContain("for 1 more second.");
+    await act(async () => {
+      vi.advanceTimersByTime(1100);
     });
     expect(pinInput()).not.toBeNull();
     expect(pageText()).not.toContain("cannot sign in");
+    expect(document.activeElement).toBe(pinInput()); // the cursor is back in the PIN box
   });
 
   it("a user switched off after the list loaded: message and the list reloads (test 12)", async () => {

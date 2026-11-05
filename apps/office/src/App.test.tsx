@@ -582,7 +582,7 @@ describe("Users screen (minimal)", () => {
     await press("u", { alt: true });
     await flush(4);
     expect(pageText()).toContain("Ravi Kumar");
-    expect(pageText()).toContain("Locked (about 2 min)");
+    expect(pageText()).toContain("Locked (2 min left)");
 
     await press("F2");
     await typeText("Meena");
@@ -741,7 +741,7 @@ describe("QA fixes", () => {
   it("a wrong recovery code shows the backend's recovery-code message, not 'Wrong PIN' (QA-3)", async () => {
     const api = makeApi({
       recoverOwnerPin: vi.fn(() =>
-        Promise.reject(appError("WRONG_PIN", "That recovery code is not right. 3 tries left.", { attemptsBeforeLock: 3 })),
+        Promise.reject(appError("WRONG_PIN", "Wrong PIN.", { attemptsBeforeLock: 3 })),
       ),
     });
     await boot(api);
@@ -753,8 +753,10 @@ describe("QA fixes", () => {
     await typeText("246802");
     await press("Enter");
     await flush(4);
-    expect(pageText()).toContain("That recovery code is not right. 3 tries left.");
+    expect(pageText()).toContain("Wrong recovery code. 3 tries left.");
     expect(pageText()).not.toContain("Wrong PIN");
+    expect(input("recoveryCode")?.value).toBe(""); // cleared
+    expect(document.activeElement).toBe(input("recoveryCode")); // and focus stays
   });
 
   it("closing while the recovery code is shown asks first (QA-5)", async () => {
@@ -785,5 +787,122 @@ describe("QA fixes", () => {
     await act(async () => closeHandler());
     await press("c");
     expect(api.closeWindow).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** F1 must list at least every key the legend shows (UX Must 2). Returns the help rows. */
+async function helpCoversLegend(): Promise<string[]> {
+  const legend = Array.from(document.querySelectorAll(".gk-legend-item")).map((item) => {
+    const key = item.querySelector(".gk-keycap")?.textContent ?? "";
+    return { key, label: (item.textContent ?? "").slice(key.length) };
+  });
+  expect(legend.length).toBeGreaterThan(0);
+  await press("F1");
+  const rows = Array.from(document.querySelectorAll(".gk-help-table tbody tr")).map((r) => r.textContent ?? "");
+  for (const { key, label } of legend) {
+    expect(rows.some((r) => r.includes(key) && r.endsWith(label)), `${key} ${label}`).toBe(true);
+  }
+  expect(document.querySelector(".gk-help-table")?.closest('[role="dialog"]')?.textContent).toContain("Esc Close");
+  await press("Escape");
+  expect(document.querySelector(".gk-help-table")).toBeNull();
+  return rows;
+}
+
+describe("final UX batch (Office)", () => {
+  it("F1 lists the legend keys on login, dashboard, Users and Settings", async () => {
+    const api = makeApi({ listUsers: vi.fn(() => Promise.resolve([])) });
+    await boot(api);
+    await helpCoversLegend(); // login
+    await signIn("owner");
+    const dash = await helpCoversLegend();
+    expect(dash.join("|")).toContain("Alt+D / I / S / P / K / C / R / U / T");
+    await press("u", { alt: true });
+    await flush(4);
+    const users = await helpCoversLegend();
+    expect(users.join("|")).toContain("Add cashier");
+    expect(users.join("|")).toContain("Reset PIN");
+    await press("t", { alt: true });
+    await flush(4);
+    const settings = await helpCoversLegend();
+    expect(settings.join("|")).toContain("F10Save");
+    expect(settings.join("|")).toContain("Ctrl+SSave");
+  });
+
+  it("login shows roles; F4 only for the owner, cashier gets the owner-only message", async () => {
+    await boot();
+    expect(Array.from(document.querySelectorAll('[role="option"]')).map((e) => e.lastElementChild?.textContent)).toEqual(["Owner", "Cashier"]);
+    expect(document.querySelector(".gk-legend")?.textContent).toContain("Forgot owner PIN");
+    await press("ArrowDown"); // Ravi Kumar, cashier
+    expect(document.querySelector(".gk-legend")?.textContent).not.toContain("Forgot owner PIN");
+    await press("F4");
+    expect(pageText()).toContain("Only the owner uses a recovery code. Ask the owner to reset your PIN.");
+    expect(pageText()).not.toContain("Forgot the owner PIN");
+  });
+
+  it("recovery: locked shows the countdown, then the code box returns with focus", async () => {
+    vi.useFakeTimers();
+    const api = makeApi({
+      recoverOwnerPin: vi.fn(() => Promise.reject(appError("LOCKED", "", { secondsLeft: 3 }))),
+    });
+    await boot(api);
+    await press("F4");
+    await typeText("AAAABBBBCCCCDDDD");
+    await press("Enter");
+    await typeText("246802");
+    await press("Enter");
+    await typeText("246802");
+    await press("Enter");
+    await flush(3);
+    expect(pageText()).toContain("Too many wrong recovery codes. The owner cannot sign in for 3 more seconds.");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(pageText()).toContain("for 2 more seconds");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(pageText()).not.toContain("cannot sign in");
+    expect(document.activeElement?.getAttribute("name")).toBe("recoveryCode");
+  });
+
+  it("Users list counts a lock down each second from the backend's seconds left", async () => {
+    vi.useFakeTimers();
+    const ravi: UserRow = { id: 2, name: "Ravi Kumar", role: "cashier", active: true, lockedSecondsLeft: 62, mustChangePin: false, lastLoginAt: null };
+    const api = makeApi({ listUsers: vi.fn(() => Promise.resolve([ravi])) });
+    await boot(api);
+    await signIn("owner");
+    await press("u", { alt: true });
+    await flush(3);
+    expect(pageText()).toContain("Locked (2 min left)");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(pageText()).toContain("Locked (59 s left)");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(pageText()).toContain("Locked (29 s left)");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40_000);
+    });
+    expect(pageText()).toContain("Active");
+    expect(pageText()).not.toContain("Locked (");
+  });
+
+  it("a selected Users row keeps all three columns inside the row", async () => {
+    const rows: UserRow[] = [
+      { id: 1, name: "Gokul", role: "owner", active: true, lockedSecondsLeft: 0, mustChangePin: false, lastLoginAt: null },
+      { id: 2, name: "Ravi Kumar", role: "cashier", active: true, lockedSecondsLeft: 60, mustChangePin: false, lastLoginAt: null },
+    ];
+    await boot(makeApi({ listUsers: vi.fn(() => Promise.resolve(rows)) }));
+    await signIn("owner");
+    await press("u", { alt: true });
+    await flush(3);
+    await press("ArrowDown");
+    const selected = document.querySelector('[aria-selected="true"]');
+    expect(selected?.querySelectorAll("span")).toHaveLength(3);
+    expect(selected?.textContent).toContain("Ravi Kumar");
+    expect(selected?.textContent).toContain("Locked (1 min left)");
+    expect(selected?.textContent).toContain("Never signed in");
   });
 });

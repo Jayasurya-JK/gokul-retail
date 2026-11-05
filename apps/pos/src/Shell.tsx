@@ -34,6 +34,11 @@ export interface ShellProps {
   registerClose: (handler: (() => void) | null) => void;
 }
 
+const HELP_EXTRA = [
+  { keys: "Alt+F4", label: "Close Gokul POS" },
+  { keys: "F2 to F12", label: "Used by billing, not active yet" },
+];
+
 /** F2-F12 belong to billing (spec 03). In this step they do nothing, without a beep. */
 const RESERVED = ["F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
 
@@ -143,7 +148,7 @@ export function Shell({ session, startupShopName, onSwitchUser, onPinChangeRequi
           getUnsaved={() => null}
         />
       ) : null}
-      {help ? <HelpOverlay onClose={closeHelp} /> : null}
+      {help ? <HelpOverlay onClose={closeHelp} extra={HELP_EXTRA} /> : null}
       {closing ? (
         <Dialog title="Close Gokul POS?" buttons={closeButtons} onCancel={() => setClosing(false)} cancelLabel="Stay">
           <p>The counter will close. Nothing is open.</p>

@@ -148,7 +148,7 @@ export function useDelayedFlag(active: boolean, ms = 300): boolean {
 }
 
 /**
- * Counts down from `seconds` (every second under 2 minutes, otherwise every 30 s) and returns
+ * Counts down from `seconds` (every second, only while the component is on screen) and returns
  * the seconds left. Give the component a `key` that changes when a new lock starts.
  */
 export function useCountdown(seconds: number): number {
@@ -159,9 +159,9 @@ export function useCountdown(seconds: number): number {
     const tick = (): void => {
       const l = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
       setLeft(l);
-      if (l > 0) timer = setTimeout(tick, l <= 120 ? 1000 : 30_000);
+      if (l > 0) timer = setTimeout(tick, 1000);
     };
-    timer = setTimeout(tick, seconds <= 120 ? 1000 : 30_000);
+    timer = setTimeout(tick, 1000);
     return () => clearTimeout(timer);
   }, [seconds]);
   return left;

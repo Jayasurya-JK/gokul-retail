@@ -41,7 +41,8 @@ export function hintFor(key: SettingsKey, rawValue: string): string | undefined 
     if (g.length !== 15) return `GSTIN must be 15 characters. You typed ${g.length}.`;
   }
   if (key === "fssaiNo") {
-        if (value.length !== 14) return `FSSAI number must be 14 digits. You typed ${value.length}.`;
+    if (!/^\d+$/.test(value)) return "FSSAI number can have digits only.";
+    if (value.length !== 14) return `FSSAI number must be 14 digits. You typed ${value.length}.`;
   }
   return undefined;
 }

@@ -302,7 +302,7 @@ export function createFakeBackend(opts: FakeOptions) {
       shopName: settings.shopName || null,
       dbMessage: null,
     }),
-    listLoginUsers: (): LoginUser[] => users.filter((u) => u.active).map((u) => ({ id: u.id, name: u.name })),
+    listLoginUsers: (): LoginUser[] => users.filter((u) => u.active).map((u) => ({ id: u.id, name: u.name, role: u.role })),
 
     login(userId: number, pin: string): SessionInfo {
       if (!/^[0-9]{4,6}$/.test(pin)) fail("PIN_INVALID", "PIN must be 4 to 6 digits.", { fields: [{ field: "pin", message: "PIN must be 4 to 6 digits." }] });

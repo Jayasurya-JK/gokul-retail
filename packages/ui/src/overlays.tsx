@@ -11,7 +11,7 @@ import {
 } from "react";
 import { Button } from "./controls";
 import { useLatest } from "./hooks";
-import { LAYER, useActiveBindings, useKeymap, type Binding } from "./keymap";
+import { LAYER, getActiveBindings, useKeymap, type Binding } from "./keymap";
 
 /* ------------------------------------------------------------------ Dialog */
 
@@ -115,9 +115,18 @@ export function Dialog({ title, children, buttons, onCancel, cancelLabel, initia
 
 /* ------------------------------------------------------------- HelpOverlay */
 
-/** F1: every key that works on this screen, from the live keymap. */
-export function HelpOverlay({ onClose }: { onClose: () => void }) {
-  const bindings = useActiveBindings();
+export interface HelpExtra {
+  keys: string;
+  label: string;
+}
+
+/**
+ * F1: every key that works on this screen, as two columns (Key, What it does). The list is the live
+ * keymap, the same one that draws the legend, taken before this dialog's own keymap is added,
+ * plus `extra` lines for keys the legend leaves out (Alt+letters, reserved F-keys, Alt+F4).
+ */
+export function HelpOverlay({ onClose, extra = [] }: { onClose: () => void; extra?: HelpExtra[] }) {
+  const [bindings] = useState(() => getActiveBindings());
   const keymap = useMemo<Binding[]>(
     () => [{ keys: ["Esc", "F1"], label: "Close help", run: onClose, silent: true }],
     [onClose],
@@ -131,19 +140,32 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
       if (opener && opener.isConnected && opener !== document.body) opener.focus();
     };
   }, []);
+  const rows = [...bindings.map((b) => ({ keys: b.keys.join(" or "), label: b.label })), ...extra];
   return (
     <div className="gk-backdrop">
       <div ref={boxRef} className="gk-dialog" role="dialog" aria-modal="true" aria-label="Keys" tabIndex={-1}>
         <div className="gk-dialog-title">Keys on this screen</div>
-        <ul className="gk-help">
-          {bindings.map((b) => (
-            <li key={b.keys.join("|") + b.label}>
-              <span className="gk-keycap">{b.keys.join(" or ")}</span>
-              <span>{b.label}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="gk-hint">Esc closes this list.</div>
+        <table className="gk-table gk-help-table">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.keys + r.label}>
+                <td>
+                  <span className="gk-keycap">{r.keys}</span>
+                </td>
+                <td>{r.label}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="gk-hint">
+          <span className="gk-keycap">Esc</span> Close
+        </div>
       </div>
     </div>
   );
