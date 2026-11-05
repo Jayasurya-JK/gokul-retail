@@ -47,6 +47,7 @@ A small, fast, crash-safe Windows app that opens to a menu, stores data safely, 
 - Status bar: shop name, user, date/time, last backup time.
 - Settings screen: shop name, address, GSTIN, FSSAI no, phone, bill footer.
 - Accept: whole shell usable without a mouse; cashier cannot open Settings.
+- Detailed rules (hashing, PIN policy, lockout, session, audit, migration 002, CSP, tests): `docs/specs/00-step3-login-security.md`. Screens: `docs/design/00-shells-and-login.md`.
 
 ### Step 4 - Crash safety and errors
 - Rust panic hook and all command errors -> log file `%APPDATA%\GokulRetail\logs\` (rotate, keep 14 days) + plain-language message in UI. React error boundary: never a white screen; offers "Reload screen".

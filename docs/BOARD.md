@@ -11,7 +11,7 @@ Roles and process: see `docs/IT-TEAM.md`.
 ## Now
 | Card | Spec / step | Who | Status |
 |---|---|---|---|
-| S0-3 | 00 shells and login | ux-designer -> ui-builder + builder | next |
+| S0-3 | 00 shells and login (migration 002) | builder (core+commands) -> ui-builder (screens) -> verifier | building |
 
 ## Done
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
