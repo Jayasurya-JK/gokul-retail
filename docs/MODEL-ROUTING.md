@@ -21,3 +21,11 @@ Scores are from third-party leaderboards (BenchLM, BenchLeader, Nov 2026), not A
 - Effort: helper `low`, builder/ui-builder `medium`, verifier `high`. Raise only if work comes back wrong.
 - Do not set `CLAUDE_CODE_SUBAGENT_MODEL`; each agent file sets its own model.
 - If the Claude plan runs low, the main session can switch to Sonnet (`/model sonnet`) for routine days; keep the verifier on Opus.
+
+## Cost rule (MD direction 5 Nov 2026: "tokens are salary")
+Use the cheapest model that can do the job well. Opus is the exception, not the default.
+- **Opus only for:** the first full QA of a card that touches money, stock, GST or crash safety; new screen design (first pass); architecture questions the Head of IT cannot settle.
+- **Sonnet for:** all building, all re-checks after fixes (QA and security), UX review of built screens, expert spec reviews, security reviews, test automation.
+- **Haiku for:** retros, sprint cards, docs, staff guides, searching, log/test-output summaries.
+- Head of IT passes `model: sonnet` when calling an Opus-default agent for a Sonnet job (e.g. verifier re-check, ux-designer screenshot review).
+- Prompts carry exact file paths and the diff range, so agents read only what they need.

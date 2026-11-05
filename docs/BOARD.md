@@ -48,11 +48,14 @@ If work stops (plan limit, crash, new session), the MD says "continue": the Head
 
 | Role | Task | Branch / worktree | State | Next step |
 |---|---|---|---|---|
-| builder | S0-3 backend fix batch DONE (34e27d9, merged 68ea383; cargo audit 0 vulns). Now: fix e2e compile break (SetupResult/RecoveryResult Drop) | feat/S0-3-fix-be2 / .claude/worktrees/agent-a76827da5223d169a | running | commit, report -> merge |
-| ui-builder | S0-3 UI fix batch: QA-2, 3, 4, 5, 6, 8, 10, 11 | feat/S0-3-fix-ui / .claude/worktrees/agent-a4ab20679d7a6b59c | running (resumed after limit) | commit, report -> merge |
-| test-automation-engineer | S0-3 Rust e2e flows (11) + dev-only browser preview | feat/S0-3-e2e (f9d6936) | DONE, merged into feat/S0-3 | - |
-| scrum-master | S0-3 retro -> Lessons in docs/IT-TEAM.md | main tree, feat/S0-3 | DONE 5 Nov 2026 (3 Lessons lines) | - |
-| Head of IT | after the 3 branches merge | feat/S0-3 | waiting | npm run check -> verifier + security re-check of fixes -> preview screenshots -> ux-designer review -> merge to main -> technical-writer -> delivery-manager status |
+| builder | S0-3 backend fixes + integration fix | feat/S0-3-fix-be, -fix-be2 | DONE, merged (c3b5a15) | waits for UX/QA findings |
+| ui-builder | S0-3 UI fixes (QA-2..11) | feat/S0-3-fix-ui (71956c0) | DONE, merged (d1a6146) | waits for UX/QA findings |
+| test-automation-engineer (Sonnet) | rename demo owner Selvi -> Gokul; full screenshot set Office + POS -> .playwright-mcp/shots/s0-3/ + INDEX.md | feat/S0-3-shots / .claude/worktrees/agent-a9883aa84b28dfc7b | running | commit rename, report -> ux-designer review |
+| verifier (Sonnet, re-check) | confirm QA findings 1-11 fixed, no new issues | feat/S0-3 (main tree, read-only) | running | PASS/FAIL |
+| security-engineer (Sonnet, re-check) | confirm M1, M2, L1-L13 fixed | feat/S0-3 (main tree, read-only) | running | PASS/FAIL |
+| ux-designer (Sonnet, review) | review screenshots vs design | - | waiting for screenshots | PASS / fix list |
+| Head of IT | after all PASS | feat/S0-3 | waiting | merge to main, push -> technical-writer (Haiku) -> delivery-manager status |
+| Known small fix (batch with UX findings) | Users list shows new owner "Never signed in" while signed in (setup_owner sets no last_login_at) | - | queued | builder |
 
 ## Done
 | S0-1+2 | 00 skeleton: scaffold + database (14 core tests, installers ~3.8 MB each) | builder | QA PASS 5 Nov 2026 (after 1 FAIL: BOM, schema collation/index) |
