@@ -190,6 +190,13 @@ mod tests {
         assert!(conf.contains("frame-src 'none'"));
         assert_eq!(conf.matches("\"label\"").count(), 1);
         assert!(
+            conf.contains("\"create\": false"),
+            "the window is built in main.rs so pop-ups can be denied"
+        );
+        let main = read("src/main.rs");
+        assert!(main.contains("NewWindowResponse::Deny"));
+        assert!(main.contains("clippy::unwrap_used"));
+        assert!(
             !conf.contains("\"url\""),
             "no window may load a remote address"
         );

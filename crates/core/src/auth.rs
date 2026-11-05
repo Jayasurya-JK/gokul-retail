@@ -152,9 +152,14 @@ pub fn begin_attempt(db: &mut Db, user_id: i64, now: i64, app: AppKind, via: Via
                     &Detail::new(app).int("last_failed_at", last_failed_at),
                 )?;
             }
+            // Re-anchor to the current (wrong) clock so the lock is a normal one that
+            // ends `dur` seconds from now, not at a date that may be a year away.
+            tx.execute(
+                "UPDATE users SET last_failed_at = ?1, locked_until = ?2 WHERE id = ?3",
+                params![now, now + dur, user_id],
+            )?;
             tx.commit()?;
-            let left = (last_failed_at + dur - now).min(FAIL_AGE_OUT_SECS);
-            return Err(Error::Locked { seconds_left: left });
+            return Err(Error::Locked { seconds_left: dur });
         }
     }
 
@@ -251,15 +256,14 @@ pub fn finish_failure(
 }
 
 /// Clear the failure counters after a correct secret. `login` also stamps `last_login_at`.
-pub fn reset_attempts(tx: &Transaction, user_id: i64, login: bool) -> Result<()> {
-    tx.execute(
+pub fn reset_attempts(tx: &Transaction, user_id: i64, login: bool) -> Result<usize> {
+    Ok(tx.execute(
         "UPDATE users SET failed_attempts = 0, locked_until = 0, last_failed_at = 0,
             last_login_at = CASE WHEN ?2 = 1 THEN strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime')
                                  ELSE last_login_at END
-         WHERE id = ?1",
+         WHERE id = ?1 AND active = 1",
         params![user_id, i64::from(login)],
-    )?;
-    Ok(())
+    )?)
 }
 
 /// Finish a correct login: counters, optional rehash with current parameters, audit.
@@ -270,7 +274,10 @@ pub fn finish_login_success(
     app: AppKind,
 ) -> Result<()> {
     let tx = db.transaction()?;
-    reset_attempts(&tx, user.id, true)?;
+    if reset_attempts(&tx, user.id, true)? == 0 {
+        // Switched off while the PIN was being checked.
+        return Err(Error::NotFound("User"));
+    }
     if let Some(h) = new_hash {
         tx.execute(
             "UPDATE users SET pin_hash = ?1 WHERE id = ?2 AND pin_hash = ?3",
@@ -375,8 +382,9 @@ pub fn clean_user_name(raw: &str) -> Result<String> {
     clean_name(raw, USER_NAME_MAX).map_err(|_| name_error("name", "a name"))
 }
 
-/// First run. Creates the owner, marks the shop set up and stores the recovery hash,
-/// all in one transaction. Fails with `AlreadySetup` if any user exists.
+/// First run. Creates the owner, stores the shop name and the recovery hash and sets
+/// `setup_complete` (only a first-run marker: `settings::is_shop_set_up` is the real check
+/// that the shop details are filled in), all in one transaction. Fails with `AlreadySetup` if any user exists.
 pub fn setup_owner(
     db: &mut Db,
     owner_name: &str,
@@ -616,17 +624,38 @@ pub fn set_own_pin(
 pub fn finish_recovery(
     db: &mut Db,
     owner_id: i64,
+    stored_hash: &str,
     new_pin_hash: &str,
     new_recovery_hash: &str,
     app: AppKind,
 ) -> Result<()> {
     let tx = db.transaction()?;
+    // Swap the code first, and only if it is still the one that was verified. Two people
+    // using the same code at the same moment: one wins, the other is told it is wrong.
+    let swapped = tx.execute(
+        "UPDATE settings SET value = ?1 WHERE key = ?2 AND value = ?3",
+        params![
+            new_recovery_hash,
+            settings::KEY_OWNER_RECOVERY_HASH,
+            stored_hash
+        ],
+    )?;
+    if swapped != 1 {
+        let failed: i64 = tx.query_row(
+            "SELECT failed_attempts FROM users WHERE id = ?1",
+            [owner_id],
+            |r| r.get(0),
+        )?;
+        let left = LOCK_AFTER.saturating_sub(u32::try_from(failed).unwrap_or(LOCK_AFTER));
+        return Err(Error::WrongRecoveryCode {
+            attempts_before_lock: left,
+        });
+    }
     tx.execute(
         "UPDATE users SET pin_hash = ?1, must_change_pin = 0 WHERE id = ?2",
         params![new_pin_hash, owner_id],
     )?;
     reset_attempts(&tx, owner_id, false)?;
-    settings::set_raw(&tx, settings::KEY_OWNER_RECOVERY_HASH, new_recovery_hash)?;
     audit::log(
         &tx,
         Some(owner_id),
@@ -635,4 +664,15 @@ pub fn finish_recovery(
     )?;
     tx.commit()?;
     Ok(())
+}
+
+/// A login attempt for an id that is unknown or switched off. No user id and no name are
+/// stored, so the log cannot be used to echo names.
+pub fn log_unavailable(db: &mut Db, app: AppKind) -> Result<()> {
+    audit::log(
+        db.conn(),
+        None,
+        event::LOGIN_FAILED,
+        &Detail::new(app).str("reason", "unavailable"),
+    )
 }

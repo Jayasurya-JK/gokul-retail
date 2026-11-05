@@ -60,14 +60,6 @@ impl AppError {
         }
     }
 
-    /// For PIN_INVALID: say which form field the message belongs to ("pin" or "newPin").
-    pub fn with_pin_field(mut self, field: &str) -> AppError {
-        if self.code == ErrorCode::PinInvalid {
-            self.fields = Some(vec![FieldError::new(field, self.message.clone())]);
-        }
-        self
-    }
-
     /// True for errors that mean a bug or a broken data file (the command layer logs these).
     pub fn is_internal(&self) -> bool {
         self.code == ErrorCode::Internal
@@ -97,6 +89,10 @@ impl From<&Error> for AppError {
             },
             Error::InvalidPin(_) => AppError {
                 fields: Some(vec![FieldError::new("pin", message.clone())]),
+                ..AppError::plain(ErrorCode::PinInvalid, message)
+            },
+            Error::InvalidNewPin(_) => AppError {
+                fields: Some(vec![FieldError::new("newPin", message.clone())]),
                 ..AppError::plain(ErrorCode::PinInvalid, message)
             },
             Error::AlreadySetup => AppError::plain(ErrorCode::AlreadySetup, message),

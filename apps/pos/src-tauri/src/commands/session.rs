@@ -68,9 +68,7 @@ pub async fn change_pin(
     new_pin: String,
 ) -> Result<SessionInfo, AppError> {
     let (old_pin, new_pin) = (Pin::new(old_pin), Pin::new(new_pin));
-    run(&ctx, "change_pin", move |c| c.change_pin(old_pin, new_pin))
-        .await
-        .map_err(|e| e.with_pin_field("newPin"))
+    run(&ctx, "change_pin", move |c| c.change_pin(old_pin, new_pin)).await
 }
 
 #[tauri::command]
