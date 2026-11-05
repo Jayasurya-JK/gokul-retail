@@ -12,9 +12,11 @@ Before coding, read `CLAUDE.md`, `docs/ENGINEERING-RULES.md`, and the spec path 
 
 Rules:
 - Money in integer paise. Stock as ledger rows. Bill save in one transaction.
-- Business rules in plain TypeScript functions with Vitest tests next to them. Write the tests for the spec's acceptance criteria and edge cases.
+- Business rules live in Rust under `src-tauri/src/core/`, as plain functions with `#[cfg(test)]` tests. Write tests for the spec's acceptance criteria and edge cases.
+- No `unwrap()`/`expect()` in non-test code; return `Result` and turn errors into plain messages for the UI.
+- Expose to the UI only through `#[tauri::command]` functions in `src-tauri/src/commands/`.
 - Schema changes only as new numbered migrations.
-- No new dependency unless the spec allows it.
-- Run `npm run typecheck` and `npm test` before you finish. Do not report done with failing tests.
+- No new crate or npm package unless the spec allows it. Keep the binary small.
+- Run `cargo test`, `cargo clippy -- -D warnings` and `npm run typecheck` before you finish. Do not report done with failing tests.
 
 Finish with: files changed, tests added, test results (pass/fail counts), anything in the spec you could not do or think is wrong. Do not commit; the main session commits after the verifier passes.

@@ -12,8 +12,14 @@ Not for sale now. Write it cleanly enough that it could become a product later.
 - `docs/MODEL-ROUTING.md` - which Claude model does which job
 - `docs/specs/` - one spec per feature, written before any code
 
-## Stack (proposed, confirm counter hardware first)
-Electron + React + TypeScript (strict) + Vite. SQLite via `better-sqlite3` (WAL mode), plain SQL migrations. Vitest for unit tests, Playwright for end-to-end. Thermal bills via ESC/POS, barcode stickers via TSPL/ZPL. Works fully offline on a Windows counter PC.
+## Stack (decided 5 Nov 2026 - shop PC is Windows 10, ~4 GB RAM, slow)
+Electron was rejected: too heavy for the shop PC (100 MB+ installer, 300 MB+ RAM).
+- **Tauri 2** desktop app -> one small NSIS installer `.exe` (target < 15 MB). Uses Windows' built-in WebView2.
+- **Rust core** (`src-tauri/src/core/`): all business rules, database, stock, GST, printing, backup. `rusqlite` with bundled SQLite, WAL mode. Tested with `cargo test`.
+- **UI**: React + TypeScript (strict) + Vite in `src/`. UI only calls Tauri commands; no business rules in the UI. Tested with Vitest.
+- Thermal bills via ESC/POS, barcode stickers via TSPL/ZPL (printer models to confirm).
+- Fully offline. Data in `%APPDATA%\GokulRetail\`.
+- Dev laptop is high-spec; the shop PC is not. Always measure on low-end settings. Lightweight never means lower quality.
 
 ## How work is done (no vibe coding)
 Every feature goes through this loop. Skipping a step is not allowed.
@@ -34,10 +40,11 @@ Use `helper` (Haiku) for searching the code, reading logs, converting data files
 - Do not re-run the full research. Decisions live in `docs/`.
 
 ## Commands (after the skeleton exists)
-- `npm run dev` - run the app
-- `npm test` - unit tests (must pass before any commit)
-- `npm run e2e` - end-to-end billing tests
-- `npm run typecheck`, `npm run lint`
+- `npm run tauri dev` - run the app
+- `npm run check` - everything below in one go (must pass before any commit)
+- `cargo test --manifest-path src-tauri/Cargo.toml` - Rust core tests, incl. speed budget tests
+- `npm test` - UI tests; `npm run typecheck`, `npm run lint`
+- `npm run tauri build` - makes the installer in `src-tauri/target/release/bundle/nsis/`
 
 ## Out of scope until the owner says so
 Importing POSBean data, real item lists and customers. That comes last, after the skeleton and core screens work with test data.

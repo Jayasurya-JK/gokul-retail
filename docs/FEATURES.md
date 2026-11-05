@@ -56,6 +56,34 @@ App shell and login screen, database with migrations, settings screen (shop name
 - [LATER] Import items, stock, customers from POSBean export
 - [LATER] Run side by side for 1-2 weeks
 
+## Gokul Oils special features (owner decision 5 Nov 2026)
+
+### NOW - build first (after the skeleton)
+**A. Pressing / production**
+- Seed stock (groundnut, sesame, copra...) in kg with purchase price
+- Pressing batch: seed in (kg) -> oil out (L) + oil cake/punnakku out (kg); stock updates automatically
+- Yield report: oil per kg seed, per machine, per day
+- True cost per litre: seed + labour + power + packing
+- Oil cake (punnakku) as its own stock item for sale
+
+**B. Loose oil and packing**
+- Loose sale by quantity ("1.5 L") or by amount ("Rs 200 worth"); customer's own can
+- Bulk tank -> bottles/tins (e.g. 50 L tank -> 100 x 500ml); tank stock down, bottle stock up
+- Packing material stock: empty bottles, caps, tins, labels, with low alerts
+- Leakage / spill loss tracking
+- Litre <-> kg conversion per oil (density per item)
+
+### WAIT - owner will decide later
+- C. One-step price change for all sizes from price per litre; price history; wholesale price
+- D. Batch stickers: batch no, packed date, best before, MRP, net qty, FSSAI no; batch trace to seed supplier
+- E. One stock for shop and WooCommerce website; online orders in the same list
+- F. Refill WhatsApp reminders, tin/can deposit tracking, customer credit
+- G. Festival/season planning, near-best-before alert
+- H. Owner daily summary: sales, oil pressed, yield %, cash vs UPI, oil-wise profit
+
+## Hard limit: shop computer is old and slow
+The final software is one small Windows installer (.exe). Target: installer under 15 MB, under 150 MB RAM while billing, works on a low-end PC. See CLAUDE.md "Stack".
+
 ## Questions for you
 1. Counter PC: Windows version? How many counters bill at the same time?
 2. Printers: bill printer model (2 or 3 inch thermal?), sticker printer model, scanner model.

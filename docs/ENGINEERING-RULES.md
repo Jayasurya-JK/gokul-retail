@@ -24,7 +24,13 @@
 - Item search as you type: under 50 ms with 20,000 items
 - Save + print bill: under 300 ms (printer time excluded)
 - Day-end report: under 2 s with 1 year of data
+- Installer size: under 15 MB. RAM while billing: under 150 MB total (app + WebView2).
+- Idle CPU: near 0% (no polling loops, no heavy animations).
 Each budget gets an automated test with seeded data. Slower than budget = FAIL.
+
+## Units
+- Integer base units only: `ml` for liquids, `g` for weights, `pcs` for counts. 1.5 L = 1500 ml.
+- Litre <-> kg uses the item's density stored as integer mg per ml (groundnut oil ~ 910). Conversion rounds once, at the end.
 
 ## Code
 - TypeScript strict, no `any` in business logic. Business rules live in plain functions with unit tests, not inside React components.
