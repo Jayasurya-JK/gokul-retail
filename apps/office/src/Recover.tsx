@@ -8,7 +8,7 @@ import {
   TextField,
   beep,
   fieldMessage,
-  plainMessage,
+  backendMessage,
   toAppError,
   useInitialFocus,
   useKeymap,
@@ -71,7 +71,7 @@ export function Recover({ onRecovered, onBack }: RecoverProps) {
         setConfirm("");
         pinRef.current?.focus();
       } else {
-        setGeneral(plainMessage(err));
+        setGeneral(backendMessage(err)); // e.g. the recovery-code message, never "Wrong PIN"
         if (err.code === "WRONG_PIN" || err.code === "PERMISSION_DENIED") {
           setCode("");
           beep();

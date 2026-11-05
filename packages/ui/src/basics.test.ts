@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { fieldMessage, isSessionGone, plainMessage, secondsInWords, toAppError } from "./errors";
+import { backendMessage, fieldMessage, isSessionGone, plainMessage, secondsInWords, toAppError } from "./errors";
 import { digitsOnly, formatBackup, formatDateTime, formatPaise, formatTime } from "./format";
 import { msToNextMinute } from "./hooks";
 import { readFileSync } from "node:fs";
@@ -62,6 +62,17 @@ describe("error helper", () => {
     expect(plainMessage({ code: "LOCKED", message: "", secondsLeft: 30 })).toContain("30 seconds");
     expect(plainMessage({ code: "INTERNAL", message: "" })).toContain("Nothing was changed");
     expect(plainMessage({ code: "VALIDATION", message: "Phone must be 10 digits." })).toBe("Phone must be 10 digits.");
+  });
+  it("an error on a field that is not on screen still shows the backend's words (QA-2)", () => {
+    const err = { code: "VALIDATION" as const, message: "", fields: [{ field: "name" as const, message: "At least one active owner is required." }] };
+    expect(plainMessage(err)).toBe("At least one active owner is required.");
+    expect(plainMessage({ ...err, code: "PIN_INVALID" })).toBe("At least one active owner is required.");
+    expect(plainMessage({ code: "VALIDATION", message: "" })).toBe("Some fields need fixing.");
+  });
+  it("backendMessage keeps the backend sentence even for WRONG_PIN (QA-3)", () => {
+    expect(backendMessage({ code: "WRONG_PIN", message: "That recovery code is not right.", attemptsBeforeLock: 2 })).toBe(
+      "That recovery code is not right.",
+    );
   });
   it("words for time", () => {
     expect(secondsInWords(30)).toBe("30 seconds");

@@ -300,7 +300,7 @@ function PinFormDialog({ title, saveLabel, withName, onCancel, onApiError, submi
     } catch (raw) {
       const err = toAppError(raw);
       if (onApiError(err)) return;
-      const nameMsg = fieldMessage(err, "name");
+      const nameMsg = withName ? fieldMessage(err, "name") : undefined;
       const pinMsg = fieldMessage(err, "pin") ?? fieldMessage(err, "newPin");
       if (nameMsg || pinMsg) {
         setErrors({ ...(nameMsg ? { name: nameMsg } : {}), ...(pinMsg ? { pin: pinMsg } : {}) });

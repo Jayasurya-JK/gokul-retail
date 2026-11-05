@@ -72,6 +72,16 @@ export function plainMessage(error: AppError): string {
     const n = error.attemptsBeforeLock;
     return `Wrong PIN. ${n} ${n === 1 ? "try" : "tries"} left.`;
   }
+  if ((error.code === "VALIDATION" || error.code === "PIN_INVALID") && error.fields && error.fields.length > 0) {
+    // A field error whose field is not on this screen must still be visible: show the backend's words.
+    const first = error.fields[0]?.message.trim();
+    if (first) return first;
+  }
+  return backendMessage(error);
+}
+
+/** The backend's own sentence (or our fallback for the code), without any rewriting. */
+export function backendMessage(error: AppError): string {
   const own = error.message.trim();
   return own.length > 0 ? own : FALLBACK[error.code];
 }
