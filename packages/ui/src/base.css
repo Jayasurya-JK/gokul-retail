@@ -1,0 +1,32 @@
+/* Desktop-app base: fills the window, no page scroll, native-feeling chrome. */
+html, body, #root { height: 100%; width: 100%; margin: 0; overflow: hidden; }
+body {
+  font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px; line-height: 1.4;
+  font-feature-settings: 'tnum' 1, 'cv11' 1, 'ss03' 1;
+  background: rgb(var(--bg)); color: rgb(var(--ink));
+  -webkit-font-smoothing: antialiased;
+  user-select: none; -webkit-user-select: none; cursor: default;
+}
+* { box-sizing: border-box; }
+button, [role='button'], a { cursor: default; }
+input, textarea, [data-selectable], td, .selectable { user-select: text; -webkit-user-select: text; }
+input, textarea { cursor: text; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; }
+img { -webkit-user-drag: none; }
+::selection { background: rgb(var(--primary) / 0.25); }
+:focus { outline: none; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--subtle)); background-clip: content-box; border: 2px solid transparent; }
+::-webkit-scrollbar-track { background: transparent; }
+input[type='number']::-webkit-inner-spin-button { display: none; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+@keyframes g-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes g-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
+@keyframes g-slide { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+.g-overlay { animation: g-fade 120ms ease-out; }
+.g-dialog { animation: g-pop 150ms ease-out; }
+.g-drawer { animation: g-slide 160ms ease-out; }
+@keyframes shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-6px) } 40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(4px) } }

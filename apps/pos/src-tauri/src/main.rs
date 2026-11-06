@@ -1,89 +1,62 @@
-// Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-// A panic here would close the counter app mid-bill: return errors instead.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-mod commands;
-
-use gokul_core::{nav, paths, AppContext, AppKind};
+use gokul_core::{Db, Session};
+use serde_json::Value;
 use std::sync::Arc;
-use tauri::Manager;
-use tauri_plugin_log::{Target, TargetKind};
 
-pub const APP_NAME: &str = "Gokul POS";
-
-fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    let builder = tauri_plugin_log::Builder::new().level(log::LevelFilter::Info);
-    match paths::logs_dir() {
-        Ok(path) => builder
-            .clear_targets()
-            .target(Target::new(TargetKind::Folder {
-                path,
-                file_name: Some("pos".to_string()),
-            }))
-            .build(),
-        Err(_) => builder.build(),
-    }
+/// The shared database (`%APPDATA%\GokulRetail\gokul.db`, same file for POS and Office) and the signed-in user of this
+/// app. The session lives here, in Rust: screens cannot say who they are.
+struct Backend {
+    db: Arc<Db>,
+    session: Arc<Session>,
 }
 
-/// The window may only ever show the app itself, never another web page.
-fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::<R>::new("navigation-guard")
-        .on_navigation(|_webview, url| {
-            nav::is_allowed(url.scheme(), url.host_str(), cfg!(debug_assertions))
-        })
-        .build()
+/// The one entry point for every screen call (see crates/core/src/dispatch.rs for the method list).
+#[tauri::command]
+async fn gokul_call(state: tauri::State<'_, Backend>, method: String, args: Vec<Value>) -> Result<Value, String> {
+    let (db, session) = (state.db.clone(), state.session.clone());
+    // Off the UI thread: SQLite work never freezes the window.
+    tauri::async_runtime::spawn_blocking(move || gokul_core::dispatch_session(&db, &session, &method, args).map_err(|e| e.to_string()))
+        .await
+        .map_err(|_| "Something went wrong inside the app. Nothing was saved. Please try again.".to_string())?
+}
+
+/// Opens the database or tells the user why not in a native error box, then exits: without the shop database
+/// there is nothing this app can do, and a silent empty window would look like a crash.
+fn open_backend() -> Backend {
+    match Db::open_default() {
+        Ok(db) => {
+            // DEMO DATA: fills an empty database with the demo shop. Remove this call to start with a blank shop.
+            if let Err(e) = gokul_core::seed_demo_if_empty(&db) {
+                eprintln!("demo seed failed: {e}");
+            }
+            // Scheduled backups run on their own thread and connection; billing never waits for them.
+            gokul_core::backup::spawn_scheduler(db.path().to_path_buf());
+            Backend { db: Arc::new(db), session: Arc::new(Session::pos()) }
+        }
+        Err(e) => {
+            gokul_core::native::show_error(
+                "Gokul POS cannot start",
+                &format!(
+                    "The shop database could not be opened, so nothing was changed.
+
+{e}
+
+File: {}
+
+Close any other Gokul window and start again. If this keeps happening, restore the latest backup from the Backups folder next to the database file or call support.",
+                    gokul_core::db::default_db_path().display()
+                ),
+            );
+            std::process::exit(1);
+        }
+    }
 }
 
 fn main() {
-    let result = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
-        .plugin(log_plugin())
-        .plugin(navigation_guard())
-        .setup(|app| {
-            // If the data file cannot be opened the app still starts; the start-up screen
-            // reports the problem and lets staff retry (startup_status).
-            let ctx = Arc::new(AppContext::production(AppKind::Pos));
-            let status = ctx.startup_status();
-            log::info!("{APP_NAME} started, data file state: {:?}", status.db);
-            app.manage(ctx);
-
-            // The window is created here (config has `"create": false`) so that scripts and
-            // links cannot open extra windows or pop-ups.
-            let config = app
-                .config()
-                .app
-                .windows
-                .first()
-                .cloned()
-                .ok_or("no window is configured")?;
-            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-                .on_new_window(|_url, _features| tauri::webview::NewWindowResponse::Deny)
-                .build()?;
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::session::app_info,
-            commands::session::startup_status,
-            commands::session::list_login_users,
-            commands::session::login,
-            commands::session::current_session,
-            commands::session::logout,
-            commands::session::lock_session,
-            commands::session::heartbeat,
-            commands::session::change_pin,
-            commands::session::get_status_bar,
-            commands::session::get_shop_settings,
-        ])
-        .run(tauri::generate_context!());
-
-    if let Err(e) = result {
-        log::error!("{APP_NAME} stopped: {e}");
-        std::process::exit(1);
-    }
+    tauri::Builder::default()
+        .manage(open_backend())
+        .invoke_handler(tauri::generate_handler![gokul_call])
+        .run(tauri::generate_context!())
+        .expect("error while running Gokul");
 }

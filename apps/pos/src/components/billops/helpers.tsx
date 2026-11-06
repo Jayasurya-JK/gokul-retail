@@ -1,0 +1,59 @@
+import { Ban, CheckCircle2, CornerUpLeft, HandCoins } from 'lucide-react';
+import { type Bill, type BillDetail, type CreditNote, type PayMode, type RefundMode } from '@gokul/data';
+import { Badge } from '@gokul/ui';
+import type { ReceiptData } from '@gokul/ui';
+
+export const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const shiftDay = (key: string, by: number) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return dayKey(new Date(y, m - 1, d + by));
+};
+export const dayLabel = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const txt = dt.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  const today = dayKey(new Date());
+  if (key === today) return `Today, ${txt}`;
+  if (key === shiftDay(today, -1)) return `Yesterday, ${txt}`;
+  return txt;
+};
+export const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+export const dateTimeOf = (iso: string) =>
+  new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+
+export const modeLabel: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note' };
+export const payLabel = (b: Bill) => {
+  const modes = [...new Set(b.payments.map((p) => p.mode))];
+  return modes.length > 1 ? 'Split' : modeLabel[modes[0]] ?? '';
+};
+export const refundLabel: Record<RefundMode, string> = {
+  cash: 'Cash refund', upi: 'UPI refund', credit_note: 'Credit note', exchange: 'Exchange credit',
+};
+
+export function StatusBadge({ bill, detail }: { bill: Bill; detail?: BillDetail | null }) {
+  if (bill.status === 'cancelled') return <Badge tone="danger"><Ban size={11} /> Cancelled</Badge>;
+  if (bill.status === 'returned') return <Badge tone="warning"><CornerUpLeft size={11} /> Returned</Badge>;
+  if (detail && detail.returned.some((q) => q > 0)) return <Badge tone="warning"><CornerUpLeft size={11} /> Part returned</Badge>;
+  if (bill.status === 'credit') return <Badge tone="info"><HandCoins size={11} /> On credit</Badge>;
+  return <Badge tone="success"><CheckCircle2 size={11} /> Paid</Badge>;
+}
+
+export function billReceipt(d: BillDetail): ReceiptData {
+  const { bill } = d;
+  return {
+    title: 'TAX INVOICE', number: bill.number, at: bill.at, cashier: bill.cashier, customerName: bill.customerName,
+    lines: bill.lines, totals: bill.totals, payments: bill.payments,
+    stamp: bill.status === 'cancelled' ? 'Cancelled' : undefined,
+    note: d.reprints > 0 ? `DUPLICATE COPY - reprint ${d.reprints}` : undefined,
+  };
+}
+
+export function noteReceipt(n: CreditNote): ReceiptData {
+  return {
+    title: 'CREDIT NOTE', number: n.number, at: n.at, cashier: n.by, customerName: n.customerName,
+    reference: `Against bill ${n.billNumber}`, lines: n.lines, totals: n.totals, refund: true,
+    note: <>{refundLabel[n.refundMode]}{n.refundMode === 'credit_note' || n.refundMode === 'exchange' ? ' - adjust on a future bill' : ' - paid to customer'}</>,
+  };
+}
+

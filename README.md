@@ -1,8 +1,37 @@
 # Gokul Retail
 
-See CLAUDE.md and docs/. Run `npm run check` for the full check; `cargo` must be on PATH for it (add `%USERPROFILE%\.cargo\bin`).
+Billing and stock software for Gokul Oils. Phase 1 is UI only: real React screens running on mock data.
 
-## Browser preview (dev only, no Tauri)
-`npm run preview:office` -> http://localhost:1421 and `npm run preview:pos` -> http://localhost:1420.
-Runs the real screens against an in-memory fake of the command API (red "PREVIEW MOCK" ribbon). Reload resets it; add `?scenario=fresh` for a first-run shop. Demo logins (ready shop): owner Gokul 739158, cashier Ravi 4829, cashier Anu 6073 (must change PIN). Office and POS previews do not share state.
-It cannot ship: it only exists in vite mode `preview-mock`, `vite build` refuses that mode, and `npm run verify:bundle` (part of `npm run check`) fails if the marker is in `apps/*/dist`.
+## Run
+
+```
+npm install
+npm run dev:pos      # Gokul POS      http://localhost:5173  (PIN 1234)
+npm run dev:office   # Gokul Office   http://localhost:5174  (password 1111)
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Build and install the desktop apps
+
+Needs Rust (`%USERPROFILE%\.cargo\bin` on PATH), Visual Studio Build Tools and WebView2.
+
+```
+npm run tauri:pos      # run POS in a native window (dev)
+npm run tauri:office   # run Office in a native window (dev)
+npm run dist:pos       # build the POS installer
+npm run dist:office    # build the Office installer
+```
+
+Installers land in `target/release/bundle/nsis/` (`Gokul POS_0.1.0_x64-setup.exe`, `Gokul Office_0.1.0_x64-setup.exe`).
+Double-click to install for the current user (no admin). Silent install: run the setup with `/S`.
+Start menu and desktop shortcuts are created. The apps still use mock data until the backend phase.
+
+## Layout
+
+- `apps/pos` - billing counter
+- `apps/office` - back office
+- `packages/ui` - design system (tokens, components, layouts)
+- `packages/data` - shared types, `Api` interface, in-memory `mockApi`, money and GST helpers
+- `docs/` - plan and design brief

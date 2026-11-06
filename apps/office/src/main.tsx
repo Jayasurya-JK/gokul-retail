@@ -1,17 +1,14 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { installBrowserKeyBlock } from "@gokul/ui";
-import "@gokul/ui/theme.css";
-import { App } from "./App";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/inter/wght.css';
+import '@gokul/ui/tokens.css';
+import '@gokul/ui/base.css';
+import './index.css';
+import { App } from './App';
 
-// Reload, print, find, zoom and friends must never reach the page (an open form would be lost).
-installBrowserKeyBlock({ dev: import.meta.env.DEV });
-
-const container = document.getElementById("root");
-if (container) {
-  createRoot(container).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
-}
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);

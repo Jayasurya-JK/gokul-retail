@@ -1,33 +1,20 @@
-import js from "@eslint/js";
-import globals from "globals";
-import reactHooks from "eslint-plugin-react-hooks";
-import tseslint from "typescript-eslint";
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
 
 export default tseslint.config(
-  {
-    ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
-      "target/**",
-      "**/src-tauri/**",
-      "**/gen/**",
-      ".claude/**",
-      ".dsh-themes/**",
-    ],
-  },
+  { ignores: ['**/dist/**', '**/target/**', '**/node_modules/**', 'docs/**', '.dsh-themes/**', '.playwright-mcp/**', '**/*.cjs', 'tools/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  { files: ['**/*.mjs'], languageOptions: { globals: { ...globals.node } } },
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ['**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
-    plugins: { "react-hooks": reactHooks },
+    plugins: { 'react-hooks': reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "@typescript-eslint/no-explicit-any": "error",
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
-  },
-  {
-    files: ["*.config.{js,ts}", "**/*.config.{js,ts}", "tools/**/*.{mjs,ts}"],
-    languageOptions: { globals: { ...globals.node } },
   },
 );

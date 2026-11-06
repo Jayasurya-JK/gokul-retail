@@ -42,4 +42,4 @@ Deepavali - sesame oil for the oil bath (nallennai), big spike. Karthigai Deepam
 - **GST** (verify with CA): edible oils generally 5% (groundnut HSN 1508, sesame 1515, coconut 1513). Oil cake (HSN 2305/2306) rate depends on use - confirm. Ask whether the shop is under the composition scheme (then it issues a "Bill of Supply", not a tax invoice).
 
 ## How to use this knowledge
-When reviewing a spec or screen, ask: would the owner recognise this flow from his shop floor? Does it record the real steps (batch, settle, barrel, measure, bottle)? Does it show the leaks above? Are norms editable settings? Flag anything that forces staff to do extra typing during rush hours.
+When reviewing a spec or screen, ask: would the owner recognise this flow from their shop floor? Does it record the real steps (batch, settle, barrel, measure, bottle)? Does it show the leaks above? Are norms editable settings? Flag anything that forces staff to do extra typing during rush hours.

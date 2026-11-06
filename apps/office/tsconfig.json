@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "allowImportingTsExtensions": true },
-  "include": ["src", "vite.config.ts", "../../tools"]
+  "compilerOptions": { "types": ["vite/client"] },
+  "include": ["src", "vite.config.ts"]
 }

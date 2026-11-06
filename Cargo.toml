@@ -2,24 +2,16 @@
 resolver = "2"
 members = ["crates/core", "apps/pos/src-tauri", "apps/office/src-tauri"]
 
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-license = "UNLICENSED"
-publish = false
-
-# Small installer, no panic=abort (the panic hook in step 4 needs unwinding).
-# Argon2 is slow when unoptimised; keep dev and test runs close to real timing.
-[profile.dev.package.argon2]
-opt-level = 3
-[profile.test.package.argon2]
-opt-level = 3
-# The release profile is size-optimised ("s"); the PIN hash must still run at full speed.
-[profile.release.package.argon2]
-opt-level = 3
-
 [profile.release]
-lto = true
 opt-level = "s"
+lto = true
 codegen-units = 1
+panic = "unwind" # a panic in one call must not take the whole app (and the shop) down
 strip = true
+
+# Dependencies (SQLite, argon2) are compiled optimised even in debug/test builds,
+# otherwise PIN hashing and the 100k-bill tests are painfully slow.
+[profile.dev.package."*"]
+opt-level = 3
+[profile.test.package."*"]
+opt-level = 3

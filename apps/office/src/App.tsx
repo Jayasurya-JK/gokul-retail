@@ -1,293 +1,108 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AppFrame,
-  Banner,
-  BlockingScreen,
-  Dialog,
-  ChangePinScreen,
-  HelpOverlay,
-  KeyLegend,
-  LAYER,
-  LoginScreen,
-  RecoveryCodeScreen,
-  StatusBar,
-  UnsavedGuardProvider,
-  toAppError,
-  useFocusGuard,
-  useDelayedFlag,
-  useKeymap,
-  type Binding,
-  type SessionInfo,
-  type StartupStatus,
-} from "@gokul/ui";
-import * as realApi from "./api";
-import { ApiContext, type Api } from "./apiContext";
-import { FirstRun } from "./FirstRun";
-import { Shell } from "./Shell";
-import { Recover } from "./Recover";
-import { S } from "./strings";
+import { useEffect, useState } from 'react';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { TriangleAlert } from 'lucide-react';
+import type { BackupStatus } from '@gokul/data';
+import { OfficeLayout, StatusDot, ToastProvider, TooltipProvider, useDesktopGuards } from '@gokul/ui';
+import { nav } from './nav';
+import { api, useSession } from './store';
+import { Login } from './pages/Login';
+import { Dashboard } from './pages/Dashboard';
+import { Items } from './pages/Items';
+import { Categories } from './pages/Categories';
+import { Labels } from './pages/Labels';
+import { Stock } from './pages/Stock';
+import { Purchases } from './pages/Purchases';
+import { Suppliers } from './pages/Suppliers';
+import { Production } from './pages/Production';
+import { Sales } from './pages/Sales';
+import { Customers } from './pages/Customers';
+import { Collections } from './pages/Collections';
+import { Reports } from './pages/Reports';
+import { Users } from './pages/Users';
+import { SettingsPage } from './pages/SettingsPage';
+import { ItemEditor } from './pages/ItemEditor';
 
-type BlockKind = "error" | "busy" | "newer";
+const fmtAgo = (iso: string) => {
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  const t = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  if (sameDay) return `today ${t}`;
+  if (days <= 1 && new Date(Date.now() - 86_400_000).toDateString() === d.toDateString()) return `yesterday ${t}`;
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${t}`;
+};
 
-type Phase =
-  | { kind: "starting" }
-  | { kind: "block"; block: BlockKind; detail: string }
-  | { kind: "firstRun" }
-  | { kind: "recoveryCode"; code: string; then: { kind: "main"; session: SessionInfo } | { kind: "login"; notice: string } }
-  | { kind: "login"; notice?: string }
-  | { kind: "recover" }
-  | { kind: "changePin"; session: SessionInfo }
-  | { kind: "main"; session: SessionInfo; setupPrompt: boolean };
+/** The real last good backup (Rust reads the backup log). Amber warning when it is older than 24 hours or the last try failed. */
+function BackupStatusText() {
+  const loc = useLocation();
+  const [st, setSt] = useState<BackupStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => { api.backupStatus().then((s) => live && setSt(s)).catch(() => undefined); };
+    load();
+    const t = window.setInterval(load, 60_000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [loc.pathname]);
+  if (!st) return <span>Backup: checking...</span>;
+  if (!st.lastAt) {
+    return <span className="flex items-center gap-1.5 font-semibold text-warning" title={st.lastError ?? undefined}><TriangleAlert size={12} /> No backup yet{st.lastError ? ' - last try failed' : ''}. Open Settings, Backup.</span>;
+  }
+  if (st.stale || st.lastError) {
+    const age = st.ageHours ?? 0;
+    const ago = age >= 48 ? `${Math.floor(age / 24)} days ago` : `${Math.floor(age)} hours ago`;
+    return <span className="flex items-center gap-1.5 font-semibold text-warning" title={st.lastError ?? undefined}><TriangleAlert size={12} /> Last backup {fmtAgo(st.lastAt)} ({ago}){st.lastError ? ' - the latest try failed' : ' - overdue'}</span>;
+  }
+  return <span>Last backup {fmtAgo(st.lastAt)}</span>;
+}
 
-export function App({ api = realApi }: { api?: Api }) {
+function Shell() {
+  const user = useSession((s) => s.user);
+  const signOut = useSession((s) => s.signOut);
+  const loc = useLocation();
+  const navigate = useNavigate();
+  if (!user) return <Navigate to="/login" replace />;
   return (
-    <ApiContext.Provider value={api}>
-      <UnsavedGuardProvider>
-        <Root api={api} />
-      </UnsavedGuardProvider>
-    </ApiContext.Provider>
+    <OfficeLayout
+      nav={nav} activePath={loc.pathname} onNavigate={navigate}
+      user={{ name: user.name, role: user.role, initials: user.initials }}
+      onLogout={() => { signOut(); navigate('/login'); }}
+      statusLeft={<><span className="flex items-center gap-1.5"><StatusDot tone="success" /> Database connected</span><BackupStatusText /></>}
+      statusRight={<span>Gokul Oils, Counter 1 online</span>}
+    >
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/items" element={<Items />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/labels" element={<Labels />} />
+        <Route path="/stock" element={<Stock />} />
+        <Route path="/purchases" element={<Purchases />} />
+        <Route path="/suppliers" element={<Suppliers />} />
+        <Route path="/production" element={<Production />} />
+        <Route path="/sales" element={<Sales />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/collections" element={<Collections />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/items/new" element={<ItemEditor />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </OfficeLayout>
   );
 }
 
-interface StartupResult {
-  phase: Phase;
-  shopName: string | null;
-}
-
-/** Start-up checks 2 to 7, in order. The first one that fails decides the screen. */
-async function runStartup(api: Api): Promise<StartupResult> {
-  let status: StartupStatus;
-  try {
-    status = await api.startupStatus();
-  } catch (raw) {
-    const err = toAppError(raw);
-    const block: BlockKind = err.code === "DB_BUSY" ? "busy" : err.code === "DB_NEWER" ? "newer" : "error";
-    return { phase: { kind: "block", block, detail: err.message }, shopName: null };
-  }
-  const shopName = status.shopName;
-  if (status.db !== "ok") {
-    const block: BlockKind = status.db === "busy" ? "busy" : status.db === "newer_than_app" ? "newer" : "error";
-    return { phase: { kind: "block", block, detail: status.dbMessage ?? "" }, shopName };
-  }
-  if (!status.usersExist) return { phase: { kind: "firstRun" }, shopName };
-  const session = await api.currentSession().catch(() => null);
-  if (session) {
-    return {
-      phase: session.mustChangePin ? { kind: "changePin", session } : { kind: "main", session, setupPrompt: false },
-      shopName,
-    };
-  }
-  return { phase: { kind: "login" }, shopName };
-}
-
-function Root({ api }: { api: Api }) {
-  const [phase, setPhase] = useState<Phase>({ kind: "starting" });
-  const [shopName, setShopName] = useState<string | null>(null);
-  const [help, setHelp] = useState(false);
-  const [closeAsk, setCloseAsk] = useState(false);
-  const closeRef = useRef<(() => void) | null>(null);
-  const registerClose = useCallback((fn: (() => void) | null) => {
-    closeRef.current = fn;
-  }, []);
-
-  const applyStartup = useCallback((r: StartupResult) => {
-    setShopName(r.shopName);
-    setPhase(r.phase);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void runStartup(api).then((r) => {
-      if (!cancelled) applyStartup(r);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [api, applyStartup]);
-
-  const restart = useCallback(() => {
-    setPhase({ kind: "starting" });
-    void runStartup(api).then(applyStartup);
-  }, [api, applyStartup]);
-
-  // Window close (Alt+F4 / X) goes through Main's unsaved-changes guard when it is open.
-  useEffect(() => {
-    let off: (() => void) | undefined;
-    let gone = false;
-    void api
-      .onCloseRequested(() => {
-        if (closeRef.current) closeRef.current();
-        else void api.closeWindow();
-      })
-      .then((fn) => {
-        if (gone) fn();
-        else off = fn;
-      });
-    return () => {
-      gone = true;
-      off?.();
-    };
-  }, [api]);
-
-  // Closing while the recovery code is on screen would lose it for ever: ask first.
-  const showingCode = phase.kind === "recoveryCode";
-  useEffect(() => {
-    if (!showingCode) return;
-    registerClose(() => setCloseAsk(true));
-    return () => registerClose(null);
-  }, [showingCode, registerClose]);
-
-  const inMain = phase.kind === "main";
-  const helpKeys = useMemo<Binding[]>(() => [{ keys: ["F1"], label: "Help", run: () => setHelp(true) }], []);
-  useKeymap(helpKeys, { layer: LAYER.app, enabled: !inMain });
-  useFocusGuard(() => document.querySelector<HTMLElement>("[tabindex], input, button"));
-
-  const signedIn = (session: SessionInfo) => {
-    setPhase(session.mustChangePin ? { kind: "changePin", session } : { kind: "main", session, setupPrompt: false });
-  };
-
-  if (phase.kind === "main") {
-    return (
-      <Shell
-        session={phase.session}
-        startupShopName={shopName}
-        setupPrompt={phase.setupPrompt}
-        onSwitchUser={() => setPhase({ kind: "login" })}
-        onSignedOut={(notice) => setPhase({ kind: "login", notice })}
-        onPinChangeRequired={() => setPhase({ kind: "changePin", session: phase.session })}
-        registerClose={registerClose}
-      />
-    );
-  }
-
-  const retry: Binding[] = [{ keys: ["Enter"], label: "Try again", run: restart }];
-
-  let body: React.ReactNode = null;
-  switch (phase.kind) {
-    case "starting":
-      body = <Starting />;
-      break;
-    case "block":
-      body =
-        phase.block === "error" ? (
-          <BlockingScreen
-            title="Gokul Office cannot open the shop data"
-            steps={[
-              "Press Enter to try again.",
-              "If it still fails, restart the computer and open Gokul Office again.",
-              "Still failing? Call IT and read out the code below.",
-            ]}
-            keys={retry}
-            itLine={`For IT: DB-OPEN  ${phase.detail}  Log folder: %APPDATA%\\GokulRetail\\logs`}
-          >
-            <p>Nothing has been deleted.</p>
-          </BlockingScreen>
-        ) : phase.block === "busy" ? (
-          <BlockingScreen title="The shop data is busy" keys={retry} itLine="For IT: DB-BUSY">
-            <p>Gokul POS is updating the data. Wait one minute, then press Enter.</p>
-          </BlockingScreen>
-        ) : (
-          <BlockingScreen
-            title="This Gokul Office is older than the shop data"
-            itLine={`For IT: DB-NEWER  ${phase.detail}`}
-          >
-            <p>
-              {phase.detail ? `${phase.detail} ` : ""}Your data is safe and has not been changed. Install the newer Gokul
-              Office from IT, then open it again.
-            </p>
-          </BlockingScreen>
-        );
-      break;
-    case "firstRun":
-      body = (
-        <FirstRun
-          onAlreadySetup={restart}
-          onCreated={({ recoveryCode, session }) =>
-            setPhase({ kind: "recoveryCode", code: recoveryCode, then: { kind: "main", session } })
-          }
-        />
-      );
-      break;
-    case "recoveryCode": {
-      const then = phase.then;
-      body = (
-        <RecoveryCodeScreen
-          code={phase.code}
-          onConfirmed={() =>
-            setPhase(then.kind === "main" ? { kind: "main", session: then.session, setupPrompt: true } : { kind: "login", notice: then.notice })
-          }
-        />
-      );
-      break;
-    }
-    case "login":
-      body = (
-        <LoginScreen
-          title="Gokul Office - Sign in"
-          loadUsers={api.listLoginUsers}
-          login={api.login}
-          onSignedIn={signedIn}
-          notice={phase.notice ? <Banner kind="ok">{phase.notice}</Banner> : null}
-          ownerKey={{ keys: ["F4"], label: "Forgot owner PIN", run: () => setPhase({ kind: "recover" }) }}
-        />
-      );
-      break;
-    case "recover":
-      body = (
-        <Recover
-          onBack={() => setPhase({ kind: "login" })}
-          onRecovered={(code) =>
-            setPhase({
-              kind: "recoveryCode",
-              code,
-              then: { kind: "login", notice: "Owner PIN changed. Sign in with your new PIN." },
-            })
-          }
-        />
-      );
-      break;
-    case "changePin":
-      body = (
-        <ChangePinScreen
-          changePin={api.changePin}
-          onDone={(session) => setPhase({ kind: "main", session, setupPrompt: false })}
-          onCancel={() => {
-            api.logout().catch(() => undefined);
-            setPhase({ kind: "login" });
-          }}
-        />
-      );
-      break;
-  }
-
+export function App() {
+  useDesktopGuards();
   return (
-    <>
-      <AppFrame
-        statusBar={<StatusBar shopName={shopName || S.appName} />}
-        legend={<KeyLegend mode="list" />}
-      >
-        {body}
-      </AppFrame>
-      {help ? <HelpOverlay onClose={() => setHelp(false)} /> : null}
-      {closeAsk ? (
-        <Dialog
-          title="Close without the recovery code?"
-          buttons={[
-            { label: "Stay", isDefault: true, onPress: () => setCloseAsk(false) },
-            { label: "Close anyway", keys: ["C"], variant: "danger", onPress: () => void api.closeWindow() },
-          ]}
-          onCancel={() => setCloseAsk(false)}
-          cancelLabel="Stay"
-        >
-          <p>You have not confirmed you wrote down the recovery code. Close anyway?</p>
-        </Dialog>
-      ) : null}
-    </>
+    <TooltipProvider>
+      <ToastProvider>
+        <HashRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/*" element={<Shell />} />
+          </Routes>
+        </HashRouter>
+      </ToastProvider>
+    </TooltipProvider>
   );
-}
-
-/** "Starting..." only if start-up takes more than 300 ms, so fast starts do not flicker. */
-function Starting() {
-  const slow = useDelayedFlag(true);
-  return slow ? <p className="gk-starting">Starting Gokul Office...</p> : null;
 }

@@ -1,22 +1,19 @@
 [package]
 name = "gokul-core"
-description = "Gokul Retail core: database, stock ledger and business rules. No UI/Tauri dependency."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-publish.workspace = true
+version = "0.1.0"
+edition = "2021"
+description = "Gokul Retail business rules and SQLite database (no Tauri dependency)"
 
 [dependencies]
-rusqlite = { version = "0.41", features = ["bundled", "backup"] }
-thiserror = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
-# PIN hashing is required by spec 00 step 3. argon2 re-exports password-hash and OsRng.
-argon2 = { version = "0.5", features = ["std"] }
-# Wipes PINs from memory when dropped.
-zeroize = "1"
-# Log facade only (the apps already use it): warnings from core reach the app log.
-log = "0.4"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [dev-dependencies]
-# Tests only: checks the exact JSON the UI receives. Already in the build via Tauri.
-serde_json = "1"
+tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
