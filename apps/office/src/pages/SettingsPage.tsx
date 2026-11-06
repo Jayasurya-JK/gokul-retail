@@ -4,12 +4,13 @@ import type { SettingsBundle } from '@gokul/data';
 import { PageHeader, Tabs, TabPanel, useToast } from '@gokul/ui';
 import { api } from '../store';
 import { SaveBar } from '../components/crm/SaveBar';
-import { BackupTab, BillFormatTab, PrintersTab, ShopTab, TaxTab } from '../components/crm/SettingsTabs';
+import { BackupTab, BillFormatTab, ExpensesTab, MillTab, PrintersTab, SecurityTab, ShopTab, TaxTab } from '../components/crm/SettingsTabs';
 
 type Section = keyof SettingsBundle;
 const LABELS: { value: Section; label: string }[] = [
   { value: 'shop', label: 'Shop' }, { value: 'tax', label: 'Tax' }, { value: 'billFormat', label: 'Bill format' },
   { value: 'printers', label: 'Printers' }, { value: 'backup', label: 'Backup' },
+  { value: 'expenses', label: 'Expenses' }, { value: 'mill', label: 'Mill' }, { value: 'security', label: 'Security' },
 ];
 
 export function SettingsPage() {
@@ -53,6 +54,9 @@ export function SettingsPage() {
           <TabPanel value="tax" className="outline-none"><TaxTab v={draft.tax} set={(n) => patch('tax', n)} /></TabPanel>
           <TabPanel value="billFormat" className="outline-none"><BillFormatTab v={draft.billFormat} shop={draft.shop} set={(n) => patch('billFormat', n)} /></TabPanel>
           <TabPanel value="printers" className="outline-none"><PrintersTab v={draft.printers} set={(n) => patch('printers', n)} /></TabPanel>
+          <TabPanel value="expenses" className="outline-none"><ExpensesTab v={draft.expenses} set={(n) => patch('expenses', n)} /></TabPanel>
+          <TabPanel value="mill" className="outline-none"><MillTab v={draft.mill} set={(n) => patch('mill', n)} /></TabPanel>
+          <TabPanel value="security" className="outline-none"><SecurityTab v={draft.security} set={(n) => patch('security', n)} /></TabPanel>
           <TabPanel value="backup" className="outline-none">
             <BackupTab
               v={draft.backup} set={(n) => patch('backup', n)}

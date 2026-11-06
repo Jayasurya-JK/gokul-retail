@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { configureKeyBar, reloadKeyBar } from '@gokul/ui';
 import {
   makeLine, recalcLine, api as backendApi, type Api, type BillLine, type Customer, type HeldBill, type Item, type Paise, type Settings, type Shift, type User,
 } from '@gokul/data';
@@ -22,6 +23,7 @@ function guarded(a: Api): Api {
   });
 }
 export const api: Api = guarded(backendApi);
+configureKeyBar({ get: () => backendApi.getUiPref('showKeyBar'), set: (v) => backendApi.setUiPref('showKeyBar', v) });
 
 interface SessionState {
   user: User | null;
@@ -38,6 +40,7 @@ export const useSession = create<SessionState>((set) => ({
   signIn: async (user) => {
     const [shift, settings, held] = await Promise.all([api.currentShift(user.id), api.getSettings(), api.listHeld()]);
     set({ user, shift, settings, heldCount: held.length });
+    void reloadKeyBar();
   },
   signOut: () => { set({ user: null, shift: null }); void backendApi.logout().catch(() => undefined); },
   setShift: (shift) => set({ shift }),

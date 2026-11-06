@@ -9,6 +9,7 @@ import { Badge, Button, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast, t
 import { needsManagerPin } from '@gokul/data';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
+import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 import { CreditNoteDialog } from '../components/billops/CreditNoteDialog';
 import { StatusBadge, dateTimeOf, modeLabel, payLabel, timeOf } from '../components/billops/helpers';
 
@@ -28,7 +29,22 @@ const defaultMode = (b: Bill): RefundMode => {
   return m === 'cash' ? 'cash' : m === 'upi' ? 'upi' : 'credit_note';
 };
 
+const RETURNS_KEYS: KeyRows = [
+  ['Move between lines', ['Up', 'Down']],
+  ['Tick a line', ['Space']],
+  ['Quantity up or down', ['+', '-']],
+  ['Edit the quantity', ['Enter']],
+  ['Tick all', ['Ctrl+A']],
+  ['Reason', ['F3']],
+  ['Refund as cash / UPI', ['F5', 'F6']],
+  ['Credit note / exchange', ['F7', 'F8']],
+  ['Preview', ['F9']],
+  ['Complete the return', ['F12']],
+  ['Other bill, or back to billing', ['Esc']],
+];
+
 export function Returns() {
+  useScreenKeys('Returns', RETURNS_KEYS);
   const nav = useNavigate();
   const toast = useToast();
   const loc = useLocation();

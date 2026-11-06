@@ -5,7 +5,7 @@
 use crate::error::{invalid, ApiError, Result};
 use crate::types::*;
 use crate::authz::{self, Session};
-use crate::{bills, billops, catalog, crm, dash, purchasing, reports, shift, store, Db};
+use crate::{bills, billops, catalog, crm, dash, expenses, mill, purchasing, reports, shift, store, Db};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -76,6 +76,7 @@ pub fn dispatch_session(db: &Db, session: &Session, method: &str, mut args: Vec<
         }
     };
     let _who = crate::db::ActorGuard::set(&actor.name);
+    let _appr = crate::db::ApproverGuard::set(approval.as_ref().map(|o| o.approver.as_str()));
     let out = dispatch(db, method, args)?;
     if let Some(o) = &approval {
         db.with(|c| authz::record_override(c, &actor, method, o))?;
@@ -261,6 +262,35 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "logout" => Ok(Value::Null), // the session lives outside the database; see dispatch_session
         "restoreBackup" => ok(crm::restore_backup(c, &arg::<String>(a, 0, "id")?)?),
 
+        // ----- ExpensesApi -----
+        "listExpenseCategories" => ok(expenses::list_categories(c)?),
+        "saveExpenseCategories" => ok(expenses::save_categories(c, &arg::<Vec<Value>>(a, 0, "categories")?)?),
+        "listExpenses" => ok(expenses::list_expenses(c, &arg::<Option<expenses::ExpenseQuery>>(a, 0, "query")?.unwrap_or_default())?),
+        "addExpense" => ok(expenses::add_expense(c, &arg::<expenses::ExpenseInput>(a, 0, "input")?)?),
+        "editExpense" => ok(expenses::edit_expense(c, &arg::<expenses::ExpenseEdit>(a, 0, "input")?)?),
+        "voidExpense" => ok(expenses::void_expense(c, &arg::<expenses::ExpenseVoid>(a, 0, "input")?)?),
+        "logVoidedLine" => {
+            expenses::log_voided_line(c, &arg::<expenses::VoidedLineInput>(a, 0, "line")?)?;
+            Ok(Value::Null)
+        }
+
+        // ----- MillApi -----
+        "getMillSheet" => ok(mill::get_sheet(c, &arg::<String>(a, 0, "day")?)?),
+        "saveMillSheet" => ok(mill::save_sheet(c, &arg::<mill::SheetInput>(a, 0, "input")?)?),
+        "closeMillSheet" => ok(mill::close_sheet(c, &arg::<mill::CloseInput>(a, 0, "input")?)?),
+        "listMillSheets" => ok(mill::list_sheets(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(60))?),
+
+        // ----- UI preferences (per counter) -----
+        "getUiPref" => {
+            let key = format!("ui.{}.{}", crate::db::load_settings(c)?.counter, arg::<String>(a, 0, "key")?);
+            ok(crate::db::get_setting(c, &key)?)
+        }
+        "setUiPref" => {
+            let key = format!("ui.{}.{}", crate::db::load_settings(c)?.counter, arg::<String>(a, 0, "key")?);
+            crate::db::set_setting(c, &key, &arg::<String>(a, 1, "value")?)?;
+            Ok(Value::Null)
+        }
+
         // ----- ReportsApi -----
         "runReport" => ok(reports::run_report(c, &arg::<String>(a, 0, "id")?, &arg::<reports::ReportParams>(a, 1, "params")?)?),
 
@@ -285,4 +315,6 @@ pub const METHODS: &[&str] = &[
     "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "listReceivables", "getStatement",
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
+    "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
+    "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref",
 ];

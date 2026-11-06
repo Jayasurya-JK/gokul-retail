@@ -248,7 +248,7 @@ fn load_items_in_order(conn: &Connection, ids: &[String]) -> Result<Vec<Item>> {
 
 pub fn low_stock(conn: &Connection, limit: i64) -> Result<Vec<Item>> {
     let mut st = conn.prepare_cached(&format!(
-        "{ITEM_SELECT} WHERE i.active=1 AND i.kind='item' AND i.stock <= i.reorder_level
+        "{ITEM_SELECT} WHERE i.active=1 AND i.kind='item' AND i.service=0 AND i.stock <= i.reorder_level
          ORDER BY CAST(i.stock AS REAL) / MAX(i.reorder_level, 1), i.rowid LIMIT ?1"
     ))?;
     let v = st.query_map([limit], item_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;

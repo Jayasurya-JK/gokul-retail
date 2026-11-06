@@ -172,6 +172,9 @@ fn ss(v: &Sql) -> String {
     }
 }
 
+#[path = "reports_money.rs"]
+mod money_reports;
+
 pub fn run_report(conn: &Connection, id: &str, p: &ReportParams) -> Result<Value> {
     match id {
         "daily-summary" => daily_summary(conn, p),
@@ -194,6 +197,8 @@ pub fn run_report(conn: &Connection, id: &str, p: &ReportParams) -> Result<Value
         "cash-book" => cash_book(conn, p),
         "day-close" => day_close(conn, p),
         "yield" => yield_report(conn, p),
+        "expenses" => money_reports::expenses_report(conn, p),
+        "voided-lines" => money_reports::voided_lines_report(conn, p),
         other => invalid(format!("Unknown report '{other}'")),
     }
 }
@@ -642,7 +647,7 @@ fn stock_items(conn: &Connection, p: &ReportParams) -> Result<Vec<(String, Strin
     let cat = p.category_id.clone().filter(|c| !c.is_empty() && c != "all");
     let mut st = conn.prepare_cached(
         "SELECT i.id,i.name,c.name,i.unit,i.stock,i.reorder_level,i.cost,i.price FROM items i JOIN categories c ON c.id=i.category_id
-         WHERE i.active=1 AND i.kind='item' AND (?1 IS NULL OR i.category_id=?1) ORDER BY i.rowid",
+         WHERE i.active=1 AND i.kind='item' AND i.service=0 AND (?1 IS NULL OR i.category_id=?1) ORDER BY i.rowid",
     )?;
     let v = st.query_map([cat], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
@@ -825,26 +830,36 @@ fn daily_profit(conn: &Connection, p: &ReportParams) -> Result<Value> {
         a,
     )?;
     let by: HashMap<String, Vec<Sql>> = data.into_iter().map(|r| (ss(&r[0]), r)).collect();
+    let exp: HashMap<String, i64> = run(
+        conn,
+        "SELECT day,SUM(amount) FROM expenses WHERE status='active' AND day >= ?1 AND day <= ?2 GROUP BY day",
+        vec![p.from.clone().into(), p.to.clone().into()],
+    )?
+    .into_iter()
+    .map(|r| (ss(&r[0]), si(&r[1])))
+    .collect();
     let days = days_between(&p.from, &p.to);
     let rows: Vec<Value> = days
         .iter()
         .map(|d| {
             let r = by.get(d);
             let (sales, cost) = (r.map(|r| si(&r[2])).unwrap_or(0), r.map(|r| si(&r[3])).unwrap_or(0));
-            json!({ "date": d, "bills": r.map(|r| si(&r[1])).unwrap_or(0), "sales": sales, "cost": cost, "profit": sales - cost, "margin": pct(sales - cost, sales) })
+            let expenses = exp.get(d).copied().unwrap_or(0);
+            json!({ "date": d, "bills": r.map(|r| si(&r[1])).unwrap_or(0), "sales": sales, "cost": cost, "gross": sales - cost, "expenses": expenses,
+                    "profit": sales - cost - expenses, "margin": pct(sales - cost - expenses, sales) })
         })
         .collect();
     let t = |k: &str| sum_i(&rows, k);
     let best = rows.iter().max_by_key(|r| r["profit"].as_i64().unwrap_or(0));
     Ok(json!({
-        "id": "daily-profit", "title": "Daily profit", "note": "Taxable sales minus cost of goods sold",
-        "kpis": [kpi("Gross profit", "money", t("profit"), None, Some("success")), kpi("Margin", "pct", pct(t("profit"), t("sales")), None, None),
+        "id": "daily-profit", "title": "Daily profit", "note": "Taxable sales minus cost of goods sold minus expenses",
+        "kpis": [kpi("Net profit", "money", t("profit"), Some(format!("after expenses of {} rupees", rupees(t("expenses")))), Some("success")), kpi("Margin", "pct", pct(t("profit"), t("sales")), None, None),
                  kpi("Best day", "text", best.map(|r| r["date"].clone()).unwrap_or(json!("-")), best.map(|r| format!("profit {} rupees", rupees(r["profit"].as_i64().unwrap_or(0)))), None),
                  kpi("Average per day", "money", round_div(t("profit"), days.len().max(1) as i64), None, None)],
         "chart": { "kind": "area", "title": "Gross profit per day", "money": true, "points": rows.iter().map(|r| json!({ "label": r["date"], "value": r["profit"] })).collect::<Vec<_>>() },
-        "columns": [col("date","Date","date",Some("1.2fr")), col("bills","Bills","int",Some("0.6fr")), col("sales","Sales (ex-GST)","money",None), col("cost","Cost","money",None), col("profit","Profit","money",None), col("margin","Margin","pct",Some("0.7fr"))],
+        "columns": [col("date","Date","date",Some("1.2fr")), col("bills","Bills","int",Some("0.6fr")), col("sales","Sales (ex-GST)","money",None), col("cost","Cost","money",None), col("gross","Gross profit","money",None), col("expenses","Expenses","money",None), col("profit","Net profit","money",None), col("margin","Margin","pct",Some("0.7fr"))],
         "rows": rows.iter().rev().cloned().collect::<Vec<_>>(),
-        "totals": { "date": "Total", "bills": t("bills"), "sales": t("sales"), "cost": t("cost"), "profit": t("profit"), "margin": pct(t("profit"), t("sales")) },
+        "totals": { "date": "Total", "bills": t("bills"), "sales": t("sales"), "cost": t("cost"), "gross": t("gross"), "expenses": t("expenses"), "profit": t("profit"), "margin": pct(t("profit"), t("sales")) },
     }))
 }
 
@@ -877,6 +892,9 @@ fn cash_book(conn: &Connection, p: &ReportParams) -> Result<Value> {
         } else {
             e[5] += amt;
         }
+    }
+    for r in run(conn, "SELECT day,SUM(amount) FROM expenses WHERE paid_from='cash' AND status='active' AND day >= ?1 AND day <= ?2 GROUP BY day", rng.clone())? {
+        days.entry(ss(&r[0])).or_default()[5] += si(&r[1]);
     }
     for r in run(
         conn,

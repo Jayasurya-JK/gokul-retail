@@ -9,6 +9,8 @@ export * from './areas/catalog';
 export * from './areas/purchasing';
 export * from './areas/crm';
 export * from './areas/reports';
+export * from './areas/expenses';
+export * from './areas/mill';
 export { mockApi, createMockApi } from './mockApi';
 export { settings as defaultSettings, categories as mockCategories } from './seed';
 export { api, isTauri } from './tauri/select';

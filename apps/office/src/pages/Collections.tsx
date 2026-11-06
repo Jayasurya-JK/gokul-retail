@@ -9,7 +9,7 @@ import { ago, DetailPane, fmtShort, SectionLabel, SplitBar } from '../components
 
 const BUCKETS: { key: AgeingKey; label: string; bar: string; text: string }[] = [
   { key: 'd0_30', label: '0 to 30 days', bar: 'bg-success', text: 'text-success' },
-  { key: 'd31_60', label: '31 to 60 days', bar: 'bg-accent', text: 'text-accent' },
+  { key: 'd31_60', label: '31 to 60 days', bar: 'bg-accent', text: 'text-warning' },
   { key: 'd61_90', label: '61 to 90 days', bar: 'bg-warning', text: 'text-warning' },
   { key: 'd90p', label: 'Over 90 days', bar: 'bg-danger', text: 'text-danger' },
 ];

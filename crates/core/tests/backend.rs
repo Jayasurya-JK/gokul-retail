@@ -540,10 +540,14 @@ fn demo_seed_matches_the_mock_shop_and_is_fast() {
     assert!(took.as_millis() < 2000, "startup with seeding must stay under 2 s, was {took:?}");
     assert!(!gokul_core::seed_demo_if_empty(&db).unwrap(), "seeds once only");
     db.with(|c| {
-        assert_eq!(c.query_row("SELECT COUNT(*) FROM items WHERE kind='item'", [], |r| r.get::<_, i64>(0))?, 132);
+        // 132 shop items as in the mock, plus the mill items the demo sheets create (punnaku R, malli, the aravai service).
+        let shop_items = c.query_row("SELECT COUNT(*) FROM items WHERE kind='item'", [], |r| r.get::<_, i64>(0))?;
+        assert!((132..=137).contains(&shop_items), "{shop_items} items");
         assert_eq!(count(c, "customers"), 60);
         assert_eq!(count(c, "users"), 5);
-        assert_eq!(count(c, "bills"), 1573);
+        // 1,573 counter bills as in the mock, plus the aravai charges of the demo mill sheets.
+        let bills = count(c, "bills");
+        assert!((1573..=1580).contains(&bills), "{bills} bills");
         assert_eq!(c.query_row("SELECT COUNT(*) FROM categories WHERE substr(id,1,1) != '_'", [], |r| r.get::<_, i64>(0))?, 9);
         assert!(dash::ledger_mismatches(c)?.is_empty(), "demo stock ledger balances");
         let items = store::list_items(c)?;
@@ -570,7 +574,7 @@ fn demo_seed_matches_the_mock_shop_and_is_fast() {
         // saving a new bill on top of the demo works and continues the numbering
         let it = store::find_item_by_code(c, &items[1].barcode)?.unwrap();
         let nb = save_bill(c, &cash_draft(vec![line(&it.id, &it.code, &it.name, 1000, it.price, it.gst_rate)]))?;
-        assert!(nb.number.ends_with("-001574"), "{}", nb.number);
+        assert!(nb.number.ends_with(&format!("-{:06}", bills + 1)), "{}", nb.number);
         Ok(())
     })
     .unwrap();

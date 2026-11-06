@@ -528,7 +528,7 @@ const ADJ_SELECT: &str = "SELECT a.id,a.at,a.item_id,i.name,i.unit,i.loose,a.rea
     FROM stock_adjustments a JOIN items i ON i.id=a.item_id";
 
 /// Writes the adjustment row and its ledger row inside the caller's transaction.
-fn apply_adjustment(tx: &Connection, now: chrono::DateTime<Local>, item_id: &str, reason: &str, qty: i64, note: &str, by: &str) -> Result<i64> {
+pub(crate) fn apply_adjustment(tx: &Connection, now: chrono::DateTime<Local>, item_id: &str, reason: &str, qty: i64, note: &str, by: &str) -> Result<i64> {
     let by = db::actor_or(by);
     let by = by.as_str();
     let cost: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [item_id], |r| r.get(0))?;
@@ -579,7 +579,7 @@ pub fn list_adjustments(conn: &Connection) -> Result<Vec<Value>> {
 pub fn start_stock_take(conn: &Connection, category_id: &str) -> Result<Vec<Value>> {
     let mut st = conn.prepare(
         "SELECT i.id,i.code,i.name,i.unit,i.loose,c.name,i.stock,i.cost FROM items i JOIN categories c ON c.id=i.category_id
-         WHERE i.kind='item' AND i.active=1 AND (?1='all' OR i.category_id=?1) ORDER BY i.rowid",
+         WHERE i.kind='item' AND i.service=0 AND i.active=1 AND (?1='all' OR i.category_id=?1) ORDER BY i.rowid",
     )?;
     let v = st
         .query_map([category_id], |r| {

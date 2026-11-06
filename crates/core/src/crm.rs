@@ -109,7 +109,7 @@ pub fn sales_filter_options(conn: &Connection) -> Result<Value> {
 // Customers
 // =====================================================================
 
-const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at";
+const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes";
 
 type Spend = (i64, i64, Option<String>);
 
@@ -134,6 +134,10 @@ fn customer_row(r: &rusqlite::Row, now: chrono::DateTime<Local>, spend: &HashMap
         }
     }
     m.insert("since".into(), json!(r.get::<_, String>(13)?));
+    let notes: String = r.get(14)?;
+    if !notes.is_empty() {
+        m.insert("notes".into(), json!(notes));
+    }
     m.insert("totalSpend".into(), json!(total));
     m.insert("visits".into(), json!(visits));
     m.insert("avgBill".into(), json!(if visits > 0 { round_div(total, visits) } else { 0 }));
@@ -209,6 +213,8 @@ pub struct CustomerInput {
     pub address: Option<String>,
     #[serde(default)]
     pub credit_limit: i64,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> {
@@ -227,13 +233,14 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
     let business = if b2b { i.business.clone().unwrap_or_default().trim().to_string() } else { String::new() };
     let email = i.email.clone().unwrap_or_default().trim().to_string();
     let address = i.address.clone().unwrap_or_default().trim().to_string();
+    let notes = i.notes.clone().unwrap_or_default().trim().to_string();
     let now = Local::now();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let id = match &i.id {
         Some(id) => {
             let n = tx.execute(
-                "UPDATE customers SET name=?1,phone=?2,area=?3,credit_limit=?4,type=?5,business=?6,gstin=?7,email=?8,address=?9 WHERE id=?10",
-                params![name, i.phone.trim(), i.area.trim(), i.credit_limit, if b2b { "b2b" } else { "retail" }, business, gstin, email, address, id],
+                "UPDATE customers SET name=?1,phone=?2,area=?3,credit_limit=?4,type=?5,business=?6,gstin=?7,email=?8,address=?9,notes=?10 WHERE id=?11",
+                params![name, i.phone.trim(), i.area.trim(), i.credit_limit, if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes, id],
             )?;
             if n == 0 {
                 return invalid("Customer not found.");
@@ -244,9 +251,9 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
         None => {
             let id = fresh_id(&tx, "customers", "c", "CUSTOMER")?;
             tx.execute(
-                "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,created_at,type,business,gstin,email,address)
-                 VALUES(?1,?2,?3,?4,?5,0,0,?6,?7,?8,?9,?10,?11)",
-                params![id, name, i.phone.trim(), i.area.trim(), i.credit_limit, iso(now), if b2b { "b2b" } else { "retail" }, business, gstin, email, address],
+                "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,created_at,type,business,gstin,email,address,notes)
+                 VALUES(?1,?2,?3,?4,?5,0,0,?6,?7,?8,?9,?10,?11,?12)",
+                params![id, name, i.phone.trim(), i.area.trim(), i.credit_limit, iso(now), if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes],
             )?;
             audit(&tx, now, OFFICE, "create", "customer", &id, name)?;
             id
@@ -586,7 +593,7 @@ fn valid_pin(p: &str) -> bool {
     p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())
 }
 
-const COLORS: &[&str] = &["#2563EB", "#DB2777", "#D97706", "#7C3AED", "#0F766E", "#DC2626"];
+const COLORS: &[&str] = &["#2563EB", "#DB2777", "#D97706", "#7C3AED", "#0E4330", "#DC2626"];
 
 pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> {
     let name = i.name.trim();
@@ -699,7 +706,13 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
         backup["location"] = json!(default_backup_dir(conn).display().to_string());
     }
     backup["history"] = json!(backup_history(conn)?);
-    Ok(json!({ "shop": shop, "tax": tax, "billFormat": bill_format, "printers": printers, "backup": backup }))
+    let num = |k: &str, d: i64| get_setting(conn, k).ok().flatten().and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(d);
+    let security = json!({ "lockoutAttempts": num("security.lockoutAttempts", 5), "lockoutSeconds": num("security.lockoutSeconds", 60),
+                           "voidLineNeedsPin": get_setting(conn, "security.voidLineNeedsPin").ok().flatten().as_deref() == Some("1") });
+    let expenses = json!({ "limit": crate::expenses::expense_limit(conn) });
+    let mill = blob(conn, "bundle.mill")?.unwrap_or_else(crate::mill::default_mill_bundle);
+    Ok(json!({ "shop": shop, "tax": tax, "billFormat": bill_format, "printers": printers, "backup": backup,
+               "security": security, "expenses": expenses, "mill": mill }))
 }
 
 pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value> {
@@ -720,7 +733,49 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     if !(1..=365).contains(&keep) {
         return invalid("Keep between 1 and 365 backups.");
     }
+    // Security, expenses and mill settings are optional in the call (an older screen may not send them).
+    let sec = &next["security"];
+    if !sec.is_null() {
+        let a = sec["lockoutAttempts"].as_i64().unwrap_or(5);
+        let secs = sec["lockoutSeconds"].as_i64().unwrap_or(60);
+        if !(3..=20).contains(&a) {
+            return invalid("Lock out after between 3 and 20 wrong PINs.");
+        }
+        if !(10..=3600).contains(&secs) {
+            return invalid("Lock out for between 10 seconds and 1 hour.");
+        }
+    }
+    let exp = &next["expenses"];
+    if !exp.is_null() && exp["limit"].as_i64().unwrap_or(0) < 0 {
+        return invalid("The expense limit cannot be negative.");
+    }
+    let mill = &next["mill"];
+    if !mill.is_null() {
+        for k in ["rateCakeTaken", "rateCakeKept"] {
+            if mill[k].as_i64().unwrap_or(0) < 0 {
+                return invalid("Aravai rates cannot be negative.");
+            }
+        }
+        if ![0, 5, 12, 18].contains(&mill["serviceGstRate"].as_i64().unwrap_or(5)) {
+            return invalid("The aravai GST rate must be 0, 5, 12 or 18.");
+        }
+        let ops = mill["operators"].as_array().map(|a| a.iter().filter(|o| o.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)).count()).unwrap_or(0);
+        if ops == 0 {
+            return invalid("Add at least one operator for the mill sheet.");
+        }
+    }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if !sec.is_null() {
+        set_setting(&tx, "security.lockoutAttempts", &sec["lockoutAttempts"].as_i64().unwrap_or(5).to_string())?;
+        set_setting(&tx, "security.lockoutSeconds", &sec["lockoutSeconds"].as_i64().unwrap_or(60).to_string())?;
+        set_setting(&tx, "security.voidLineNeedsPin", if sec["voidLineNeedsPin"].as_bool().unwrap_or(false) { "1" } else { "0" })?;
+    }
+    if !exp.is_null() {
+        set_setting(&tx, "expense.limit", &exp["limit"].as_i64().unwrap_or(0).to_string())?;
+    }
+    if !mill.is_null() {
+        set_setting(&tx, "bundle.mill", &mill.to_string())?;
+    }
     let mut shop_v = shop.clone();
     shop_v["gstin"] = json!(gstin);
     set_setting(&tx, "bundle.shop", &shop_v.to_string())?;

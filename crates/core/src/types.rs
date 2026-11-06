@@ -310,6 +310,11 @@ pub struct ShiftSummary {
     pub cgst: i64,
     pub sgst: i64,
     pub slabs: Vec<GstSlab>,
+    /// Expenses paid from the drawer during the shift (voided ones excluded); already taken off `expected_cash`
+    #[serde(default)]
+    pub expenses_cash: i64,
+    #[serde(default)]
+    pub expenses_count: i64,
     pub expected_cash: i64,
 }
 

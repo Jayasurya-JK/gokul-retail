@@ -70,7 +70,10 @@ export interface ShiftSummary {
   cgst: Paise;
   sgst: Paise;
   slabs: { rate: number; taxable: Paise; cgst: Paise; sgst: Paise }[];
-  /** opening + cash sales + cash in - cash out */
+  /** Expenses paid from the drawer during the shift (voided ones excluded); already taken off expectedCash */
+  expensesCash: Paise;
+  expensesCount: number;
+  /** opening + cash sales + cash in - cash out - cash expenses */
   expectedCash: Paise;
 }
 
@@ -154,6 +157,9 @@ export function createShiftMock(store: MockStore): ShiftApi {
     const cashIn = sum(entries.filter((e) => e.kind === 'in').map((e) => e.amount));
     const cashOut = sum(entries.filter((e) => e.kind === 'out').map((e) => e.amount));
     const openingCash = shift?.openingCash ?? 0;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todays = (store.expenses ?? []).filter((e) => e.status === 'active' && e.paidFrom === 'cash' && e.day === todayKey);
+    const expensesCash = sum(todays.map((e) => e.amount));
     return {
       at: new Date().toISOString(),
       counter: store.settings.counter,
@@ -174,7 +180,8 @@ export function createShiftMock(store: MockStore): ShiftApi {
       cgst: sum(slabs.map((s) => s.cgst)),
       sgst: sum(slabs.map((s) => s.sgst)),
       slabs,
-      expectedCash: openingCash + byMode.cash + cashIn - cashOut,
+      expensesCash, expensesCount: todays.length,
+      expectedCash: openingCash + byMode.cash + cashIn - cashOut - expensesCash,
     };
   };
 

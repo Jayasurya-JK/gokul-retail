@@ -21,6 +21,10 @@ import type {
   BackupStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
 } from '../areas/crm';
 import type { ReportId, ReportParams, ReportResult } from '../areas/reports';
+import type {
+  Expense, ExpenseCategory, ExpenseEdit, ExpenseInput, ExpenseList, ExpenseQuery, ExpenseVoid, VoidedLineInput,
+} from '../areas/expenses';
+import type { MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
 
 /**
  * Calls the Rust backend (crates/core) through the single `gokul_call` Tauri command.
@@ -56,6 +60,8 @@ export const REAL_METHODS = [
   'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'listReceivables', 'getStatement',
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
   'saveSettingsBundle', 'testPrint', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
+  'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
+  'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -181,6 +187,23 @@ export function createTauriApi(): Api {
     backupNow: () => call<BackupEntry>('backupNow'),
     backupStatus: () => call<BackupStatus>('backupStatus'),
     restoreBackup: (id: string) => call<{ ok: boolean; message: string }>('restoreBackup', id),
+
+    // ----- ExpensesApi -----
+    listExpenseCategories: () => call<ExpenseCategory[]>('listExpenseCategories'),
+    saveExpenseCategories: (cats: { id?: string; name: string; active: boolean }[]) => call<ExpenseCategory[]>('saveExpenseCategories', cats),
+    listExpenses: (q?: ExpenseQuery) => call<ExpenseList>('listExpenses', q ?? null),
+    addExpense: (input: ExpenseInput) => call<Expense>('addExpense', input),
+    editExpense: (input: ExpenseEdit) => call<Expense>('editExpense', input),
+    voidExpense: (input: ExpenseVoid) => call<Expense>('voidExpense', input),
+    logVoidedLine: (line: VoidedLineInput) => call<void>('logVoidedLine', line),
+    getUiPref: (key: string) => call<string | null>('getUiPref', key),
+    setUiPref: (key: string, value: string) => call<void>('setUiPref', key, value),
+
+    // ----- MillApi -----
+    getMillSheet: (day: string) => call<MillSheet>('getMillSheet', day),
+    saveMillSheet: (input: MillSheetInput) => call<MillSheet>('saveMillSheet', input),
+    closeMillSheet: (input: { day: string; managerPin?: string }) => call<MillSheet>('closeMillSheet', input),
+    listMillSheets: (limit?: number) => call<MillSheetSummary[]>('listMillSheets', limit ?? null),
 
     // ----- ReportsApi -----
     runReport: (id: ReportId, params: ReportParams) => call<ReportResult>('runReport', id, params),

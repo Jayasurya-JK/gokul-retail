@@ -687,7 +687,7 @@ const SEEDS: &[SeedBase] = &[
     SeedBase { key: "sesame", label: "Sesame (Ellu)", ta: "எள்", oil_name: "Gingelly Oil", rm: "rm-sesame", cake_name: "Gingelly Oil Cake (Loose)", uses_jaggery: true },
     SeedBase { key: "copra", label: "Copra", ta: "கொப்பரை", oil_name: "Coconut Oil", rm: "rm-copra", cake_name: "Coconut Oil Cake (Loose)", uses_jaggery: false },
 ];
-const JAGGERY_ITEM: &str = "Palm Jaggery (Karupatti) (Loose)";
+pub(crate) const JAGGERY_ITEM: &str = "Palm Jaggery (Karupatti) (Loose)";
 
 fn seed_base(key: &str) -> Option<&'static SeedBase> {
     SEEDS.iter().find(|s| s.key == key)
@@ -784,7 +784,7 @@ pub fn pressing_metrics(seed_g: i64, cleaning_g: i64, jaggery_g: i64, oil_ml: i6
     })
 }
 
-fn find_item_by_name(conn: &Connection, name: &str) -> Result<Option<String>> {
+pub(crate) fn find_item_by_name(conn: &Connection, name: &str) -> Result<Option<String>> {
     Ok(conn.query_row("SELECT id FROM items WHERE name=?1 AND kind='item' ORDER BY rowid LIMIT 1", [name], |r| r.get(0)).optional()?)
 }
 
@@ -794,7 +794,7 @@ fn oil_item_id(conn: &Connection, oil_name: &str) -> Result<String> {
 }
 
 const BATCH_SELECT: &str = "SELECT b.id,b.number,b.at,b.seed,b.seed_g,b.cleaning_loss_g,b.jaggery_g,b.oil_raw_ml,b.cake_g,b.chekku,b.operator,
-    b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on
+    b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on,b.machine
     FROM pressing_batches b LEFT JOIN barrels br ON br.id=b.barrel_id";
 
 fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -818,7 +818,7 @@ fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "seedLabel": base.map(|b| b.label).unwrap_or(""), "oilName": base.map(|b| b.oil_name).unwrap_or(""),
         "chekku": r.get::<_, String>(9)?, "operator": r.get::<_, String>(10)?, "phase": phase, "settleReadyOn": ready,
         "clearOilL": r.get::<_, Option<i64>>(14)?, "sedimentL": r.get::<_, Option<i64>>(15)?, "barrelId": barrel,
-        "barrelLabel": r.get::<_, Option<String>>(17)?, "movedOn": r.get::<_, Option<String>>(18)?,
+        "barrelLabel": r.get::<_, Option<String>>(17)?, "movedOn": r.get::<_, Option<String>>(18)?, "machine": r.get::<_, String>(19)?,
         "metrics": pressing_metrics(seed_g, clean, jag, oil, cake, kg_per_l, density),
     }))
 }
@@ -867,6 +867,13 @@ pub struct PressingDraft {
     pub chekku: String,
     #[serde(default)]
     pub operator: String,
+    /// W = wood-pressed (chekku), R = rotary. Older callers send nothing and get W.
+    #[serde(default = "default_machine")]
+    pub machine: String,
+}
+
+fn default_machine() -> String {
+    "W".into()
 }
 
 fn fmt_kg(milli: i64) -> String {
@@ -879,6 +886,14 @@ pub fn create_pressing_batch(conn: &mut Connection, d: &PressingDraft) -> Result
 }
 
 pub fn create_pressing_batch_at(conn: &mut Connection, d: &PressingDraft, now: chrono::DateTime<Local>) -> Result<Value> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let out = create_pressing_in_tx(&tx, d, now)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+/// The pressing batch inside the caller's transaction (the caller commits): used by the Production screen and the mill daily sheet.
+pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::DateTime<Local>) -> Result<Value> {
     let Some(base) = seed_base(&d.seed) else { return invalid("Choose the seed.") };
     if d.seed_kg <= 0 {
         return invalid("Enter the seed weight.");
@@ -892,13 +907,16 @@ pub fn create_pressing_batch_at(conn: &mut Connection, d: &PressingDraft, now: c
     if d.cleaning_loss_kg >= d.seed_kg {
         return invalid("Cleaning loss cannot be more than the seed weight.");
     }
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let machine = d.machine.trim().to_uppercase();
+    if machine != "W" && machine != "R" {
+        return invalid("Machine must be W (wood-pressed) or R (rotary).");
+    }
     let stock: i64 = tx.query_row("SELECT stock FROM items WHERE id=?1", [base.rm], |r| r.get(0))?;
     if d.seed_kg > stock {
         return invalid(format!("Only {} kg {} in the godown.", fmt_kg(stock), base.label));
     }
     let jaggery_id = if d.jaggery_kg > 0 {
-        let Some(id) = find_item_by_name(&tx, JAGGERY_ITEM)? else { return invalid("Palm jaggery is not in the item list.") };
+        let Some(id) = find_item_by_name(tx, JAGGERY_ITEM)? else { return invalid("Palm jaggery is not in the item list.") };
         let js: i64 = tx.query_row("SELECT stock FROM items WHERE id=?1", [&id], |r| r.get(0))?;
         if d.jaggery_kg > js {
             return invalid("Not enough palm jaggery in stock.");
@@ -908,36 +926,34 @@ pub fn create_pressing_batch_at(conn: &mut Connection, d: &PressingDraft, now: c
         None
     };
     let cake_id = if d.cake_kg > 0 {
-        Some(find_item_by_name(&tx, base.cake_name)?.ok_or_else(|| ApiError::Invalid(format!("Create the item \"{}\" first. Oil cake is stocked there.", base.cake_name)))?)
+        Some(crate::mill::ensure_punnaku_item(tx, base.key, &machine)?)
     } else {
         None
     };
-    let norm = seed_norm(&tx, &d.seed);
+    let norm = seed_norm(tx, &d.seed);
     let fy = fy_of(now);
-    let seq = next_seq(&tx, PRESS_SERIES, &fy)?;
+    let seq = next_seq(tx, PRESS_SERIES, &fy)?;
     let number = doc_number("PB", &fy, seq);
     let ready = now + Duration::days(norm.settle_days);
     tx.execute(
-        "INSERT INTO pressing_batches(number,series,fy,seq,at,day,seed,seed_g,cleaning_loss_g,jaggery_g,oil_raw_ml,cake_g,chekku,operator,settle_ready_on,norm_kg_per_l,norm_density)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+        "INSERT INTO pressing_batches(number,series,fy,seq,at,day,seed,seed_g,cleaning_loss_g,jaggery_g,oil_raw_ml,cake_g,chekku,operator,settle_ready_on,norm_kg_per_l,norm_density,machine)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         params![
             number, PRESS_SERIES, fy, seq, iso(now), db::day_of(now), d.seed, d.seed_kg, d.cleaning_loss_kg, d.jaggery_kg, d.oil_raw_l,
-            d.cake_kg, d.chekku.trim(), d.operator.trim(), iso(ready), norm.kg_per_l.to_string(), norm.density.to_string()
+            d.cake_kg, d.chekku.trim(), d.operator.trim(), iso(ready), norm.kg_per_l.to_string(), norm.density.to_string(), machine
         ],
     )?;
     let bid = tx.last_insert_rowid();
     let at = iso(now);
-    post_movement(&tx, &at, base.rm, "production", -d.seed_kg, "pressing", &bid.to_string(), &format!("Pressed in {number}"), OFFICE)?;
+    post_movement(tx, &at, base.rm, "production", -d.seed_kg, "pressing", &bid.to_string(), &format!("Pressed in {number}"), OFFICE)?;
     if let Some(j) = &jaggery_id {
-        post_movement(&tx, &at, j, "production", -d.jaggery_kg, "pressing", &bid.to_string(), &format!("Jaggery used in {number}"), OFFICE)?;
+        post_movement(tx, &at, j, "production", -d.jaggery_kg, "pressing", &bid.to_string(), &format!("Jaggery used in {number}"), OFFICE)?;
     }
     if let Some(c) = &cake_id {
-        post_movement(&tx, &at, c, "production", d.cake_kg, "pressing", &bid.to_string(), &format!("Oil cake from {number}"), OFFICE)?;
+        post_movement(tx, &at, c, "production", d.cake_kg, "pressing", &bid.to_string(), &format!("Oil cake from {number}"), OFFICE)?;
     }
-    audit(&tx, now, OFFICE, "create", "pressing_batch", &number, &format!("{} kg {}, {} L oil", d.seed_kg / 1000, base.label, d.oil_raw_l / 1000))?;
-    let out = get_batch(&tx, bid)?;
-    tx.commit()?;
-    Ok(out)
+    audit(tx, now, OFFICE, "create", "pressing_batch", &number, &format!("{} kg {} ({machine}), {} L oil", d.seed_kg / 1000, base.label, d.oil_raw_l / 1000))?;
+    get_batch(tx, bid)
 }
 
 fn barrel_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {

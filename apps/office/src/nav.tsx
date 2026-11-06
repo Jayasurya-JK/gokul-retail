@@ -1,5 +1,5 @@
 import {
-  BarChart3, Barcode, Boxes, Factory, LayoutDashboard, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Tags, Truck, Users, Wallet,
+  BarChart3, Barcode, Boxes, ClipboardList, Factory, LayoutDashboard, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Tags, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { NavGroup } from '@gokul/ui';
 
@@ -20,6 +20,7 @@ export const nav: NavGroup[] = [
       { path: '/purchases', label: 'Purchases', icon: <ShoppingCart />, keywords: 'grn entry' },
       { path: '/suppliers', label: 'Suppliers', icon: <Truck /> },
       { path: '/production', label: 'Production', icon: <Factory />, keywords: 'pressing batch packing seeds' },
+      { path: '/mill', label: 'Mill daily sheet', icon: <ClipboardList />, keywords: 'aravai operator punnaku stock paper form day end' },
     ],
   },
   {
@@ -30,6 +31,7 @@ export const nav: NavGroup[] = [
       { path: '/collections', label: 'Credit and collections', icon: <Wallet />, keywords: 'ledger outstanding' },
     ],
   },
+  { title: 'Money', items: [{ path: '/expenses', label: 'Expenses', icon: <Wallet />, keywords: 'petty cash tea transport wages rent categories' }] },
   { title: 'Insights', items: [{ path: '/reports', label: 'Reports', icon: <BarChart3 />, keywords: 'gst gstr hsn profit cash' }] },
   {
     title: 'Admin',

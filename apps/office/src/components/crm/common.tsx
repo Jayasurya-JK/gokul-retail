@@ -57,7 +57,7 @@ export function Avatar({ initials, color, size = 32 }: { initials: string; color
   );
 }
 
-const PALETTE = ['#0F766E', '#2563EB', '#7C3AED', '#DB2777', '#D97706', '#0891B2', '#65A30D'];
+const PALETTE = ['#0E4330', '#2563EB', '#7C3AED', '#DB2777', '#D97706', '#0891B2', '#65A30D'];
 export function nameColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;

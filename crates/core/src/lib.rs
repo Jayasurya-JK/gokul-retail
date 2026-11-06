@@ -11,6 +11,8 @@ pub mod dash;
 pub mod db;
 pub mod dispatch;
 pub mod error;
+pub mod expenses;
+pub mod mill;
 pub mod money;
 pub mod native;
 pub mod purchasing;

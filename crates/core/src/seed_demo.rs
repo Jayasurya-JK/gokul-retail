@@ -9,7 +9,7 @@ use crate::db::{self, iso, set_setting, Db};
 use crate::error::Result;
 use crate::store::hash_pin;
 use crate::types::*;
-use chrono::{Duration, Local, TimeZone};
+use chrono::{DateTime, Duration, Local, TimeZone};
 use rusqlite::{params, Connection, TransactionBehavior};
 use serde::Deserialize;
 
@@ -67,12 +67,8 @@ pub fn seed_demo_if_empty(db: &Db) -> Result<bool> {
     })
 }
 
-pub fn seed_demo(conn: &mut Connection) -> Result<()> {
-    let data: SeedData = serde_json::from_str(DEMO_JSON)?;
-    let now = Local::now();
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-
-    let s = &data.settings;
+/// Shop settings (the default shop details). Shared by the demo seed and the real-stock import.
+fn write_settings(c: &Connection, s: &Settings) -> Result<()> {
     for (k, v) in [
         ("shopName", s.shop_name.as_str()),
         ("address", &s.address),
@@ -84,21 +80,48 @@ pub fn seed_demo(conn: &mut Connection) -> Result<()> {
         ("printer", &s.printer),
         ("roundToRupee", if s.round_to_rupee { "1" } else { "0" }),
     ] {
-        set_setting(&tx, k, v)?;
+        set_setting(c, k, v)?;
     }
-    for (i, c) in data.categories.iter().enumerate() {
-        tx.execute("INSERT INTO categories(id,name,sort) VALUES(?1,?2,?3)", params![c.id, c.name, i as i64])?;
-    }
-    for u in &data.users {
+    Ok(())
+}
+
+/// Login users with their PINs (1111 owner, 2222 manager, 1234 cashier and the other demo users).
+fn write_users(c: &Connection, users: &[SeedUser], now: DateTime<Local>) -> Result<()> {
+    for u in users {
         let at = (now - Duration::days(u.last_login.d)).date_naive();
         let hm: Vec<u32> = u.last_login.hm.split(':').filter_map(|x| x.parse().ok()).collect();
         let t = at.and_hms_opt(hm.first().copied().unwrap_or(9), hm.get(1).copied().unwrap_or(0), 0).unwrap();
         let last = Local.from_local_datetime(&t).earliest().unwrap_or(now);
-        tx.execute(
+        c.execute(
             "INSERT INTO users(id,name,role,initials,color,pin_hash,last_login,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
             params![u.id, u.name, u.role, u.initials, u.color, hash_pin(&u.pin)?, iso(last), iso(now)],
         )?;
     }
+    Ok(())
+}
+
+/// Only the shop settings and the login users (plus the migration defaults: roles, barrels, norms, expense
+/// categories). No items, customers, bills, purchases or production. Used by the real-stock import (`gokul-import`).
+pub fn seed_login_and_settings(conn: &mut Connection) -> Result<()> {
+    let data: SeedData = serde_json::from_str(DEMO_JSON)?;
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    write_settings(&tx, &data.settings)?;
+    write_users(&tx, &data.users, now)?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn seed_demo(conn: &mut Connection) -> Result<()> {
+    let data: SeedData = serde_json::from_str(DEMO_JSON)?;
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+    write_settings(&tx, &data.settings)?;
+    for (i, c) in data.categories.iter().enumerate() {
+        tx.execute("INSERT INTO categories(id,name,sort) VALUES(?1,?2,?3)", params![c.id, c.name, i as i64])?;
+    }
+    write_users(&tx, &data.users, now)?;
     for c in &data.customers {
         let last = now - Duration::days(c.last_visit_days);
         tx.execute(
@@ -336,6 +359,7 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
             &PressingDraft {
                 seed: seed.to_string(), seed_kg: seed_g, cleaning_loss_kg: cleaning, jaggery_kg: jag, oil_raw_l: oil_ml, cake_kg: cake_g,
                 chekku: format!("Chekku {}", 1 + n % 3), operator: ["Murugesan", "Selvam", "Kannan"][n % 3].into(),
+                machine: if n % 4 == 3 && *seed != "copra" { "R".into() } else { "W".into() },
             },
             when,
         )?;
@@ -378,6 +402,107 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
         if let Some(item_id) = id {
             create_adjustment(conn, &AdjustmentInput { item_id, reason: reason.into(), qty, note: note.into() })?;
         }
+    }
+    seed_expenses(conn, now)?;
+    // The demo sheets are a nicety: a failure here must never stop the shop from starting.
+    let _ = seed_mill_sheets(conn, now);
+    Ok(())
+}
+
+/// Past expenses for the last few weeks (cash ones are written straight in: the demo days have no open drawer).
+fn seed_expenses(conn: &mut Connection, now: chrono::DateTime<Local>) -> Result<()> {
+    let plan: [(&str, &str, i64, &str, &str); 10] = [
+        ("tea", "cash", 18_000, "Tea stall", "Tea and snacks for staff"),
+        ("transport", "cash", 45_000, "Auto - Saravana", "Bringing seeds from market"),
+        ("wages", "cash", 150_000, "Loadmen", "Unloading groundnut lorry"),
+        ("electricity", "bank", 612_000, "TNEB", "Mill electricity bill"),
+        ("rent", "bank", 1_800_000, "Mr. Palanisamy", "Godown rent"),
+        ("repairs", "cash", 85_000, "Murugan Workshop", "Chekku bearing repair"),
+        ("packing", "upi", 240_000, "Sri Packaging", "Labels and cartons"),
+        ("advance", "cash", 200_000, "Selvam", "Salary advance"),
+        ("tea", "cash", 14_000, "Tea stall", "Tea"),
+        ("transport", "upi", 120_000, "Gokul Transport", "Delivery to Pollachi"),
+    ];
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    for (n, (cat, from, amt, to, note)) in plan.iter().enumerate() {
+        let when = now - Duration::days(1 + (n as i64) * 2);
+        let fy = db::fy_of(when);
+        let seq = db::next_seq(&tx, crate::expenses::EXPENSE_SERIES, &fy)?;
+        let name: String = tx.query_row("SELECT name FROM expense_categories WHERE id=?1", [cat], |r| r.get(0))?;
+        tx.execute(
+            "INSERT INTO expenses(number,fy,seq,at,day,category_id,category_name,paid_from,amount,paid_to,note,by_name) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            params![db::doc_number("EX", &fy, seq), fy, seq, iso(when), db::day_of(when), cat, name, from, amt, to, note, if n % 3 == 0 { "Karthik" } else { "Lakshmi" }],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Three closed mill sheets (3, 2 and 1 days ago): operator aravai on W and R machines, customer job work (cake taken and
+/// kept), punnaku purchased, and a counted closing stock with small differences.
+fn seed_mill_sheets(conn: &mut Connection, now: chrono::DateTime<Local>) -> Result<()> {
+    use crate::mill::{close_sheet, get_sheet, save_sheet, CloseInput, CustRow, OpRow, PunnakuRow, SheetInput};
+    let cust: Vec<String> = {
+        let mut st = conn.prepare("SELECT id FROM customers WHERE type='retail' ORDER BY id LIMIT 4")?;
+        let v = st.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        v
+    };
+    let op = |o: &str, seed: &str, m: &str, kg: i64, oil: i64, cake: i64, jag: i64| OpRow {
+        operator: o.into(), seed: seed.into(), machine: m.into(), seed_kg: kg * 1000, oil_l: oil, cake_kg: cake * 1000, jaggery_kg: jag * 1000,
+    };
+    for (i, days) in [3i64, 2, 1].iter().enumerate() {
+        let day = db::day_of(now - Duration::days(*days));
+        let (ops, custs, puns) = match i {
+            0 => (
+                vec![op("Operator 1", "groundnut", "W", 120, 44_500, 70_000, 0), op("Operator 1", "sesame", "W", 60, 21_000, 38_000, 6), op("Operator 2", "groundnut", "R", 150, 60_000, 82_000, 0)],
+                vec![(0usize, "groundnut", "W", 40i64, 15_000i64, 22i64, "taken")],
+                vec![("kadalai_w", 120i64), ("ellu_r", 45)],
+            ),
+            1 => (
+                vec![op("Operator 1", "groundnut", "W", 140, 51_500, 82_000, 0), op("Operator 2", "copra", "W", 90, 52_000, 33_000, 0), op("Operator 2", "sesame", "R", 70, 27_500, 40_000, 7)],
+                vec![(1, "sesame", "W", 25, 9_000, 15, "kept"), (0, "groundnut", "R", 30, 11_500, 17, "taken")],
+                vec![("kadalai_r", 80)],
+            ),
+            _ => (
+                vec![op("Operator 1", "groundnut", "W", 130, 48_000, 76_000, 0), op("Operator 2", "groundnut", "R", 110, 44_000, 60_000, 0), op("Operator 1", "copra", "W", 80, 46_000, 29_000, 0)],
+                vec![(2, "groundnut", "W", 50, 19_000, 28, "kept")],
+                vec![("coco", 60), ("kadalai_w", 90)],
+            ),
+        };
+        let mut input = SheetInput {
+            day: day.clone(),
+            supervisor: "Mohan".into(),
+            note: String::new(),
+            op_rows: ops,
+            cust_rows: custs
+                .into_iter()
+                .filter_map(|(c, seed, m, kg, oil, cake, mode)| {
+                    cust.get(c).map(|id| CustRow { customer_id: id.clone(), seed: seed.into(), machine: m.into(), seed_kg: kg * 1000, oil_l: oil, cake_kg: cake * 1000, cake_mode: mode.into() })
+                })
+                .collect(),
+            punnaku_rows: puns.into_iter().map(|(k, kg)| PunnakuRow { punnaku: k.into(), qty_kg: kg * 1000, supplier_id: String::new(), note: String::new() }).collect(),
+            physical: serde_json::Map::new(),
+        };
+        // Count what the sheet computes, with a small loss on one or two lines.
+        let sheet = get_sheet(conn, &day)?;
+        let _ = sheet;
+        save_sheet(conn, &input)?;
+        let draft = get_sheet(conn, &day)?;
+        let mut physical = serde_json::Map::new();
+        for (n, l) in draft["stock"].as_array().cloned().unwrap_or_default().iter().enumerate() {
+            let computed = l["computed"].as_i64().unwrap_or(0).max(0);
+            let delta = match (i, l["key"].as_str().unwrap_or("")) {
+                (0, "kadalai_w") => -2_500,
+                (1, "sesame") => -1_000,
+                (2, "kadalai_r") => 1_500,
+                _ => 0,
+            };
+            let _ = n;
+            physical.insert(l["key"].as_str().unwrap_or("").into(), serde_json::json!((computed + delta).max(0)));
+        }
+        input.physical = physical;
+        save_sheet(conn, &input)?;
+        close_sheet(conn, &CloseInput { day, manager_pin: None })?;
     }
     Ok(())
 }

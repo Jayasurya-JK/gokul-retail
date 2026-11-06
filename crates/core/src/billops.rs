@@ -12,6 +12,11 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 
 pub const CN_SERIES: &str = "CN";
 
+/// A service item (aravai job work) has no stock.
+fn is_service(conn: &Connection, item_id: &str) -> bool {
+    conn.query_row("SELECT service FROM items WHERE id=?1", [item_id], |r| r.get::<_, i64>(0)).unwrap_or(0) == 1
+}
+
 pub fn list_bills_on(conn: &Connection, s: &BillSearch) -> Result<Vec<Bill>> {
     let mut conds: Vec<String> = vec![];
     let mut args: Vec<rusqlite::types::Value> = vec![];
@@ -213,6 +218,9 @@ pub fn cancel_bill(conn: &mut Connection, req: &CancelRequest) -> Result<BillDet
         )?;
         let mut upd = tx.prepare_cached("UPDATE items SET stock = stock + ?1 WHERE id = ?2")?;
         for l in &bill.lines {
+            if is_service(&tx, &l.item_id) {
+                continue;
+            }
             mv.execute(params![iso(now), l.item_id, l.qty, bid.to_string(), format!("Cancelled {}", bill.number), req.by])?;
             upd.execute(params![l.qty, l.item_id])?;
         }
@@ -317,6 +325,9 @@ pub fn create_return(conn: &mut Connection, req: &ReturnRequest) -> Result<Credi
         // quote_return keeps pick order and skips nothing we already validated, so lines[i] belongs to picks[i].
         for (i, (l, p)) in lines.iter().zip(picks.iter()).enumerate() {
             ins.execute(params![cn_id, i as i64, p.line_index, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount])?;
+            if is_service(&tx, &l.item_id) {
+                continue;
+            }
             mv.execute(params![iso(now), l.item_id, l.qty, cn_id.to_string(), format!("{number} against {}", bill.number), req.by])?;
             upd.execute(params![l.qty, l.item_id])?;
             crate::barrels::give_back(&tx, now, bid, &l.item_id, l.qty, "return", &req.by)?;

@@ -23,10 +23,24 @@ img { -webkit-user-drag: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 input[type='number']::-webkit-inner-spin-button { display: none; }
 .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+/* Overlays: transform and opacity only, short, no vertical slide. Radix keeps the element mounted for the closing animation. */
 @keyframes g-fade { from { opacity: 0 } to { opacity: 1 } }
-@keyframes g-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
-@keyframes g-slide { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
-.g-overlay { animation: g-fade 120ms ease-out; }
-.g-dialog { animation: g-pop 150ms ease-out; }
-.g-drawer { animation: g-slide 160ms ease-out; }
+@keyframes g-fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes g-pop { from { opacity: 0; transform: scale(.98) } to { opacity: 1; transform: none } }
+@keyframes g-pop-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(.985) } }
+@keyframes g-slide { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
+@keyframes g-slide-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateX(20px) } }
+@keyframes g-toast { from { opacity: 0; transform: translateX(-10px) } to { opacity: 1; transform: none } }
+/* Dropdowns, popovers, tooltips and the dialog backdrop: a quick fade */
+.g-overlay { animation: g-fade 90ms ease-out; }
+.g-overlay[data-state='closed'] { animation: g-fade-out 100ms ease-in forwards; }
+/* Dialogs sit in the centre with the separate `translate` property, so the scale animation never moves them */
+.g-dialog { translate: -50% -50%; animation: g-pop 130ms ease-out; will-change: transform, opacity; }
+.g-dialog[data-state='closed'] { animation: g-pop-out 100ms ease-in forwards; }
+.g-drawer { animation: g-slide 180ms ease-out; will-change: transform, opacity; }
+.g-drawer[data-state='closed'] { animation: g-slide-out 120ms ease-in forwards; }
+.g-toast { animation: g-toast 140ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .g-overlay, .g-dialog, .g-drawer, .g-toast, .g-overlay[data-state='closed'], .g-dialog[data-state='closed'], .g-drawer[data-state='closed'] { animation: none !important; }
+}
 @keyframes shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-6px) } 40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(4px) } }

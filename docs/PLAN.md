@@ -61,6 +61,32 @@ docs/design/BRIEF.md   design rules every screen follows
 12. Users and roles
 13. Settings: shop, tax, bill format, printers, backup
 
+## Round 2: owner feedback (6 Nov 2026)
+1. **Brand theme from the logo** (`C:\Users\jksur\OneDrive\Desktop\Gokul Oils\`). Primary is deep forest green (about `#0E4330`), with bright yellow (`#FFED00`) and an amber oil drop (`#F5A800`) as accents, plus white. Replace the teal everywhere through the tokens. Light and dark themes. The real logo appears in the POS and Office top bars, on login screens, in app icons and on the receipt header.
+2. **POS shortcuts are hidden by default.** Remove the hint chips beside the scan box and the always-on F-key bar. Add a "Shortcuts (F1)" button in the top bar that opens a clean key sheet. A setting ("Show key bar", per counter) turns the bottom bar back on for staff in training. All keys keep working.
+3. **POS top menu**, a proper app-style navigation bar: Billing | Customers | Sales | Returns | Expenses | Day close. On the right: held bills, printer/saved status, clock, and a user menu (lock, switch user, sign out).
+   - **Customers:** search list, add/edit (name, phone, address, GSTIN, credit limit, notes), the customer's bills, dues, collect payment, and start a bill for them.
+   - **Sales:** today's bills (any date for managers), today's totals and payment-mode split. **Everyone** sees totals (owner's choice).
+   - **Returns:** the existing screen.
+   - **Day close:** the existing screen.
+4. **Expenses** become a proper module, not just petty cash.
+   - Each entry has: category (tea/snacks, transport, salary advance, wages, electricity, rent, repairs, packing material, supplier cash, other), paid from (cash drawer / UPI / bank), amount, paid to, note, and the user who entered it.
+   - Amounts over a limit (setting) need a manager PIN.
+   - The day's list has edit/void with a reason (never delete).
+   - Cash-drawer expenses flow into day close.
+   - Office gets an Expenses screen (filters, category totals, categories editor) and an expense report. Profit reports subtract expenses.
+5. **A better top bar:** clearer hierarchy, the logo, the menu, and status that's easy to scan, without crowding.
+
+6. **Mill daily sheet** (from the owner's paper form `Mill stock.pdf`, "SRI GOKUL ENTERPRISES"). This is one Office screen laid out like the paper and filled by the mill supervisor at day end.
+   - **Stock items:** seeds Groundnut, Sesame and Coconut (copra). Punnaku Kadalai, Ellu and Coco. Vellam and Malli. Oils Groundnut, Sesame and Coconut.
+   - **Machines:** W = wood-pressed (chekku), R = rotary. Every pressing batch records its machine type. Kadalai and Ellu punnaku stock is kept separately for W and R (Coco punnaku has no split).
+   - **Opening stock** is filled automatically from the previous day's closing.
+   - **Aravai (Operator):** a grid per operator (Operator 1, Operator 2, and so on; operators are a list in settings). For each seed type it records seed kg in, oil out and punnaku out, with the machine. These become our pressing batches (yield vs norm kept).
+   - **Aravai (Customer):** a job-work service. The customer brings their own seeds, and we record customer, seed type, kg, machine, oil returned, and punnaku returned or kept by the shop. The charge is per kg, at one rate if the customer takes the cake and a lower rate if the shop keeps it (both rates are settings). The charge is billed (it can also be billed in POS as a service item), and cake kept by the shop is added to stock. Customer seeds and oil never touch shop stock.
+   - **Punnaku purchased:** Kadalai W/R, Ellu W/R and Coco, which goes into stock (and can link to a supplier purchase).
+   - **Closing stock** is calculated (opening + pressed + purchased + kept − sold − packed − adjusted). The supervisor enters the physical count, the difference is shown, and posting it creates adjustment rows with a reason.
+   - The sheet prints and exports as a PDF in the same layout as the paper. Past sheets are read-only once closed.
+
 ## How the design work runs
 - Wave 1 (one Sonnet designer): design system, both app shells, POS Billing (the flagship screen). The owner approves the look.
 - Wave 2 (parallel Sonnet designers): the remaining POS screens and Office screens, all on the Wave 1 system.

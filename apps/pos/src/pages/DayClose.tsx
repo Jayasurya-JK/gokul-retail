@@ -5,13 +5,22 @@ import { countedTotal, formatRupees, type DenomCounts, type ShiftSummary, type Z
 import { Badge, Button, Dialog, Kbd, Money, PosLayout, cn, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
+import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 import { DenomCounter } from '../components/DenomCounter';
 import { ReportPreview } from '../components/ReportPreview';
 
 type Dlg = null | 'xreport' | 'pin' | 'zreport';
 const PIN_LEN = 4;
 
+const DAYCLOSE_KEYS: KeyRows = [
+  ['Next count row', ['Enter']],
+  ['Print the X report', ['F8']],
+  ['Close the day (Z, manager PIN)', ['F12']],
+  ['Back to billing', ['Esc']],
+];
+
 export function DayClose() {
+  useScreenKeys('Day close', DAYCLOSE_KEYS);
   const nav = useNavigate();
   const toast = useToast();
   const { user, settings, signOut } = useSession();

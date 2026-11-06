@@ -1202,6 +1202,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gokul-import"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "gokul-core",
+ "rusqlite",
+]
+
+[[package]]
 name = "gokul-office"
 version = "0.1.0"
 dependencies = [

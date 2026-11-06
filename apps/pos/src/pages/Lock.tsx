@@ -67,7 +67,7 @@ export function Lock() {
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
 
       <header className="relative flex h-16 shrink-0 items-center justify-between px-8">
-        <div className="flex items-center gap-2.5"><Logo size={26} /><span className="text-md font-semibold tracking-tight text-white">{settings?.shopName ?? 'Gokul Oils'}</span><span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-chrome-muted">POS</span></div>
+        <div className="flex items-center gap-2.5"><Logo size={30} badge="P" /><span className="text-md font-semibold tracking-tight text-white">{settings?.shopName ?? 'Gokul Oils'}</span><span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-chrome-muted">POS</span></div>
         <div className="text-right">
           <div className="num text-2xl font-semibold leading-none text-white">{pad(now.getHours() % 12 || 12)}:{pad(now.getMinutes())} <span className="text-sm font-medium text-chrome-muted">{now.getHours() >= 12 ? 'PM' : 'AM'}</span></div>
           <div className="mt-1 text-xs text-chrome-muted">{now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>

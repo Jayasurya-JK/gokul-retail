@@ -5,18 +5,18 @@ import {
   computeTotals, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
-import { Kbd, ManagerPinDialog, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
+import { ManagerPinDialog, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, useBilling, useSession } from '../store';
 import { plural } from '../plural';
 import { TopBar } from '../components/TopBar';
 import { BillGrid, type EditField, type EditState } from '../components/BillGrid';
 import { SummaryPanel } from '../components/SummaryPanel';
-import { ConfirmDialog, CustomerDialog, HeldDialog, HelpDialog, ItemSearchDialog, PromptDialog } from '../components/Dialogs';
+import { ConfirmDialog, CustomerDialog, HeldDialog, ItemSearchDialog, PromptDialog } from '../components/Dialogs';
 import { PaymentDialog } from '../components/PaymentDialog';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
 
-type DialogName = null | 'search' | 'customer' | 'pay' | 'help' | 'held' | 'cancel' | 'billDisc' | 'dropEx';
+type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx';
 const FIELD_ORDER: EditField[] = ['qty', 'rate', 'disc'];
 
 export function Billing() {
@@ -251,13 +251,28 @@ export function Billing() {
       setSaving(false);
     }
   };
+  /* A scanned line is removed at once; the removal is logged on the backend (user + time) for the "Voided lines" report.
+     If Settings asks for a manager PIN for removals, the line comes back and the PIN box opens. */
+  const [voidAsk, setVoidAsk] = useState<{ line: BillLine; at: number; message: string } | null>(null);
+  const logVoid = async (l: BillLine, pin?: string): Promise<string | null> => {
+    try {
+      await api.logVoidedLine({ itemId: l.itemId, code: l.code, name: l.name, qty: l.qty, rate: l.rate, amount: l.amount, counter: settings?.counter, managerPin: pin });
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Could not log the removal';
+    }
+  };
   const removeSelected = () => {
     const st = useBilling.getState();
     const l = st.lines[st.selected];
     if (!l) return;
-    removed.current = { line: l, at: st.selected };
-    st.remove(st.selected);
-    toast.show({ tone: 'info', title: `Removed ${l.name}`, detail: 'Press Ctrl+Z to undo.' });
+    const at = st.selected;
+    st.remove(at);
+    void logVoid(l).then((m) => {
+      if (m && needsManagerPin(m)) { useBilling.getState().insert(l, at); setVoidAsk({ line: l, at, message: m }); return; }
+      removed.current = { line: l, at };
+      toast.show({ tone: 'info', title: `Removed ${l.name}`, detail: 'Press Ctrl+Z to undo.' });
+    });
   };
   const lock = () => nav('/lock');
 
@@ -267,6 +282,9 @@ export function Billing() {
     if (e.key === 'Escape' && e.defaultPrevented) return; // a dialog already used Esc to close itself
     if (e.ctrlKey && e.key.toLowerCase() === 'l') { e.preventDefault(); lock(); return; }
     if (dialog || edit || saving || pinAsk) return;
+    // Safety net: if focus ever ended up on the page background (a closed dialog gave it back to nothing), the first
+    // printable key goes to the scan box so type-ahead and scanning keep working.
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && (document.activeElement === document.body || !document.activeElement) && scanRef.current) scanRef.current.focus();
     if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); nav('/day-close'); return; }
     const prevent = () => e.preventDefault();
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
@@ -276,7 +294,6 @@ export function Billing() {
       return;
     }
     switch (e.key) {
-      case 'F1': prevent(); setDialog('help'); break;
       case 'F2': prevent(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); break;
       case 'F3': prevent(); setDialog('customer'); break;
       case 'F4': prevent(); if (selected >= 0) startEdit('qty'); break;
@@ -309,7 +326,7 @@ export function Billing() {
   const pickCustomer = (c: Customer | null) => { B.setCustomer(c); setDialog(null); };
 
   const keys: FKey[] = [
-    { key: 'F1', label: 'Help', onClick: () => setDialog('help') },
+    { key: 'F1', label: 'Keys' },
     { key: 'F2', label: 'Search', onClick: () => { setSearchSeed(''); setDialog('search'); } },
     { key: 'F3', label: 'Customer', onClick: () => setDialog('customer') },
     { key: 'F4', label: 'Qty', onClick: () => selected >= 0 && startEdit('qty') },
@@ -346,23 +363,17 @@ export function Billing() {
             }}
             placeholder="Scan barcode or type item code, then press Enter"
             className={cn(
-              'num h-11 w-full rounded-xl border bg-surface-2 pl-11 pr-28 text-lg font-medium text-ink placeholder:text-base placeholder:font-normal placeholder:text-subtle',
+              'num h-11 w-full rounded-xl border bg-surface-2 pl-11 pr-4 text-lg font-medium text-ink placeholder:text-base placeholder:font-normal placeholder:text-subtle',
               'transition-colors focus:bg-surface focus:ring-4',
               scanError ? 'animate-[shake_0.35s] border-danger focus:border-danger focus:ring-danger/20' : 'border-line-strong focus:border-primary focus:ring-primary/20',
             )}
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-subtle"><Kbd>Enter</Kbd> add</span>
           {suggestOpen && (
             <ScanSuggest
               list={sugg} hi={hi} q={scanQ.text} qty={scanQ.qty} left={stockLeft} onHover={setHi}
               onPick={(it) => { addItem(it, scanQ.qty); setScan(''); scanRef.current?.focus(); }}
             />
           )}
-        </div>
-        <div className="hidden items-center gap-3 text-xs text-muted min-[1500px]:flex">
-          <span className="flex items-center gap-1.5"><Kbd>5*101</Kbd> qty x code</span>
-          <span className="flex items-center gap-1.5"><Kbd>+</Kbd><Kbd>-</Kbd> qty</span>
-          <span className="flex items-center gap-1.5"><Kbd>Del</Kbd> remove</span>
         </div>
       </div>
 
@@ -378,8 +389,22 @@ export function Billing() {
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
-      <HelpDialog open={dialog === 'help'} onClose={() => setDialog(null)} />
       <PaymentDialog open={dialog === 'pay'} total={due} customer={customer} busy={saving} onClose={() => setDialog(null)} onComplete={(p, c) => void complete(p, c)} />
+      <ManagerPinDialog
+        open={voidAsk !== null} title="Manager approval to remove a line" message={voidAsk?.message ?? ''} confirmLabel="Approve and remove"
+        onClose={() => setVoidAsk(null)}
+        onSubmit={async (pin) => {
+          if (!voidAsk) return null;
+          const m = await logVoid(voidAsk.line, pin);
+          if (m) return m;
+          const idx = useBilling.getState().lines.findIndex((x) => x === voidAsk.line);
+          if (idx >= 0) useBilling.getState().remove(idx);
+          removed.current = { line: voidAsk.line, at: voidAsk.at };
+          setVoidAsk(null);
+          return null;
+        }}
+        onLocked={() => { useSession.getState().signOut(); nav('/login', { replace: true }); }}
+      />
       <ManagerPinDialog
         open={pinAsk !== null} title="Manager approval" message={pinAsk?.message ?? ''} confirmLabel="Approve and save"
         onClose={() => { setPinAsk(null); setDialog('pay'); }}

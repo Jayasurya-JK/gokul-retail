@@ -80,6 +80,16 @@ await step('billing: loose item by code + weight 2.5', async () => {
   expect(await has('Groundnut Oil (Loose)'), 'line not shown');
 }, page);
 await step('billing: barcode scan (item 102)', async () => { await scanTo('8904000001024'); expect(await has('Groundnut Oil 200 ml'), 'line missing'); }, page);
+await step('billing: typing "gro" in the scan box shows the type-ahead dropdown with the Groundnut items (real backend)', async () => {
+  await type(page, 'gro'); await sleep(700);
+  expect(await page.locator('[role=listbox]').count() === 1, 'no type-ahead dropdown for "gro"');
+  const t = await page.locator('[role=listbox]').innerText();
+  expect(/Groundnut Oil \(Loose\)/.test(t) && /Groundnut Oil 200 ml/.test(t) && /Groundnut Oil 500 ml/.test(t), 'dropdown does not list the Groundnut items: ' + t.slice(0, 200));
+  await shot(page, '01b-typeahead-gro');
+  await press(page, 'Escape', 300); // closes the list
+  for (let i = 0; i < 3; i++) await press(page, 'Backspace', 80);
+  expect(await page.locator('[role=listbox]').count() === 0, 'list did not close');
+}, page);
 await step('billing: type-ahead "gr" + Enter adds the top suggestion', async () => {
   await type(page, 'gr'); await sleep(400); await shot(page, '02-typeahead'); await press(page, 'Enter', 300);
   await type(page, '1'); await press(page, 'Enter', 300); // top match is a loose item: it asks for the weight
@@ -140,14 +150,14 @@ await shot(page, '06-after-billing');
 
 /* ---------------- restart: bills and stock survive ---------------- */
 const stockBefore = { 101: stockOf('101'), 102: stockOf('102'), 103: stockOf('103'), 104: stockOf('104'), 105: stockOf('105') };
-await step('restart: app closed and reopened, bills are still there (F8) and stock stayed down', async () => {
+await step('restart: app closed and reopened, bills are still there (Sales, Alt+3) and stock stayed down', async () => {
   await sleep(500);
   killApps(); await sleep(1500);
   ({ page, errors } = await launch('pos')); await sleep(2000);
   expect(billCount() === seedBills + 2, 'bills lost on restart');
   await login('1234'); await waitRoute('billing');
-  await press(page, 'F8', 800); await waitRoute('history');
-  expect(await has(bill1.number) && await has(bill2.number), 'saved bills not listed in F8 history');
+  await press(page, 'Alt+3', 800); await waitRoute('sales');
+  expect(await has(bill1.number) && await has(bill2.number), 'saved bills not listed on the Sales screen');
   await shot(page, '07-history');
   for (const c of Object.keys(stockBefore)) expect(stockOf(c) === stockBefore[c], 'stock changed over restart ' + c);
 }, page);
@@ -161,8 +171,8 @@ await step('restart: stock numbers shown in item search match the database', asy
 }, page);
 
 /* ---------------- history: reprint, cancel ---------------- */
-await step('history: Enter reprints (recorded), cancel with wrong then right manager PIN', async () => {
-  await press(page, 'F8', 800); await waitRoute('history');
+await step('sales: Enter reprints (recorded), cancel with wrong then right manager PIN', async () => {
+  await press(page, 'Alt+3', 800); await waitRoute('sales');
   await press(page, 'Enter', 500); await waitText('Duplicate copy');
   expect(q('SELECT COUNT(*) n FROM bill_reprints')[0].n === 1, 'reprint not recorded');
   await press(page, 'ArrowDown', 300); // newest first: the second row is bill 1
@@ -263,15 +273,49 @@ await step('esc paths: F1 help, F2 search, F3 customer all close with Esc; Ctrl+
   expect(errors.length === 0, 'console errors: ' + errors.join(' | '));
 }, page);
 
-/* ---------------- cash out, day close ---------------- */
-await step('cash: F9 cash out 100 for tea is recorded', async () => {
+/* ---------------- menu on every screen ---------------- */
+await step('menu: Alt+1..6 reach every screen, F1 opens the shortcuts sheet on each, Esc returns to billing', async () => {
+  const tabs = [['1', 'billing'], ['2', 'customers'], ['3', 'sales'], ['4', 'returns'], ['5', 'cash'], ['6', 'day-close']];
+  for (const [n, route] of tabs) {
+    await press(page, 'Alt+' + n, 700); await waitRoute(route);
+    expect(await has('Billing') && await has('Customers') && await has('Expenses') && await has('Day close'), 'menu missing on ' + route);
+    await press(page, 'F1', 500); await waitText('Keyboard shortcuts');
+    if (route !== 'billing') expect(await has('On this screen'), 'no screen keys listed first on ' + route);
+    if (route === 'sales' || route === 'cash') await shot(page, 'nav-' + route);
+    await press(page, 'Escape', 500); expect(!(await has('Keyboard shortcuts')), 'F1 sheet did not close on ' + route);
+    if (route !== 'billing') { await press(page, 'Escape', 700); await waitRoute('billing'); }
+  }
+  expect(errors.length === 0, 'console errors: ' + errors.join(' | '));
+}, page);
+
+/* ---------------- expenses, voided lines, day close ---------------- */
+await step('expenses: Rs 100 tea from the drawer, then Rs 1,500 over the limit needs a manager PIN, void with a reason', async () => {
   await press(page, 'F9', 700); await waitRoute('cash');
-  await press(page, 'F3', 200); await type(page, '100'); await press(page, 'Enter', 200); await press(page, 'Enter', 200);
-  await type(page, 'tea for staff'); await shot(page, '14-cash-out'); await press(page, 'F12', 800);
+  await press(page, 'F3', 200); await type(page, '100'); await press(page, 'Enter', 200); await press(page, 'Enter', 200); await press(page, 'Enter', 200);
+  await type(page, 'Tea stall'); await press(page, 'Enter', 200); await type(page, 'tea for staff'); await shot(page, '14-expense'); await press(page, 'F12', 800);
+  const mine = () => q("SELECT * FROM expenses WHERE shift_id IS NOT NULL AND status='active' ORDER BY id"); // the demo has older expenses
+  let r = mine();
+  expect(r.length === 1 && r[0].amount === 10000 && r[0].paid_from === 'cash' && r[0].category_id === 'tea' && r[0].shift_id, 'expense wrong ' + JSON.stringify(r));
+  await type(page, '1500'); await press(page, 'Enter', 200); await press(page, 'ArrowRight', 100); await press(page, 'ArrowRight', 100); await press(page, 'ArrowRight', 100);
+  await press(page, 'Enter', 200); await press(page, 'Enter', 200); await type(page, 'Loadmen'); await press(page, 'F12', 800);
   await approve();
-  const r = q('SELECT * FROM cash_movements');
-  expect(r.length === 1 && r[0].kind === 'out' && r[0].amount === 10000, 'cash movement wrong ' + JSON.stringify(r));
+  r = mine();
+  expect(r.length === 2 && r[1].amount === 150000 && r[1].approved_by === 'Lakshmi Rajan' && r[1].by_name === 'Karthik Murugan', 'over-limit expense wrong ' + JSON.stringify(r));
+  const x = await rpc(page, 'shiftSummary');
+  expect(x.expensesCash === 160000 && x.expectedCash === 200000 + 22500 - 160000, 'X report drawer maths ' + JSON.stringify([x.expensesCash, x.expectedCash]));
+  // void the big one (a cashier needs a manager PIN) and the drawer total comes back
+  let e = await rpcErr('voidExpense', { id: 'ex' + r[1].id, reason: 'Entered twice', managerPin: '' });
+  expect(e && /manager PIN is needed/i.test(e), 'void without PIN was not refused: ' + e);
+  await rpc(page, 'voidExpense', { id: 'ex' + r[1].id, reason: 'Entered twice', managerPin: '2222' });
+  expect(q("SELECT status, void_reason FROM expenses WHERE id=?", r[1].id)[0].status === 'void', 'void not stored');
+  expect((await rpc(page, 'shiftSummary')).expectedCash === 200000 + 22500 - 10000, 'void did not return the cash');
   await press(page, 'Escape', 500); await waitRoute('billing');
+}, page);
+await step('voided lines: a scanned line removed with Del is logged with the user', async () => {
+  const v0 = q('SELECT COUNT(*) n FROM voided_lines')[0].n;
+  await scanTo('103'); await press(page, 'Delete', 600);
+  const v = q('SELECT * FROM voided_lines ORDER BY id DESC LIMIT 1')[0];
+  expect(q('SELECT COUNT(*) n FROM voided_lines')[0].n === v0 + 1 && v.by_name === 'Karthik Murugan' && v.code === '103', 'voided line not logged ' + JSON.stringify(v));
 }, page);
 await step('day close: X report, wrong manager PIN refused, Z with 2222', async () => {
   await page.keyboard.press('Control+e'); await waitRoute('day-close'); await sleep(500);
@@ -546,6 +590,63 @@ await step('integrity: supplier balances, barrel levels and the stock ledger agr
 await step('integrity: stock ledger equals items.stock', async () => {
   const bad = q('SELECT i.code, i.stock s, COALESCE((SELECT SUM(qty) FROM stock_movements m WHERE m.item_id=i.id),0) l FROM items i').filter((r) => r.s !== r.l);
   expect(bad.length === 0, 'ledger mismatch ' + JSON.stringify(bad.slice(0, 3)));
+}, page);
+
+/* ---------------- Office: a full mill sheet day ---------------- */
+await step('office: a mill sheet day (operators W and R, customer aravai, punnaku bought) closes and posts', async () => {
+  const today = localDay();
+  const rm = (id) => q('SELECT stock FROM items WHERE id=?', id)[0].stock;
+  const seed0 = rm('rm-gn');
+  expect(seed0 > 300000, 'demo has too little groundnut for the sheet: ' + seed0);
+  const w0 = q("SELECT stock FROM items WHERE name='Groundnut Oil Cake (Loose)'")[0].stock;
+  const input = {
+    day: today, supervisor: 'Mohan', note: 'e2e',
+    opRows: [
+      { operator: 'Operator 1', seed: 'groundnut', machine: 'W', seedKg: 100000, oilL: 38000, cakeKg: 58000, jaggeryKg: 0 },
+      { operator: 'Operator 2', seed: 'groundnut', machine: 'R', seedKg: 60000, oilL: 24000, cakeKg: 33000, jaggeryKg: 0 },
+    ],
+    custRows: [{ customerId: 'c3', seed: 'groundnut', machine: 'W', seedKg: 40000, oilL: 15000, cakeKg: 22000, cakeMode: 'kept' }],
+    punnakuRows: [{ punnaku: 'kadalai_w', qtyKg: 10000 }],
+    physical: {},
+  };
+  let sheet = await rpc(page, 'saveMillSheet', input);
+  expect(rm('rm-gn') === seed0, 'a draft moved stock');
+  const line = (k) => sheet.stock.find((l) => l.key === k);
+  const earlier = q("SELECT COALESCE(SUM(seed_g),0) s FROM pressing_batches WHERE day=? AND seed='groundnut'", today)[0].s; // batches the Office flow pressed today
+  expect(line('groundnut').pressed === -(earlier + 160000), 'shop seed use ' + line('groundnut').pressed + ' (the customer seed must not count)');
+  const physical = {};
+  for (const l of sheet.stock) physical[l.key] = l.computed;
+  physical.groundnut = line('groundnut').computed - 1500; // 1.5 kg short
+  await rpc(page, 'saveMillSheet', { ...input, physical });
+  const bills0 = billCount();
+  const kept0 = q("SELECT COUNT(*) n FROM stock_movements WHERE ref_type='mill_job'")[0].n; // the demo sheets kept some cake too
+  const adj0 = q("SELECT COUNT(*) n FROM stock_adjustments WHERE note LIKE 'Mill sheet%'")[0].n;
+  sheet = await rpc(page, 'closeMillSheet', { day: today });
+  expect(sheet.status === 'closed' && sheet.opRows.every((r) => r.batchNumber), 'sheet not closed with batches');
+  expect(rm('rm-gn') === seed0 - 160000 - 1500, 'seed stock after close ' + rm('rm-gn'));
+  expect(q("SELECT stock FROM items WHERE name='Groundnut Oil Cake (Loose)'")[0].stock === w0 + 58000 + 22000 + 10000, 'W cake stock');
+  expect(q("SELECT stock FROM items WHERE name='Groundnut Oil Cake R (Loose)'")[0].stock >= 33000, 'R cake is its own item');
+  expect(q("SELECT machine FROM pressing_batches ORDER BY id DESC LIMIT 2").map((r) => r.machine).sort().join('') === 'RW', 'machines W/R not stored');
+  expect(billCount() === bills0 + 1, 'the aravai charge was not billed');
+  const bill = lastBill();
+  expect(bill.customer_id === 'c3' && bill.status === 'credit' && bill.grand === 20000, 'aravai bill ' + JSON.stringify(bill)); // 40 kg x Rs 5 (cake kept)
+  expect(q("SELECT COUNT(*) n FROM stock_movements WHERE ref_type='mill_job'")[0].n === kept0 + 1, 'only the kept cake may touch stock');
+  expect(q("SELECT COUNT(*) n FROM stock_adjustments WHERE note LIKE 'Mill sheet%'")[0].n === adj0 + 1, 'the 1.5 kg difference was not posted');
+  const again = await rpc(page, 'getMillSheet', today);
+  expect(again.stock.find((l) => l.key === 'groundnut').variance === -1500, 'variance on the closed sheet');
+  const e = await rpcErr('saveMillSheet', { ...input, note: 'changed' });
+  expect(e && /closed/i.test(e), 'a closed sheet was editable: ' + e);
+  await page.evaluate(() => { location.hash = '#/mill'; }); await sleep(2000);
+  expect(await has('Mill daily sheet') && await has('Closed'), 'Mill page does not show the closed sheet');
+  await shot(page, '28-office-mill');
+  await page.evaluate(() => { location.hash = '#/expenses'; }); await sleep(1500);
+  expect(await has('Expenses') && await has('By category'), 'Office Expenses page');
+  await shot(page, '29-office-expenses');
+  const ex = await rpc(page, 'runReport', 'expenses', { from: today, to: today });
+  expect(ex.totals.amount === 10000, 'expense report total ' + ex.totals.amount);
+  const vl = await rpc(page, 'runReport', 'voided-lines', { from: today, to: today });
+  expect(vl.rows.length >= 1 && vl.rows.every((r) => r.by), 'voided lines report');
+  expect(errors.length === 0, 'console errors: ' + errors.join(' | '));
 }, page);
 
 const failed = summary();

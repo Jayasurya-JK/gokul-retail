@@ -21,6 +21,8 @@ import { Reports } from './pages/Reports';
 import { Users } from './pages/Users';
 import { SettingsPage } from './pages/SettingsPage';
 import { ItemEditor } from './pages/ItemEditor';
+import { Expenses } from './pages/Expenses';
+import { MillSheetPage } from './pages/MillSheet';
 
 const fmtAgo = (iso: string) => {
   const d = new Date(iso);
@@ -84,6 +86,8 @@ function Shell() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/expenses" element={<Expenses />} />
+        <Route path="/mill" element={<MillSheetPage />} />
         <Route path="/items/new" element={<ItemEditor />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

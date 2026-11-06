@@ -98,6 +98,10 @@ enum Rule {
     PermPin { perm: &'static str, action: &'static str, pin_arg: usize, pin_key: Option<&'static str> },
     /// Discount above the limit, changed prices and credit above the customer limit.
     Bill,
+    /// An expense over the limit (setting) needs a manager PIN unless the role may open the drawer on its own.
+    ExpenseAdd,
+    /// Removing a scanned line: no PIN, unless the setting asks for one and the role lists it.
+    VoidLine,
 }
 
 fn rule_for(method: &str, args: &[Value]) -> Rule {
@@ -120,6 +124,12 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
             PermPin { perm: "canOpenDrawer", action: "open_drawer", pin_arg: 0, pin_key: Some("managerPin") }
         }
         "saveBill" => Bill,
+        "addExpense" => ExpenseAdd,
+        "editExpense" => PermPin { perm: "canOpenDrawer", action: "edit_expense", pin_arg: 0, pin_key: Some("managerPin") },
+        "voidExpense" => PermPin { perm: "canOpenDrawer", action: "void_expense", pin_arg: 0, pin_key: Some("managerPin") },
+        "logVoidedLine" => VoidLine,
+        "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" => Perm("canManageStock"),
+        "closeMillSheet" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         _ => Open,
     }
 }
@@ -139,6 +149,13 @@ fn describe(method: &str) -> &'static str {
         "cancelBill" => "cancel a bill",
         "createReturn" => "give a refund",
         "addCashEntry" => "take cash out of the drawer",
+        "addExpense" => "record an expense over the limit",
+        "editExpense" => "change an expense",
+        "voidExpense" => "void an expense",
+        "logVoidedLine" => "remove a scanned line",
+        "saveExpenseCategories" => "change expense categories",
+        "getMillSheet" | "saveMillSheet" | "listMillSheets" => "use the mill sheet",
+        "closeMillSheet" => "close the mill sheet (it adjusts stock)",
         _ => "do this",
     }
 }
@@ -156,6 +173,32 @@ fn stamp_identity(actor: &Actor, method: &str, args: &mut Vec<Value>) {
     match method {
         "saveBill" | "holdBill" => set_field(args, 0, "cashier", name),
         "cancelBill" | "createReturn" | "addCashEntry" => set_field(args, 0, "by", name),
+        "addExpense" => {
+            set_field(args, 0, "by", name);
+            if !actor.has("canSeeReports") {
+                // A counter user records today's expenses only.
+                if let Some(o) = args.get_mut(0).and_then(|a| a.as_object_mut()) {
+                    o.remove("day");
+                }
+            }
+        }
+        "listExpenses" if !actor.has("canSeeReports") => {
+            let today = Value::String(crate::db::day_of(Local::now()));
+            let mut q = args.first().and_then(|a| a.as_object()).cloned().unwrap_or_default();
+            q.insert("from".into(), today.clone());
+            q.insert("to".into(), today);
+            if args.is_empty() {
+                args.push(Value::Null);
+            }
+            args[0] = Value::Object(q);
+        }
+        "listBillsOn" if actor.role == "cashier" => {
+            // A cashier sees today's bills only; managers and owners see any date.
+            if let Some(o) = args.get_mut(0).and_then(|a| a.as_object_mut()) {
+                o.insert("date".into(), Value::String(crate::db::day_of(Local::now())));
+                o.insert("allDays".into(), Value::Bool(false));
+            }
+        }
         "recordReprint" => {
             if args.len() < 2 {
                 args.resize(2, Value::Null);
@@ -222,6 +265,36 @@ pub fn authorize(conn: &Connection, actor: &Actor, method: &str, args: &mut Vec<
             }
         }
         Rule::Bill => check_bill(conn, actor, args),
+        Rule::ExpenseAdd => {
+            let amount = args.first().and_then(|a| a["amount"].as_i64()).unwrap_or(0);
+            let limit = crate::expenses::expense_limit(conn);
+            if amount <= limit || (!actor.pin_listed("expense_over_limit") && actor.has("canOpenDrawer")) {
+                return Ok(None);
+            }
+            let what = "record an expense over the limit";
+            let pin = pin_from(args, 0, Some("managerPin"));
+            if pin.is_empty() {
+                return invalid(format!("A manager PIN is needed to {what}"));
+            }
+            match store::find_approver(conn, &pin, Some("canOpenDrawer"), 0)? {
+                Some(m) => Ok(Some(Override { approver: m.name, what: what.to_string() })),
+                None => Err(wrong_approval_pin(conn, actor, what)),
+            }
+        }
+        Rule::VoidLine => {
+            if !crate::expenses::void_line_needs_pin(conn) || !actor.pin_listed("void_line") {
+                return Ok(None);
+            }
+            let what = "remove a scanned line";
+            let pin = pin_from(args, 0, Some("managerPin"));
+            if pin.is_empty() {
+                return invalid(format!("A manager PIN is needed to {what}"));
+            }
+            match store::find_approver(conn, &pin, None, 0)? {
+                Some(m) => Ok(Some(Override { approver: m.name, what: what.to_string() })),
+                None => Err(wrong_approval_pin(conn, actor, what)),
+            }
+        }
     }
 }
 

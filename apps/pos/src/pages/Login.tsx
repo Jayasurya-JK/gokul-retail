@@ -132,8 +132,9 @@ export function Login() {
       <div className="relative flex flex-1 flex-col justify-between overflow-hidden bg-chrome px-14 py-12 text-chrome-ink">
         <div className="pointer-events-none absolute -right-24 -top-24 h-[420px] w-[420px] rounded-full bg-primary/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 left-10 h-[360px] w-[360px] rounded-full bg-accent/10 blur-3xl" />
-        <div className="relative flex items-center gap-3"><Logo size={36} /><span className="text-lg font-semibold tracking-tight">Gokul Retail</span></div>
+        <div className="relative text-xs font-medium uppercase tracking-[0.18em] text-chrome-muted">Gokul Retail</div>
         <div className="relative">
+          <Logo size={112} className="mb-6 drop-shadow-2xl" />
           <div className="text-3xl font-semibold leading-tight tracking-tight text-white" style={{ fontSize: 40, lineHeight: '46px' }}>Gokul Oils</div>
           <div className="mt-2 text-md text-chrome-muted">Wood-pressed oils, ghee and groceries</div>
           <div className="mt-8 grid max-w-md grid-cols-2 gap-x-8 gap-y-3 text-sm">

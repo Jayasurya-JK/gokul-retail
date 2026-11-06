@@ -40,15 +40,16 @@ export function Login() {
 
   return (
     <div className="flex h-full w-full flex-col bg-bg">
-      <header className="flex h-10 shrink-0 items-center gap-2 bg-chrome px-3 text-chrome-ink">
-        <Logo size={20} /><span className="text-sm font-semibold tracking-tight">Gokul Office</span>
+      <header className="flex h-12 shrink-0 items-center gap-2.5 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">
+        <Logo size={30} badge="O" /><span className="text-[13px] font-semibold tracking-tight text-white">Gokul Office</span>
       </header>
       <div className="flex min-h-0 flex-1">
         <div className="relative flex flex-1 flex-col justify-between overflow-hidden bg-chrome px-14 py-12 text-chrome-ink">
           <div className="pointer-events-none absolute -right-24 -top-24 h-[420px] w-[420px] rounded-full bg-primary/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-32 left-10 h-[360px] w-[360px] rounded-full bg-accent/10 blur-3xl" />
-          <div className="relative flex items-center gap-3"><Logo size={36} /><span className="text-lg font-semibold">Gokul Retail</span></div>
+          <div className="relative text-xs font-medium uppercase tracking-[0.18em] text-chrome-muted">Gokul Retail</div>
           <div className="relative">
+            <Logo size={112} className="mb-6 drop-shadow-2xl" />
             <div className="font-semibold tracking-tight text-white" style={{ fontSize: 40, lineHeight: '46px' }}>Gokul Office</div>
             <div className="mt-2 text-md text-chrome-muted">Items, stock, production, purchases and reports.</div>
           </div>

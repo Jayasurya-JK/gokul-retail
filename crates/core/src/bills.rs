@@ -143,6 +143,11 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
         )?;
         let mut upd = tx.prepare_cached("UPDATE items SET stock = stock - ?1 WHERE id = ?2")?;
         for l in &lines {
+            // Services (aravai job work) have no stock to move.
+            let service: i64 = tx.query_row("SELECT service FROM items WHERE id=?1", [&l.item_id], |r| r.get(0)).unwrap_or(0);
+            if service == 1 {
+                continue;
+            }
             mv.execute(params![at, l.item_id, -l.qty, bill_id.to_string(), number, cashier])?;
             upd.execute(params![l.qty, l.item_id])?;
         }

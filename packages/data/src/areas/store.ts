@@ -1,3 +1,5 @@
+import type { MillSettings } from './crm';
+import type { Expense, MockVoidedLine } from './expenses';
 import type { Bill, Category, Customer, HeldBill, Item, ProductionBatch, Purchase, Settings, Supplier, User } from '../types';
 
 /** Shared in-memory state every area mock reads and writes. Mutate in place. */
@@ -12,4 +14,10 @@ export interface MockStore {
   settings: Settings;
   users: User[];
   categories: Category[];
+  /** Set by the expenses mock; the reports mock reads them */
+  expenses?: Expense[];
+  voidedLines?: MockVoidedLine[];
+  /** Over this an expense needs a manager PIN (paise); kept in sync with Settings */
+  expenseLimit?: number;
+  mill?: MillSettings;
 }

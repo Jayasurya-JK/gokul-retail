@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { formatPaise, formatQty, type BillLine, type BillTotals, type Payment, type Settings } from '@gokul/data';
 import { cn } from '../cn';
+import { Logo } from './Logo';
 
 export interface ReceiptData {
   /** "TAX INVOICE", "CREDIT NOTE" */
@@ -72,6 +73,7 @@ export function ReceiptPreview({ data, settings, className }: { data: ReceiptDat
         </div>
       )}
       <div className="text-center">
+        <Logo size={44} className="mx-auto mb-1 grayscale contrast-125" />
         <div className="text-[15px] font-bold uppercase tracking-wide">{settings.shopName}</div>
         <div>{settings.address}</div>
         <div>Ph: {settings.phone}</div>

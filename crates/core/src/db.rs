@@ -12,6 +12,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("../migrations/001_init.sql")),
     (2, include_str!("../migrations/002_office.sql")),
     (3, include_str!("../migrations/003_security.sql")),
+    (4, include_str!("../migrations/004_money_mill.sql")),
 ];
 
 pub struct Db {
@@ -207,6 +208,29 @@ impl Drop for ActorGuard {
     fn drop(&mut self) {
         ACTOR.with(|a| *a.borrow_mut() = self.0.take());
     }
+}
+
+thread_local! {
+    static APPROVER: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// While alive, `approver_or_empty()` names the manager whose PIN approved this call (set by `dispatch_session`).
+pub struct ApproverGuard(Option<String>);
+
+impl ApproverGuard {
+    pub fn set(name: Option<&str>) -> ApproverGuard {
+        ApproverGuard(APPROVER.with(|a| std::mem::replace(&mut *a.borrow_mut(), name.map(|n| n.to_string()))))
+    }
+}
+
+impl Drop for ApproverGuard {
+    fn drop(&mut self) {
+        APPROVER.with(|a| *a.borrow_mut() = self.0.take());
+    }
+}
+
+pub fn approver_or_empty() -> String {
+    APPROVER.with(|a| a.borrow().clone()).unwrap_or_default()
 }
 
 /// The signed-in user for this call, or `default` when there is none (tests, system jobs).

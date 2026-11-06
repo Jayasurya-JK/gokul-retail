@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, DatabaseBackup, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
-import type { BackupSettings, BillFormatSettings, PrinterSettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
+import type { BackupSettings, BillFormatSettings, ExpenseSettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
 import { BillFormatPreview } from './BillFormatPreview';
@@ -274,6 +274,72 @@ export function BackupTab({ v, set, onChanged }: { v: BackupSettings; set: (n: B
       >
         <p className="text-sm text-muted">Bills and stock saved after this backup will be replaced by the backup. A copy of today&apos;s data is kept first, so you can undo this.</p>
       </Dialog>
+    </div>
+  );
+}
+
+/* ------------------------------ Security ------------------------------ */
+export function SecurityTab({ v, set }: { v: SecuritySettings; set: (n: SecuritySettings) => void }) {
+  const up = <K extends keyof SecuritySettings>(k: K, val: SecuritySettings[K]) => set({ ...v, [k]: val });
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <Card title="PIN lock-out">
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Lock after wrong PINs" value={String(v.lockoutAttempts)} decimals={0} onValueChange={(x) => up('lockoutAttempts', Number(x || 0))} hint="Between 3 and 20. Wrong manager PINs count too." />
+          <NumberInput label="Locked for (seconds)" value={String(v.lockoutSeconds)} decimals={0} onValueChange={(x) => up('lockoutSeconds', Number(x || 0))} hint="Between 10 and 3600 (one hour)." />
+        </div>
+        <p className="mt-3 text-xs text-subtle">The same rule applies on the billing counter and in Office. A locked user cannot sign in even with the right PIN until the time is over.</p>
+      </Card>
+      <Card title="Removing a scanned item">
+        <Row title="Ask for a manager PIN" hint="Every removal is logged either way (see Reports, Voided lines). Turn this on to also ask for approval."><Switch checked={v.voidLineNeedsPin} onCheckedChange={(x) => up('voidLineNeedsPin', x)} /></Row>
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------ Expenses ------------------------------ */
+export function ExpensesTab({ v, set }: { v: ExpenseSettings; set: (n: ExpenseSettings) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <Card title="Approval limit">
+        <NumberInput label="Manager PIN needed above" value={String(v.limit / 100)} prefix="₹" decimals={0} onValueChange={(x) => set({ ...v, limit: Math.round(Number(x || 0) * 100) })} hint="A cashier recording a larger expense must have a manager or owner enter their PIN. 0 means every expense needs approval." />
+      </Card>
+      <Card title="Categories"><p className="text-sm text-muted">The list of categories is edited on the Expenses page (Categories button).</p></Card>
+    </div>
+  );
+}
+
+/* ------------------------------ Mill ------------------------------ */
+export function MillTab({ v, set }: { v: MillSettings; set: (n: MillSettings) => void }) {
+  const up = <K extends keyof MillSettings>(k: K, val: MillSettings[K]) => set({ ...v, [k]: val });
+  const [draft, setDraft] = useState('');
+  const add = () => { const n = draft.trim(); if (n && !v.operators.includes(n)) { up('operators', [...v.operators, n]); setDraft(''); } };
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <Card title="Operators on the mill sheet">
+        <div className="flex flex-col gap-1.5">
+          {v.operators.map((o, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input value={o} onChange={(e) => up('operators', v.operators.map((x, k) => (k === i ? e.target.value : x)))} className="flex-1" />
+              <Button size="sm" variant="ghost" disabled={v.operators.length <= 1} icon={<Trash2 size={13} />} onClick={() => up('operators', v.operators.filter((_, k) => k !== i))} aria-label="Remove operator" />
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add an operator" className="flex-1" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
+            <Button size="sm" onClick={add}>Add</Button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-subtle">Each operator gets a grid on the daily sheet. The name is kept on every pressing batch.</p>
+      </Card>
+      <Card title="Aravai (customer job work)">
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Cake taken by customer, per kg" value={String(v.rateCakeTaken / 100)} prefix="₹" decimals={2} onValueChange={(x) => up('rateCakeTaken', Math.round(Number(x || 0) * 100))} hint="GST included, on the kg of seed." />
+          <NumberInput label="Cake kept by the shop, per kg" value={String(v.rateCakeKept / 100)} prefix="₹" decimals={2} onValueChange={(x) => up('rateCakeKept', Math.round(Number(x || 0) * 100))} hint="Lower, as the shop keeps the punnaku." />
+          <Input label="Service code (SAC) (verify)" value={v.serviceSac} className="num" onChange={(e) => up('serviceSac', e.target.value.replace(/\D/g, '').slice(0, 8))} hint="Printed on the aravai bill. Confirm with your accountant." />
+          <Select label="GST on aravai (verify)" value={String(v.serviceGstRate)} onChange={(e) => up('serviceGstRate', Number(e.target.value) as MillSettings['serviceGstRate'])} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: `${r}%` }))} />
+        </div>
+        <p className="mt-3 text-xs text-subtle">The charge goes on the customer&apos;s account as a bill with the service item &quot;Aravai Job Work&quot;. It can also be sold at the counter as that item.</p>
+      </Card>
     </div>
   );
 }

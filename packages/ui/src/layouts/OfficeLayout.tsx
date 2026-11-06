@@ -4,16 +4,7 @@ import { cn } from '../cn';
 import { Kbd } from '../components/Display';
 import { Dialog, Tooltip } from '../components/Overlay';
 import { IconButton } from '../components/Button';
-
-export function Logo({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <rect width="24" height="24" rx="6" fill="#0F766E" />
-      <path d="M12 4.5c2.6 3.2 4.6 5.6 4.6 8.2A4.6 4.6 0 0 1 12 17.3a4.6 4.6 0 0 1-4.6-4.6c0-2.6 2-5 4.6-8.2Z" fill="#fff" fillOpacity=".95" />
-      <path d="M12 9c1.3 1.7 2.2 2.9 2.2 4.1a2.2 2.2 0 0 1-4.4 0C9.8 11.9 10.7 10.7 12 9Z" fill="#D97706" />
-    </svg>
-  );
-}
+import { Logo } from '../components/Logo';
 
 export interface NavItem { path: string; label: string; icon: ReactNode; keywords?: string }
 export interface NavGroup { title: string; items: NavItem[] }
@@ -51,15 +42,18 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg text-ink">
-      {/* Title bar */}
-      <header className="flex h-10 shrink-0 items-center gap-3 bg-chrome px-3 text-chrome-ink">
-        <div className="flex w-[216px] items-center gap-2">
-          <Logo />
-          <span className="text-sm font-semibold tracking-tight">Gokul Office</span>
+      {/* Top bar */}
+      <header className="flex h-12 shrink-0 items-center gap-3 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">
+        <div className="flex w-[216px] items-center gap-2.5">
+          <Logo size={30} badge="O" />
+          <div className="leading-tight">
+            <div className="text-[13px] font-semibold tracking-tight text-white">Gokul Office</div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-chrome-muted">Back office</div>
+          </div>
         </div>
         <button
           onClick={() => setPaletteOpen(true)}
-          className="mx-auto flex h-7 w-full max-w-[460px] items-center gap-2 rounded-md border border-white/10 bg-white/[0.07] px-2.5 text-xs text-chrome-muted transition-colors hover:bg-white/[0.12]"
+          className="mx-auto flex h-8 w-full max-w-[460px] items-center gap-2 rounded-md border border-white/10 bg-white/[0.07] px-2.5 text-xs text-chrome-muted transition-colors hover:bg-white/[0.12]"
         >
           <Search size={14} />
           <span className="flex-1 text-left">Search screens and actions</span>
@@ -67,14 +61,17 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
         </button>
         <div className="flex items-center gap-1">
           <Tooltip label={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
-            <button onClick={toggleTheme} className="flex h-7 w-7 items-center justify-center rounded-md text-chrome-muted hover:bg-white/10 hover:text-white" aria-label="Toggle theme">
+            <button onClick={toggleTheme} className="flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted hover:bg-white/10 hover:text-white" aria-label="Toggle theme">
               {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </button>
           </Tooltip>
-          <button onClick={onLogout} className="ml-1 flex h-7 items-center gap-2 rounded-md pl-1 pr-2 text-xs hover:bg-white/10">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-fg">{user.initials}</span>
-            <span className="font-medium">{user.name}</span>
-            <span className="text-chrome-muted">{user.role}</span>
+          <span className="mx-1 h-6 w-px bg-white/10" />
+          <button onClick={onLogout} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2.5 hover:bg-white/10" title="Sign out">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-yellow text-[11px] font-bold text-forest-950">{user.initials}</span>
+            <span className="text-left leading-tight">
+              <span className="block text-xs font-semibold text-white">{user.name}</span>
+              <span className="block text-[10px] capitalize text-chrome-muted">{user.role}</span>
+            </span>
           </button>
         </div>
       </header>

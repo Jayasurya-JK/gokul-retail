@@ -6,6 +6,8 @@ import { createCatalogMock } from './areas/catalog';
 import { createPurchasingMock } from './areas/purchasing';
 import { createCrmMock } from './areas/crm';
 import { createReportsMock } from './areas/reports';
+import { createExpensesMock } from './areas/expenses';
+import { createMillMock } from './areas/mill';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
 import { computeTotals } from './money';
 import { fuzzyFilter } from './fuzzy';
@@ -164,6 +166,8 @@ export function createMockApi(): Api {
     ...createCatalogMock(store),
     ...createPurchasingMock(store),
     ...createCrmMock(store),
+    ...createExpensesMock(store),
+    ...createMillMock(store),
     ...createReportsMock(store),
   };
   return api;

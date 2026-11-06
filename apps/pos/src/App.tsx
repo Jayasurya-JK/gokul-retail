@@ -4,9 +4,10 @@ import { useSession } from './store';
 import { Login } from './pages/Login';
 import { Billing } from './pages/Billing';
 import { DayOpen } from './pages/DayOpen';
-import { History } from './pages/History';
+import { Sales } from './pages/Sales';
+import { Customers } from './pages/Customers';
 import { Returns } from './pages/Returns';
-import { CashInOut } from './pages/CashInOut';
+import { Expenses } from './pages/Expenses';
 import { DayClose } from './pages/DayClose';
 import { Lock } from './pages/Lock';
 
@@ -25,9 +26,11 @@ export function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/billing" element={<Guard><Billing /></Guard>} />
             <Route path="/day-open" element={<Guard><DayOpen /></Guard>} />
-            <Route path="/history" element={<Guard><History /></Guard>} />
+            <Route path="/sales" element={<Guard><Sales /></Guard>} />
+            <Route path="/customers" element={<Guard><Customers /></Guard>} />
+            <Route path="/history" element={<Navigate to="/sales" replace />} />
             <Route path="/returns" element={<Guard><Returns /></Guard>} />
-            <Route path="/cash" element={<Guard><CashInOut /></Guard>} />
+            <Route path="/cash" element={<Guard><Expenses /></Guard>} />
             <Route path="/day-close" element={<Guard><DayClose /></Guard>} />
             <Route path="/lock" element={<Guard><Lock /></Guard>} />
             <Route path="*" element={<Navigate to="/billing" replace />} />

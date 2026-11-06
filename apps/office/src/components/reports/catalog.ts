@@ -41,6 +41,10 @@ export const reportGroups: ReportGroup[] = [
   { name: 'Cash', reports: [
     { id: 'cash-book', name: 'Day-wise cash book', hint: 'Opening, receipts, payments, closing', filters: [] },
     { id: 'day-close', name: 'Day close history', hint: 'Past day-end closings and differences', filters: [], soon: true },
+    { id: 'expenses', name: 'Expenses', hint: 'Every expense by category, who paid and from where', filters: ['mode'] },
+  ] },
+  { name: 'Control', reports: [
+    { id: 'voided-lines', name: 'Voided lines', hint: 'Items scanned and then removed before the bill was saved', filters: [] },
   ] },
   { name: 'Production', reports: [
     { id: 'yield', name: 'Yield report', hint: 'Oil and cake yield for each pressing batch', filters: [] },

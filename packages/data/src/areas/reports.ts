@@ -1,4 +1,5 @@
 import type { MockStore } from './store';
+import { mockExpensesReport, mockVoidedLinesReport } from './expenses';
 import type { Bill, BillLine, Item, Paise, PayMode, UnitCode } from '../types';
 
 // Area: Office reports: sales, item-wise, GST (GSTR-1, 3B, HSN), stock, profit, day-wise cash.
@@ -11,7 +12,8 @@ export type ReportId =
   | 'stock-summary' | 'stock-valuation' | 'stock-movement' | 'low-dead'
   | 'item-margin' | 'daily-profit'
   | 'cash-book' | 'day-close'
-  | 'yield';
+  | 'yield'
+  | 'expenses' | 'voided-lines';
 
 export interface ReportParams {
   /** inclusive, YYYY-MM-DD (local) */
@@ -768,6 +770,8 @@ export function createReportsMock(store: MockStore): ReportsApi {
         case 'daily-profit': return dailyProfit(c);
         case 'cash-book': return cashBook(c);
         case 'yield': return yieldReport(c);
+        case 'expenses': return mockExpensesReport(store, params);
+        case 'voided-lines': return mockVoidedLinesReport(store, params);
         default:
           return { id, title: SOON[id] ?? id, note: rangeNote(params), kpis: [], columns: [], rows: [] };
       }

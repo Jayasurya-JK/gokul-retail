@@ -1,0 +1,14 @@
+[package]
+name = "gokul-import"
+version = "0.1.0"
+edition = "2021"
+description = "One-off loader: the owner's real stock (data/import/clean/items_stock.csv) into a fresh Gokul database"
+
+[[bin]]
+name = "gokul-import"
+path = "src/main.rs"
+
+[dependencies]
+gokul-core = { path = "../core" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

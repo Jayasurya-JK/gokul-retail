@@ -60,7 +60,7 @@ fn exercise(c: &mut Connection, items: &[Item], label: &str) {
     println!("\n== {label} ==");
     let bills: i64 = c.query_row("SELECT COUNT(*) FROM bills", [], |r| r.get(0)).unwrap();
     println!("  bills in database: {bills}");
-    let codes: Vec<(String, String)> = items.iter().map(|i| (i.barcode.clone(), i.code.clone())).collect();
+    let codes: Vec<(String, String)> = items.iter().filter(|i| !i.barcode.is_empty()).map(|i| (i.barcode.clone(), i.code.clone())).collect();
 
     // warm the page cache like a running app would be
     for (b, _) in codes.iter().take(20) {

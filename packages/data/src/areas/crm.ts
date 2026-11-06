@@ -39,6 +39,8 @@ export interface CustomerRow extends Customer {
   gstin?: string;
   email?: string;
   address?: string;
+  /** Free text kept with the customer (shown at the counter) */
+  notes?: string;
   /** Customer since, ISO date */
   since: string;
   totalSpend: Paise;
@@ -65,6 +67,7 @@ export interface CustomerInput {
   gstin?: string;
   email?: string;
   address?: string;
+  notes?: string;
   creditLimit: Paise;
 }
 
@@ -258,12 +261,42 @@ export interface BackupSettings {
   history: BackupEntry[];
 }
 
+export interface SecuritySettings {
+  /** Wrong PINs before a user is locked out (3 to 20) */
+  lockoutAttempts: number;
+  /** How long the lock lasts, in seconds (10 to 3600) */
+  lockoutSeconds: number;
+  /** A cashier needs a manager PIN to remove a scanned line (off by default; removals are always logged) */
+  voidLineNeedsPin: boolean;
+}
+
+export interface ExpenseSettings {
+  /** An expense above this needs a manager PIN (paise) */
+  limit: Paise;
+}
+
+export interface MillSettings {
+  /** Operators listed on the mill daily sheet, one grid each */
+  operators: string[];
+  /** Aravai charge per kg of seed when the customer takes the cake (paise, GST included) */
+  rateCakeTaken: Paise;
+  /** Lower charge per kg when the shop keeps the cake (paise, GST included) */
+  rateCakeKept: Paise;
+  /** Service accounting code printed on the aravai bill (verify with the accountant) */
+  serviceSac: string;
+  /** GST rate on the aravai charge: 0, 5, 12 or 18 (verify with the accountant) */
+  serviceGstRate: 0 | 5 | 12 | 18;
+}
+
 export interface SettingsBundle {
   shop: ShopSettings;
   tax: TaxSettings;
   billFormat: BillFormatSettings;
   printers: PrinterSettings;
   backup: BackupSettings;
+  security: SecuritySettings;
+  expenses: ExpenseSettings;
+  mill: MillSettings;
 }
 
 export interface CrmApi {
@@ -316,7 +349,7 @@ const BUSINESSES = [
 ];
 
 interface Extra {
-  type: CustomerType; business?: string; gstin?: string; email?: string; address?: string; since: string;
+  type: CustomerType; business?: string; gstin?: string; email?: string; address?: string; notes?: string; since: string;
 }
 
 interface Invoice { id: string; date: string; ref: string; amount: Paise; open: Paise; note: string }
@@ -376,6 +409,9 @@ function seedSettings(store: MockStore): SettingsBundle {
         { name: 'Epson TM-T82 (USB002)', kind: 'thermal', ready: false },
       ],
     },
+    security: { lockoutAttempts: 5, lockoutSeconds: 60, voidLineNeedsPin: false },
+    expenses: { limit: 100000 },
+    mill: { operators: ['Operator 1', 'Operator 2'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 },
     backup: {
       schedule: 'daily', time: '02:00', location: 'D:\\GokulBackup', keep: 30, copyToUsb: false,
       history: Array.from({ length: 7 }, (_, i) => ({
@@ -559,7 +595,7 @@ export function createCrmMock(store: MockStore): CrmApi {
       extras.set(c.id, {
         type: input.type, business: input.type === 'b2b' ? input.business?.trim() : undefined,
         gstin: input.type === 'b2b' ? input.gstin?.trim().toUpperCase() : undefined,
-        email: input.email?.trim() || undefined, address: input.address?.trim() || undefined,
+        email: input.email?.trim() || undefined, address: input.address?.trim() || undefined, notes: input.notes?.trim() || undefined,
         since: extras.get(c.id)?.since ?? new Date().toISOString(),
       });
       return delay(rowFor(c));
@@ -659,6 +695,8 @@ export function createCrmMock(store: MockStore): CrmApi {
       store.settings.receiptFooter = bundle.billFormat.footer;
       store.settings.printer = bundle.printers.billPrinter;
       store.settings.roundToRupee = bundle.tax.roundToRupee;
+      store.expenseLimit = bundle.expenses.limit;
+      store.mill = bundle.mill;
       return delay(clone(bundle));
     },
     testPrint: (kind, printer) => {

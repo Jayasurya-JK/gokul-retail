@@ -214,6 +214,7 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         [s.id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
+    let (expenses_cash, expenses_count) = if s.id > 0 { crate::expenses::cash_expenses_of_shift(conn, s.id)? } else { (0, 0) };
     Ok(ShiftSummary {
         at: iso(Local::now()),
         counter: s.counter.clone(),
@@ -234,7 +235,9 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         cgst: slabs.iter().map(|x| x.cgst).sum(),
         sgst: slabs.iter().map(|x| x.sgst).sum(),
         slabs,
-        expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds,
+        expenses_cash,
+        expenses_count,
+        expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds - expenses_cash,
         by_mode,
     })
 }

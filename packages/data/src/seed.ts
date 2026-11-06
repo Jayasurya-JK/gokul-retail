@@ -48,7 +48,7 @@ export const categories: Category[] = [
 ];
 
 export const users: User[] = [
-  { id: 'u1', name: 'Suresh Kumar', role: 'owner', initials: 'SK', pin: '1111', color: '#0F766E', lastLogin: 'Today, 08:45' },
+  { id: 'u1', name: 'Suresh Kumar', role: 'owner', initials: 'SK', pin: '1111', color: '#0E4330', lastLogin: 'Today, 08:45' },
   { id: 'u2', name: 'Lakshmi Rajan', role: 'manager', initials: 'LR', pin: '2222', color: '#7C3AED', lastLogin: 'Yesterday, 20:10' },
   { id: 'u3', name: 'Karthik Murugan', role: 'cashier', initials: 'KM', pin: '1234', color: '#2563EB', lastLogin: 'Today, 09:02' },
   { id: 'u4', name: 'Divya Selvam', role: 'cashier', initials: 'DS', pin: '4321', color: '#DB2777', lastLogin: 'Yesterday, 14:30' },

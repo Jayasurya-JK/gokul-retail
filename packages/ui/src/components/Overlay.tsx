@@ -58,7 +58,7 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
           onCloseAutoFocus={onCloseAutoFocus}
           aria-describedby={undefined}
           className={cn(
-            'g-dialog fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-48px)] max-w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2',
+            'g-dialog fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-48px)] max-w-[calc(100vw-48px)]',
             'flex flex-col overflow-hidden rounded-card bg-surface shadow-overlay', dialogSizes[size],
           )}
         >
@@ -136,9 +136,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed bottom-12 right-4 z-[120] flex w-[340px] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-12 left-4 z-[120] flex w-[340px] flex-col gap-2">
         {items.map((t) => (
-          <div key={t.id} className="g-dialog pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-surface px-3.5 py-3 shadow-pop">
+          <div key={t.id} className="g-toast pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-surface px-3.5 py-3 shadow-pop">
             <span className="mt-0.5">{toastIcon[t.tone]}</span>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-ink">{t.title}</div>

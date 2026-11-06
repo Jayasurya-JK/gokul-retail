@@ -1,5 +1,10 @@
 /* Gokul design tokens. Colours are RGB channels so Tailwind can apply alpha. */
 :root {
+  /* Brand: forest green scale taken from the Gokul Oils logo (800 is the logo green), plus oil-drop yellow and amber. */
+  --forest-50: 238 247 242; --forest-100: 214 235 223; --forest-200: 176 214 193; --forest-300: 130 186 157;
+  --forest-400: 79 153 118; --forest-500: 46 122 90; --forest-600: 30 98 71; --forest-700: 20 82 56;
+  --forest-800: 14 67 48; --forest-900: 10 52 38; --forest-950: 5 32 26;
+  --brand-yellow: 255 237 0;
   --bg: 242 244 247;
   --surface: 255 255 255;
   --surface-2: 248 249 251;
@@ -9,11 +14,12 @@
   --ink: 16 24 40;
   --muted: 71 84 103;
   --subtle: 120 131 150;
-  --primary: 15 118 110;
-  --primary-hover: 17 94 89;
-  --primary-soft: 224 242 240;
+  --primary: 14 67 48;
+  --primary-hover: 20 82 56;
+  --primary-soft: 224 240 231;
   --primary-fg: 255 255 255;
-  --accent: 217 119 6;
+  --accent: 245 168 0;
+  --accent-soft: 255 244 204;
   --success: 22 163 74;
   --success-soft: 220 252 231;
   --warning: 180 83 9;
@@ -22,9 +28,9 @@
   --danger-soft: 254 226 226;
   --info: 37 99 235;
   --info-soft: 219 234 254;
-  --chrome: 17 24 39;
-  --chrome-ink: 226 232 240;
-  --chrome-muted: 148 163 184;
+  --chrome: 10 52 38;
+  --chrome-ink: 232 244 237;
+  --chrome-muted: 148 190 170;
   --overlay: 15 23 42;
   color-scheme: light;
 }
@@ -38,11 +44,12 @@
   --ink: 236 240 244;
   --muted: 162 174 189;
   --subtle: 113 127 145;
-  --primary: 45 184 170;
-  --primary-hover: 74 205 191;
-  --primary-soft: 16 54 53;
-  --primary-fg: 6 28 27;
-  --accent: 245 158 11;
+  --primary: 86 178 134;
+  --primary-hover: 112 196 154;
+  --primary-soft: 17 52 40;
+  --primary-fg: 5 32 26;
+  --accent: 245 168 0;
+  --accent-soft: 58 44 8;
   --success: 52 211 120;
   --success-soft: 16 56 36;
   --warning: 251 191 36;
@@ -51,9 +58,9 @@
   --danger-soft: 66 24 24;
   --info: 96 165 250;
   --info-soft: 23 40 74;
-  --chrome: 6 9 13;
-  --chrome-ink: 226 232 240;
-  --chrome-muted: 130 145 165;
+  --chrome: 6 30 22;
+  --chrome-ink: 232 244 237;
+  --chrome-muted: 128 168 148;
   --overlay: 0 0 0;
   color-scheme: dark;
 }

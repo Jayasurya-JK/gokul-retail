@@ -1,18 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, CalendarDays, ChevronLeft, ChevronRight, CornerUpLeft, Printer, Receipt, Search } from 'lucide-react';
-import { type Bill, type BillDetail, type CreditNote } from '@gokul/data';
+import { Ban, ChevronLeft, ChevronRight, CornerUpLeft, Lock, Printer, Receipt, Search } from 'lucide-react';
+import { type Bill, type BillDetail, type CreditNote, type PayMode } from '@gokul/data';
 import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
+import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 import { BillDetailPane } from '../components/billops/BillDetailPane';
 import { CancelBillDialog } from '../components/billops/CancelBillDialog';
 import { CreditNoteDialog } from '../components/billops/CreditNoteDialog';
-import { billReceipt, dayKey, dayLabel, payLabel, shiftDay, timeOf } from '../components/billops/helpers';
+import { billReceipt, dayKey, dayLabel, modeLabel, payLabel, shiftDay, timeOf } from '../components/billops/helpers';
 
 type Dialog = null | 'cancel' | 'note';
 
-export function History() {
+const SALES_KEYS: KeyRows = [
+  ['Move between bills', ['Up', 'Down']],
+  ['Jump a page', ['PageUp', 'PageDown']],
+  ['Reprint the selected bill', ['Enter', 'Ctrl+P']],
+  ['Back to today', ['F2']],
+  ['Cancel the bill (manager PIN)', ['F6']],
+  ['Return items from the bill', ['F10']],
+  ['Day before / after', ['Ctrl+Left', 'Ctrl+Right']],
+  ['All days (manager)', ['Ctrl+Enter']],
+  ['Clear search, or back to billing', ['Esc']],
+];
+
+export function Sales() {
+  useScreenKeys('Sales', SALES_KEYS);
   const nav = useNavigate();
   const toast = useToast();
   const { user, settings } = useSession();
@@ -26,8 +40,11 @@ export function History() {
   const [version, setVersion] = useState(0);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [note, setNote] = useState<CreditNote | null>(null);
+  const [notes, setNotes] = useState<CreditNote[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const today = dayKey(new Date());
+  /** Cashiers see today only; the owner and managers can open any day. Totals are visible to everyone. */
+  const canBrowse = user?.role !== 'cashier';
 
   /* list */
   useEffect(() => {
@@ -40,6 +57,8 @@ export function History() {
     return () => { live = false; };
   }, [date, query, allDays, version]);
 
+  useEffect(() => { void api.listCreditNotes(500).then(setNotes); }, [version]);
+
   /* detail */
   useEffect(() => {
     if (!selId) { setDetail(null); return; }
@@ -50,8 +69,15 @@ export function History() {
 
   const summary = useMemo(() => {
     const live = bills.filter((b) => b.status !== 'cancelled');
-    return { count: bills.length, cancelled: bills.length - live.length, total: live.reduce((s, b) => s + b.totals.grand, 0) };
-  }, [bills]);
+    const total = live.reduce((s, b) => s + b.totals.grand, 0);
+    const byMode: Partial<Record<PayMode, number>> = {};
+    live.forEach((b) => b.payments.forEach((p) => { byMode[p.mode] = (byMode[p.mode] ?? 0) + p.amount; }));
+    const ret = notes.filter((n) => allDays || dayKey(new Date(n.at)) === date);
+    return {
+      count: bills.length, live: live.length, cancelled: bills.length - live.length, total, byMode,
+      avg: live.length ? Math.round(total / live.length) : 0, returns: ret.length, returned: ret.reduce((s, n) => s + n.totals.grand, 0),
+    };
+  }, [bills, notes, date, allDays]);
 
   const refocus = useCallback(() => requestAnimationFrame(() => searchRef.current?.focus()), []);
   useEffect(() => { refocus(); }, [refocus]);
@@ -98,7 +124,11 @@ export function History() {
     });
   }, [bills]);
 
-  const changeDay = (by: number) => { setAllDays(false); setDate((d) => { const n = shiftDay(d, by); return n > today ? d : n; }); };
+  const changeDay = (by: number) => {
+    if (!canBrowse) return;
+    setAllDays(false);
+    setDate((d) => { const n = shiftDay(d, by); return n > today ? d : n; });
+  };
 
   /* keys (latest closure via ref) */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
@@ -108,7 +138,7 @@ export function History() {
     if (e.ctrlKey && k === 'p') { e.preventDefault(); void reprint(); return; }
     if (e.ctrlKey && k === 'arrowleft') { e.preventDefault(); changeDay(-1); return; }
     if (e.ctrlKey && k === 'arrowright') { e.preventDefault(); changeDay(1); return; }
-    if (e.ctrlKey && k === 'enter') { e.preventDefault(); setAllDays((v) => !v); return; }
+    if (e.ctrlKey && k === 'enter') { e.preventDefault(); if (canBrowse) setAllDays((v) => !v); return; }
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); move(1); break;
       case 'ArrowUp': e.preventDefault(); move(-1); break;
@@ -133,9 +163,11 @@ export function History() {
   const keys: FKey[] = [
     { key: 'Esc', label: query ? 'Clear search' : 'Back to billing', onClick: () => (query ? setQuery('') : nav('/billing')) },
     { key: 'F2', label: 'Today', onClick: () => { setAllDays(false); setDate(today); setQuery(''); } },
-    { key: 'Ctrl+Left', label: 'Day before', onClick: () => changeDay(-1) },
-    { key: 'Ctrl+Right', label: 'Day after', onClick: () => changeDay(1) },
-    { key: 'Ctrl+Enter', label: allDays ? 'This day only' : 'All days', onClick: () => setAllDays((v) => !v) },
+    ...(canBrowse ? [
+      { key: 'Ctrl+Left', label: 'Day before', onClick: () => changeDay(-1) },
+      { key: 'Ctrl+Right', label: 'Day after', onClick: () => changeDay(1) },
+      { key: 'Ctrl+Enter', label: allDays ? 'This day only' : 'All days', onClick: () => setAllDays((v) => !v) },
+    ] : []),
     { key: 'Enter', label: 'Reprint', onClick: () => void reprint() },
     { key: 'F6', label: 'Cancel bill', tone: 'danger', onClick: askCancel },
     { key: 'F10', label: 'Return items', tone: 'primary', onClick: startReturn },
@@ -146,32 +178,37 @@ export function History() {
 
   return (
     <PosLayout topBar={<TopBar />} keys={keys}>
+      <TotalsStrip s={summary} scope={scope} />
       <div className="flex min-h-0 flex-1">
         {/* ---------- left: list ---------- */}
         <section className="flex w-[clamp(360px,28vw,500px)] shrink-0 flex-col border-r border-line bg-surface">
           <div className="space-y-2.5 border-b border-line p-3">
-            <Input icon={<Search size={16} />}
-              ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} size="lg" autoComplete="off" spellCheck={false}
+            <Input
+              icon={<Search size={16} />} ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} size="lg" autoComplete="off" spellCheck={false}
               placeholder="Bill no, customer or amount" aria-label="Search bills"
             />
             <div className="flex items-center gap-1.5">
-              <IconButton label="Day before" onClick={() => changeDay(-1)} tabIndex={-1}><ChevronLeft size={16} /></IconButton>
-              <div className="flex h-8 flex-1 items-center justify-center gap-2 rounded-control bg-surface-3 text-sm font-semibold text-ink">
-                <CalendarDays size={15} className="text-muted" /> {scope}
-              </div>
-              <IconButton label="Day after" onClick={() => changeDay(1)} disabled={date >= today || allDays} tabIndex={-1}><ChevronRight size={16} /></IconButton>
+              <IconButton label="Day before" onClick={() => changeDay(-1)} disabled={!canBrowse} tabIndex={-1}><ChevronLeft size={16} /></IconButton>
+              <input
+                type="date" value={date} max={today} disabled={!canBrowse} aria-label="Pick a date" tabIndex={-1}
+                onChange={(e) => { if (e.target.value && e.target.value <= today) { setAllDays(false); setDate(e.target.value); refocus(); } }}
+                className="h-8 min-w-0 flex-1 rounded-control border border-line-strong bg-surface px-2 text-center text-sm font-semibold text-ink focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:bg-surface-3"
+              />
+              <IconButton label="Day after" onClick={() => changeDay(1)} disabled={!canBrowse || date >= today || allDays} tabIndex={-1}><ChevronRight size={16} /></IconButton>
             </div>
           </div>
           <div className="flex items-center justify-between border-b border-line bg-surface-2 px-4 py-2 text-xs">
-            <span className="text-muted"><b className="num text-ink">{summary.count}</b> {summary.count === 1 ? 'bill' : 'bills'}{summary.cancelled > 0 && <> ({summary.cancelled} cancelled)</>}</span>
-            <span className="text-muted">Sales <Money paise={summary.total} decimals={false} className="font-semibold text-ink" /></span>
+            <span className="font-semibold text-ink">{scope}</span>
+            {canBrowse
+              ? <span className="text-muted"><b className="num text-ink">{summary.count}</b> {summary.count === 1 ? 'bill' : 'bills'}</span>
+              : <span className="flex items-center gap-1 text-subtle"><Lock size={11} /> Today only</span>}
           </div>
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {loaded && bills.length === 0 && (
               <li className="px-4 py-10">
                 <EmptyState
                   icon={<Search size={20} />} title={query ? `No bill matches "${query}"` : 'No bills on this day'}
-                  hint={query && !allDays ? <span className="flex items-center justify-center gap-1.5">Search every day with <Kbd>Ctrl+Enter</Kbd></span> : 'Pick another day with Ctrl + arrow keys.'}
+                  hint={query && !allDays && canBrowse ? <span className="flex items-center justify-center gap-1.5">Search every day with <Kbd>Ctrl+Enter</Kbd></span> : canBrowse ? 'Pick another day with Ctrl + arrow keys.' : undefined}
                 />
               </li>
             )}
@@ -237,5 +274,50 @@ export function History() {
         />
       )}
     </PosLayout>
+  );
+}
+
+const MODE_ORDER: PayMode[] = ['cash', 'upi', 'card', 'credit', 'credit_note'];
+const MODE_BAR: Record<PayMode, string> = { cash: 'bg-primary', upi: 'bg-info', card: 'bg-accent', credit: 'bg-warning', credit_note: 'bg-subtle' };
+
+interface Totals { live: number; cancelled: number; total: number; avg: number; returns: number; returned: number; byMode: Partial<Record<PayMode, number>> }
+
+/** Day totals. Visible to every user (owner's choice), so a cashier can tell the manager how the day is going. */
+function TotalsStrip({ s, scope }: { s: Totals; scope: string }) {
+  const modes = MODE_ORDER.filter((m) => (s.byMode[m] ?? 0) > 0);
+  const sum = modes.reduce((t, m) => t + (s.byMode[m] ?? 0), 0) || 1;
+  return (
+    <div className="flex shrink-0 items-stretch gap-px border-b border-line bg-line">
+      <Stat label={`Sales - ${scope}`} wide><Money paise={s.total} className="text-2xl font-bold tracking-tight text-ink" /></Stat>
+      <Stat label="Bills" hint={s.cancelled ? `${s.cancelled} cancelled` : undefined}><span className="num text-xl font-semibold text-ink">{s.live}</span></Stat>
+      <Stat label="Average bill"><Money paise={s.avg} className="text-xl font-semibold text-ink" decimals={false} /></Stat>
+      <Stat label="Returns" hint={s.returns ? `${s.returns} credit ${s.returns === 1 ? 'note' : 'notes'}` : 'None'}>
+        <Money paise={s.returned} className={cn('text-xl font-semibold', s.returned ? 'text-warning' : 'text-ink')} decimals={false} />
+      </Stat>
+      <div className="min-w-0 flex-[1.6] bg-surface px-5 py-2.5">
+        <div className="text-xs font-medium text-muted">Received by</div>
+        <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-surface-3">
+          {modes.map((m) => <span key={m} className={MODE_BAR[m]} style={{ width: `${((s.byMode[m] ?? 0) / sum) * 100}%` }} />)}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+          {modes.length === 0 && <span className="text-subtle">No payments yet</span>}
+          {modes.map((m) => (
+            <span key={m} className="flex items-center gap-1.5 text-muted">
+              <span className={cn('h-2 w-2 rounded-sm', MODE_BAR[m])} />{modeLabel[m]} <Money paise={s.byMode[m] ?? 0} decimals={false} className="font-semibold text-ink" />
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, hint, wide, children }: { label: string; hint?: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={cn('bg-surface px-5 py-2.5', wide ? 'flex-[1.3]' : 'flex-1')}>
+      <div className="text-xs font-medium text-muted">{label}</div>
+      <div className="mt-0.5">{children}</div>
+      <div className="h-4 text-xs text-subtle">{hint}</div>
+    </div>
   );
 }
