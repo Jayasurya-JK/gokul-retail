@@ -11,8 +11,11 @@ use serde::Serialize;
 
 /// Dots per millimetre at 203 dpi.
 pub const DPM: f64 = 8.0;
-/// The TE244 prints up to 108 mm across.
-pub const MAX_WIDTH_MM: f64 = 108.0;
+/// The TE244 prints 104 mm across (832 dots at 203 dpi).
+pub const MAX_WIDTH_MM: f64 = 104.0;
+/// The safe margin inside every sticker: 2 mm (16 dots) on all four sides. Nothing is drawn outside it, so a 1 mm feed or
+/// side error on the roll cannot clip the content (see the `every_column_stays_inside_the_safe_margin` test).
+pub const SAFE_DOTS: u32 = 16;
 
 pub fn dots(mm: f64) -> u32 {
     (mm * DPM).round().max(0.0) as u32
@@ -29,17 +32,39 @@ pub struct Preset {
     pub col_gap: f64,
 }
 
-/// Ready sizes. 3-up is 32 mm wide labels: three 38 mm labels (114 mm) do not fit the 108 mm printable width of a 4 inch printer.
+/// Ready sizes. The Gokul 3-up is the shop's ribbon sticker: 33 x 25 mm, three across with a 2 mm gap (103 mm of the 104 mm
+/// print width of the TE244). Its id stays "32x25-3up" because saved settings use it; the size is 33 mm wide.
 pub const PRESETS: [Preset; 5] = [
     Preset { id: "gokul-small", label: "Gokul small 38 x 25 mm (QR)", width: 38.0, height: 25.0, gap: 3.0, columns: 1, col_gap: 0.0 },
     Preset { id: "50x25", label: "50 x 25 mm, 1 across", width: 50.0, height: 25.0, gap: 3.0, columns: 1, col_gap: 0.0 },
     Preset { id: "38x25-2up", label: "38 x 25 mm, 2 across", width: 38.0, height: 25.0, gap: 3.0, columns: 2, col_gap: 3.0 },
-    Preset { id: "32x25-3up", label: "32 x 25 mm, 3 across", width: 32.0, height: 25.0, gap: 3.0, columns: 3, col_gap: 2.0 },
+    Preset { id: "32x25-3up", label: "Gokul 3-up (33x25)", width: 33.0, height: 25.0, gap: 3.0, columns: 3, col_gap: 2.0 },
     Preset { id: "100x50", label: "100 x 50 mm, 1 across", width: 100.0, height: 50.0, gap: 3.0, columns: 1, col_gap: 0.0 },
 ];
 
 pub fn preset(id: &str) -> Option<&'static Preset> {
     PRESETS.iter().find(|p| p.id == id)
+}
+
+/// Which sticker design a size uses. `Plain` is the generic layout; the two Gokul designs are the shop's own stickers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Style {
+    Plain,
+    /// The 38 x 25 mm sticker: GOKUL, name, QR of the code, code, price, Pkd and Exp.
+    GokulSmall,
+    /// The 33 x 25 mm ribbon sticker (Gokul 3-up): GOKUL and Pkd / Exp on top, name, then QR, rupee price and code in one block.
+    GokulRibbon,
+}
+
+/// How the rupee sign is printed before the price (the printer's fonts have no rupee glyph).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rupee {
+    /// A 1-bit picture of the rupee sign, then "Rs." and the amount.
+    Both,
+    /// Only the picture of the rupee sign, then the amount.
+    Symbol,
+    /// Text only, "Rs." and the amount.
+    Text,
 }
 
 /// The sticker roll and printer tuning for one job.
@@ -62,13 +87,31 @@ pub struct Spec {
     pub dy: i32,
     /// Turn the print 180 degrees (labels coming out upside down).
     pub flip: bool,
-    /// The shop's own small sticker: GOKUL, item name, QR of the item code, code, price, Pkd and Exp (used when the QR field is on).
-    pub gokul: bool,
+    /// Which sticker design to draw (the Gokul designs use the QR field and blank Pkd / Exp unless dates are given).
+    pub style: Style,
+    /// Ribbon (thermal transfer) printing: `SET RIBBON ON`. Off is direct thermal paper.
+    pub ribbon: bool,
+    /// How the rupee sign is printed on the Gokul 3-up sticker.
+    pub rupee: Rupee,
+    /// Extra left start in mm (0 to 5): the Gokul 3-up content starts this much further in from the left edge. 0 by default.
+    pub start_mm: f64,
 }
 
 impl Spec {
     pub fn from_preset(p: &Preset) -> Spec {
-        Spec { width: p.width, height: p.height, gap: p.gap, columns: p.columns, col_gap: p.col_gap, darkness: 8, speed: 4, dx: 0, dy: 0, flip: false, gokul: p.id == "gokul-small" }
+        let style = match p.id {
+            "gokul-small" => Style::GokulSmall,
+            "32x25-3up" => Style::GokulRibbon,
+            _ => Style::Plain,
+        };
+        Spec {
+            width: p.width, height: p.height, gap: p.gap, columns: p.columns, col_gap: p.col_gap, darkness: 8, speed: 4, dx: 0, dy: 0, flip: false,
+            style, ribbon: true, rupee: Rupee::Both, start_mm: 0.0,
+        }
+    }
+    /// True for the shop's own stickers (Gokul small and Gokul 3-up).
+    pub fn is_gokul(&self) -> bool {
+        self.style != Style::Plain
     }
     pub fn cell_w(&self) -> u32 {
         dots(self.width)
@@ -84,7 +127,7 @@ impl Spec {
     }
     pub fn validate(&self) -> Result<(), String> {
         if !(10.0..=MAX_WIDTH_MM).contains(&self.width) || !(10.0..=300.0).contains(&self.height) {
-            return Err("the label size is not sensible (width 10 to 108 mm, height 10 to 300 mm)".into());
+            return Err("the label size is not sensible (width 10 to 104 mm, height 10 to 300 mm)".into());
         }
         if self.columns == 0 || self.columns > 6 {
             return Err("labels across must be 1 to 6".into());
@@ -154,6 +197,42 @@ pub enum El {
     Bar { x: u32, y: u32, w: u32, h: u32 },
     /// An outline of line width `t`.
     Frame { x: u32, y: u32, w: u32, h: u32, t: u32 },
+    /// A 1-bit picture `w` dots wide; `rows` are the dots ('1' = ink) for the preview, the printer gets them as bytes.
+    Bitmap { x: u32, y: u32, w: u32, rows: Vec<String> },
+}
+
+/// The rupee sign: an 8 x 10 design ('1' = ink) drawn at 2 x 2 dots per cell, so the strokes are 2 dots thick and clean (no
+/// dithering). The result is 16 x 20 dots, the cap height of the 16 x 24 printer font the price uses. It is sent as a TSPL BITMAP
+/// because the built-in fonts have no rupee glyph.
+const RUPEE_DESIGN: [&str; 10] = [
+    "11111110",
+    "10000011",
+    "10000011",
+    "11111110",
+    "10001100",
+    "10000110",
+    "11111111",
+    "10000011",
+    "11111111",
+    "10000000",
+];
+const RUPEE_W: u32 = 16;
+const RUPEE_H: u32 = 20;
+/// One small space between the rupee picture and the text after it.
+const RUPEE_GAP: u32 = 6;
+
+fn rupee_rows() -> Vec<String> {
+    RUPEE_DESIGN
+        .iter()
+        .flat_map(|r| {
+            let wide: String = r.chars().flat_map(|c| [c, c]).collect();
+            [wide.clone(), wide]
+        })
+        .collect()
+}
+
+fn rupee_el(x: u32, y: u32) -> El {
+    El::Bitmap { x, y, w: RUPEE_W, rows: rupee_rows() }
 }
 
 pub fn font_size(font: u8) -> (u32, u32) {
@@ -346,9 +425,131 @@ fn layout_gokul(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
     els
 }
 
+/// The rows and modules of the QR code of `src` (error correction M): the module count and '1' for each dark module.
+fn qr_matrix(src: &str) -> Option<(u32, Vec<String>)> {
+    let code = qrcode::QrCode::with_error_correction_level(src.as_bytes(), qrcode::EcLevel::M).ok()?;
+    let size = code.width();
+    let colors = code.to_colors();
+    let rows = (0..size)
+        .map(|r| (0..size).map(|c| if colors[r * size + c] == qrcode::Color::Dark { '1' } else { '0' }).collect::<String>())
+        .collect();
+    Some((size as u32, rows))
+}
+
+/// The Gokul 3-up sticker (33 x 25 mm, ribbon printing). Everything is inside the 2 mm safe margin:
+/// row 1: GOKUL in bold on the left, "Pkd:" and "Exp:" in the small font on the right (blank unless dates were given);
+/// row 2: the item name in capitals, centred;
+/// row 3: one block, centred in the space left: the QR of the item code (63 dots for the usual 13 digit code), and to its
+/// right the rupee picture and the price, with the code number under them. Nothing is drawn below the block.
+fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
+    let cw = spec.cell_w();
+    let top = SAFE_DOTS;
+    let bottom = spec.cell_h().saturating_sub(SAFE_DOTS);
+    let left = SAFE_DOTS + dots(spec.start_mm);
+    let right = cw.saturating_sub(SAFE_DOTS);
+    let avail_w = right.saturating_sub(left);
+    let src = [l.barcode.trim(), l.code.trim()].into_iter().find(|s| !s.is_empty()).unwrap_or("").to_string();
+    let mut els = Vec::new();
+
+    // row 1, right: Pkd and Exp in the small font, right aligned to the margin
+    let pkd: Vec<String> = if f.dates { vec![ascii(&format!("Pkd:{}", l.pack_date)), ascii(&format!("Exp:{}", l.best_before))] } else { vec![] };
+    let dates_w = pkd.iter().map(|t| text_w(t, 1, 1)).max().unwrap_or(0);
+    let dates_h = if pkd.is_empty() { 0 } else { 26 };
+    for (i, t) in pkd.iter().enumerate() {
+        let x = right.saturating_sub(text_w(t, 1, 1));
+        els.push(El::Text { x, y: top + i as u32 * 14, font: 1, xm: 1, ym: 1, text: t.clone() });
+    }
+
+    // row 1, left: GOKUL in the biggest printer font that fits beside the dates, printed twice 2 dots apart so it looks bold
+    let mut top_h = 0;
+    if f.shop && !l.shop.trim().is_empty() {
+        let room = avail_w.saturating_sub(dates_w + 10);
+        let shop = ascii(&l.shop.to_uppercase());
+        let (fo, cols) = [4u8, 3, 2]
+            .into_iter()
+            .map(|fo| (fo, (room / font_size(fo).0) as usize))
+            .find(|(_, c)| shop.chars().count() <= *c)
+            .unwrap_or((1, (room / font_size(1).0) as usize));
+        if let Some(t) = wrap(&shop, cols, 1).into_iter().next() {
+            els.push(El::Text { x: left, y: top, font: fo, xm: 1, ym: 1, text: t.clone() });
+            els.push(El::Text { x: left + 2, y: top, font: fo, xm: 1, ym: 1, text: t });
+            top_h = font_size(fo).1;
+        }
+    }
+    let mut y = top + top_h.max(dates_h) + 4;
+
+    // row 2: the item name in capitals, centred: the 12 x 20 font, cut with ".." when it is too long
+    if f.name {
+        let name = ascii(&l.name.replace(" (Loose)", "").to_uppercase());
+        let cols = (avail_w / font_size(2).0) as usize;
+        if let Some(t) = wrap(&name, cols, 1).into_iter().next() {
+            let x = left + avail_w.saturating_sub(text_w(&t, 2, 1)) / 2;
+            els.push(El::Text { x, y, font: 2, xm: 1, ym: 1, text: t });
+            y += font_size(2).1 + 4;
+        }
+    }
+
+    // row 3: the QR, then the price and the code, one block centred in the space above the bottom margin
+    let slot_h = bottom.saturating_sub(y);
+    let qr = if f.qr && !src.is_empty() { qr_matrix(&src) } else { None };
+    let qr_cell = match &qr {
+        Some((size, _)) => [3u32, 2, 1].into_iter().find(|c| size * c <= slot_h && size * c <= avail_w * 45 / 100).unwrap_or(1),
+        None => 0,
+    };
+    let qr_w = qr.as_ref().map(|(size, _)| size * qr_cell).unwrap_or(0);
+    let qr_gap = if qr_w > 0 { 10 } else { 0 };
+    let col_max = avail_w.saturating_sub(qr_w + qr_gap);
+
+    // the price: the rupee picture (if chosen), then "Rs.35.00", in the biggest font that fits beside the QR
+    let prefix = if l.price_prefix.is_empty() { "Rs.".to_string() } else { l.price_prefix.clone() };
+    let amount = format!("{}{}", rs2(l.price), l.per);
+    let (price, glyph) = match spec.rupee {
+        Rupee::Both => (format!("{prefix}{amount}"), true),
+        Rupee::Symbol => (amount.clone(), true),
+        Rupee::Text => (format!("{prefix}{amount}"), false),
+    };
+    let glyph_w = if glyph { RUPEE_W + RUPEE_GAP } else { 0 };
+    let pf = [3u8, 2, 1].into_iter().find(|fo| glyph_w + text_w(&price, *fo, 1) <= col_max).unwrap_or(1);
+    let price_txt = if f.price { wrap(&price, (col_max.saturating_sub(glyph_w) / font_size(pf).0) as usize, 1).into_iter().next() } else { None };
+    let price_h = if price_txt.is_some() { font_size(pf).1 } else { 0 };
+    let price_w = price_txt.as_ref().map(|t| glyph_w + text_w(t, pf, 1)).unwrap_or(0);
+
+    // the code number under the price: the same value as the QR
+    let code_txt = if f.barcode && !src.is_empty() { wrap(&src, (col_max / font_size(1).0) as usize, 1).into_iter().next() } else { None };
+    let code_h = if code_txt.is_some() { font_size(1).1 } else { 0 };
+    let code_w = code_txt.as_ref().map(|t| text_w(t, 1, 1)).unwrap_or(0);
+    let gap_pc = if price_txt.is_some() && code_txt.is_some() { 4 } else { 0 };
+    let col_w = price_w.max(code_w);
+    let col_h = price_h + gap_pc + code_h;
+    let gap = if qr_w > 0 && col_w > 0 { qr_gap } else { 0 };
+    let block_w = qr_w + gap + col_w;
+    let body_h = qr_w.max(col_h);
+    let block_x = left + avail_w.saturating_sub(block_w) / 2;
+    let body_y = y + slot_h.saturating_sub(body_h) / 2;
+    if let Some((_, rows)) = qr {
+        els.push(El::Qr { x: block_x, y: body_y, cell: qr_cell, data: src.clone(), size: rows.len() as u32, rows });
+    }
+    let cx = block_x + qr_w + gap;
+    let mut ty = body_y + body_h.saturating_sub(col_h) / 2;
+    if let Some(t) = &price_txt {
+        if glyph {
+            els.push(rupee_el(cx, ty + price_h.saturating_sub(RUPEE_H) / 2));
+        }
+        els.push(El::Text { x: cx + glyph_w, y: ty, font: pf, xm: 1, ym: 1, text: t.clone() });
+        ty += price_h + gap_pc;
+    }
+    if let Some(t) = code_txt {
+        els.push(El::Text { x: cx, y: ty, font: 1, xm: 1, ym: 1, text: t });
+    }
+    els
+}
+
 pub fn layout_label(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
-    if spec.gokul && f.qr {
+    if spec.style == Style::GokulSmall && f.qr {
         return layout_gokul(spec, f, l);
+    }
+    if spec.style == Style::GokulRibbon {
+        return layout_ribbon(spec, f, l);
     }
     let cw = spec.cell_w();
     let ch = spec.cell_h();
@@ -626,26 +827,49 @@ fn fmt_mm(v: f64) -> String {
     }
 }
 
-fn emit_el(out: &mut String, e: &El, dx: i32, dy: i32) {
+fn put(out: &mut Vec<u8>, s: &str) {
+    out.extend_from_slice(s.as_bytes());
+}
+
+fn emit_el(out: &mut Vec<u8>, e: &El, dx: i32, dy: i32) {
     let sx = |x: u32| ((x as i64 + dx as i64).max(0)) as u32;
     let sy = |y: u32| ((y as i64 + dy as i64).max(0)) as u32;
     match e {
         El::Text { x, y, font, xm, ym, text } => {
-            out.push_str(&format!("TEXT {},{},\"{}\",0,{},{},\"{}\"\r\n", sx(*x), sy(*y), font, xm, ym, ascii(text)));
+            put(out, &format!("TEXT {},{},\"{}\",0,{},{},\"{}\"\r\n", sx(*x), sy(*y), font, xm, ym, ascii(text)));
         }
         El::Barcode { x, y, h, kind, data, narrow, .. } => {
             let data = data.replace('"', "\\[\"]");
-            out.push_str(&format!("BARCODE {},{},\"{}\",{},0,0,{},{},\"{}\"\r\n", sx(*x), sy(*y), kind, h, narrow, narrow, data));
+            put(out, &format!("BARCODE {},{},\"{}\",{},0,0,{},{},\"{}\"\r\n", sx(*x), sy(*y), kind, h, narrow, narrow, data));
         }
         El::Qr { x, y, cell, data, .. } => {
-            out.push_str(&format!("QRCODE {},{},M,{},A,0,\"{}\"\r\n", sx(*x), sy(*y), cell, ascii(data)));
+            put(out, &format!("QRCODE {},{},M,{},A,0,\"{}\"\r\n", sx(*x), sy(*y), cell, ascii(data)));
         }
-        El::Bar { x, y, w, h } => out.push_str(&format!("BAR {},{},{},{}\r\n", sx(*x), sy(*y), w, h)),
-        El::Frame { x, y, w, h, t } => out.push_str(&format!("BOX {},{},{},{},{}\r\n", sx(*x), sy(*y), sx(*x + *w), sy(*y + *h), t)),
+        El::Bar { x, y, w, h } => put(out, &format!("BAR {},{},{},{}\r\n", sx(*x), sy(*y), w, h)),
+        El::Frame { x, y, w, h, t } => put(out, &format!("BOX {},{},{},{},{}\r\n", sx(*x), sy(*y), sx(*x + *w), sy(*y + *h), t)),
+        El::Bitmap { x, y, w, rows } => {
+            // TSPL BITMAP: width in bytes, height in dots, mode 0, then the raw bytes (1 bit per dot, 0 = printed, MSB first)
+            let bytes_per_row = w.div_ceil(8) as usize;
+            put(out, &format!("BITMAP {},{},{},{},0,", sx(*x), sy(*y), bytes_per_row, rows.len()));
+            for row in rows {
+                let ink = row.as_bytes();
+                for b in 0..bytes_per_row {
+                    let mut byte = 0xFFu8;
+                    for bit in 0..8 {
+                        let px = b * 8 + bit;
+                        if px < *w as usize && ink.get(px) == Some(&b'1') {
+                            byte &= !(0x80 >> bit);
+                        }
+                    }
+                    out.push(byte);
+                }
+            }
+            put(out, "\r\n");
+        }
     }
 }
 
-fn header(spec: &Spec) -> String {
+fn header(spec: &Spec) -> Vec<u8> {
     let mut s = String::new();
     s.push_str(&format!("SIZE {} mm,{} mm\r\n", fmt_mm(spec.total_width_mm()), fmt_mm(spec.height)));
     s.push_str(&format!("GAP {} mm,0 mm\r\n", fmt_mm(spec.gap)));
@@ -653,20 +877,21 @@ fn header(spec: &Spec) -> String {
     s.push_str("REFERENCE 0,0\r\n");
     s.push_str(&format!("DENSITY {}\r\n", spec.darkness.min(15)));
     s.push_str(&format!("SPEED {}\r\n", spec.speed.clamp(1, 8)));
+    s.push_str(if spec.ribbon { "SET RIBBON ON\r\n" } else { "SET RIBBON OFF\r\n" });
     s.push_str("CODEPAGE 437\r\n");
-    s
+    s.into_bytes()
 }
 
 /// A row of labels (one per column, the last row may be short) as TSPL: CLS, the elements of every cell, PRINT.
-fn emit_row(out: &mut String, spec: &Spec, f: &Fields, row: &[&Label], copies: usize) {
-    out.push_str("CLS\r\n");
+fn emit_row(out: &mut Vec<u8>, spec: &Spec, f: &Fields, row: &[&Label], copies: usize) {
+    put(out, "CLS\r\n");
     for (c, label) in row.iter().enumerate() {
         let shift = spec.col_x(c as u32) as i32 + spec.dx;
         for e in layout_label(spec, f, label) {
             emit_el(out, &e, shift, spec.dy);
         }
     }
-    out.push_str(&format!("PRINT 1,{}\r\n", copies));
+    put(out, &format!("PRINT 1,{}\r\n", copies));
 }
 
 /// The whole job for `labels` (one entry per sticker, copies already expanded), `spec.columns` stickers per row.
@@ -684,21 +909,21 @@ pub fn render_job(spec: &Spec, f: &Fields, labels: &[Label]) -> Vec<u8> {
         emit_row(&mut out, spec, f, &rows[i], n);
         i += n;
     }
-    out.into_bytes()
+    out
 }
 
 /// One calibration label per column of one row.
 pub fn render_test_job(spec: &Spec) -> Vec<u8> {
     let mut out = header(spec);
-    out.push_str("CLS\r\n");
+    put(&mut out, "CLS\r\n");
     for c in 0..spec.columns.max(1) {
         let shift = spec.col_x(c) as i32 + spec.dx;
         for e in test_label(spec) {
             emit_el(&mut out, &e, shift, spec.dy);
         }
     }
-    out.push_str("PRINT 1,1\r\n");
-    out.into_bytes()
+    put(&mut out, "PRINT 1,1\r\n");
+    out
 }
 
 /// How many printed stickers `labels` will use (a short last row still wastes the empty cells).

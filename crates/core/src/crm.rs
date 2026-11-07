@@ -697,9 +697,9 @@ pub(crate) fn default_backup_dir(conn: &Connection) -> PathBuf {
 /// TSC TE244) are preselected as soon as Windows has them and nothing was chosen yet.
 fn fill_printer_defaults(p: &mut Value) {
     let defaults = [
-        ("compat", json!(false)), ("labelPreset", json!("gokul-small")), ("labelWidth", json!(38)), ("labelHeight", json!(25)), ("labelGap", json!(3)), ("labelPricePrefix", json!("Rs.")),
-        ("labelColumns", json!(1)), ("labelColGap", json!(0)), ("labelDarkness", json!(8)), ("labelSpeed", json!(4)),
-        ("labelOffsetX", json!(0)), ("labelOffsetY", json!(0)), ("labelFlip", json!(false)),
+        ("compat", json!(false)), ("labelPreset", json!("32x25-3up")), ("labelWidth", json!(33)), ("labelHeight", json!(25)), ("labelGap", json!(3)), ("labelPricePrefix", json!("Rs.")),
+        ("labelColumns", json!(3)), ("labelColGap", json!(2)), ("labelDarkness", json!(8)), ("labelSpeed", json!(4)), ("labelRibbon", json!(true)), ("labelRupee", json!("both")),
+        ("labelOffsetX", json!(0)), ("labelOffsetY", json!(0)), ("labelFlip", json!(false)), ("labelStartMm", json!(0)),
     ];
     for (k, v) in defaults {
         if p[k].is_null() {

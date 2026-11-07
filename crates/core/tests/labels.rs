@@ -85,7 +85,7 @@ fn custom_size_calibration_and_bad_sizes() {
     let bad = json!({ "preset": "custom", "width": 38, "columns": 3, "colGap": 2 });
     let r = labels::print_labels(&db, &one, &bad);
     assert_eq!(r["ok"], false);
-    assert!(r["message"].as_str().unwrap().contains("at most 108"), "{r}");
+    assert!(r["message"].as_str().unwrap().contains("at most 104"), "{r}");
     // nothing picked / no printer / printer not installed
     assert_eq!(labels::print_labels(&db, &json!([]), &opts)["ok"], false);
     set_label_printer(&db, "No Such Label Printer");
@@ -125,7 +125,11 @@ fn hardware_defaults_new_printer_keys_and_clamping() {
     assert_eq!(b["hardware"], json!({ "scanGapMs": 30, "scanMinLen": 3, "scanBeep": true }));
     let p = &b["printers"];
     assert_eq!(p["compat"], false);
-    assert_eq!(p["labelPreset"], "gokul-small");
+    assert_eq!(p["labelPreset"], "32x25-3up");
+    assert_eq!(p["labelColumns"], 3);
+    assert_eq!((p["labelWidth"].clone(), p["labelStartMm"].clone()), (json!(33), json!(0)));
+    assert_eq!(p["labelRibbon"], true);
+    assert_eq!(p["labelRupee"], "both");
     assert_eq!(p["labelDarkness"], 8);
     assert_eq!(p["labelSpeed"], 4);
     assert_eq!(p["mode"], "escpos");
@@ -203,4 +207,48 @@ fn gokul_small_sticker_sample_job() {
     assert!(job.contains("\"Rs.38.00\"") && job.contains("\"Pkd:\"") && job.contains("\"Exp:\"") && job.contains("PRINT 1,2"), "{job}");
     let shots = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/design/shots");
     std::fs::write(shots.join("print-gokul-label.tspl"), job).unwrap();
+}
+
+/// The Gokul 3-up ribbon sticker as a job: three copies of one item fill one row, the code is the one the POS finds, and the
+/// ribbon and rupee settings reach the printer (a setting passed in the call wins over the saved one).
+#[test]
+fn gokul_3up_ribbon_job_for_the_picked_item() {
+    let (d, db) = mini_db();
+    let out = d.path().join("ribbon.tspl");
+    set_label_printer(&db, &format!("FILE:{}", out.display()));
+    let opts = json!({ "preset": "32x25-3up", "fields": { "shop": true, "name": true, "price": true, "barcode": true, "dates": true, "qr": true } });
+    let r = labels::print_labels(&db, &json!([{ "itemId": "i3", "copies": 3 }]), &opts);
+    assert_eq!(r["ok"], true, "{r}");
+    let job = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
+    assert!(job.starts_with("SIZE 103 mm,25 mm\r\nGAP 3 mm,0 mm\r\n"), "{job}");
+    assert_eq!(job.matches("CLS\r\n").count(), 1, "one row of three: {job}");
+    assert!(job.ends_with("PRINT 1,1\r\n"), "{job}");
+    assert!(job.contains("SET RIBBON ON\r\n") && job.contains("\"DISH WASH BAR\"") && job.contains("\"Rs.38.00\""), "{job}");
+    // the item barcode is the QR and the line under the price (the same value the POS finds by scan)
+    assert!(job.contains(",M,3,A,0,\"8904000000035\"") && job.contains("\"8904000000035\"\r\n"), "{job}");
+    // the rupee picture is on by default; a call can turn the ribbon off
+    assert!(job.contains("BITMAP "), "{job}");
+    let r = labels::print_labels(&db, &json!([{ "itemId": "i3", "copies": 1 }]), &json!({ "preset": "32x25-3up", "ribbon": false, "rupee": "text" }));
+    assert_eq!(r["ok"], true, "{r}");
+    let job = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
+    assert!(job.contains("SET RIBBON OFF\r\n") && !job.contains("BITMAP ") && job.contains("\"Rs.38.00\""), "{job}");
+}
+
+/// Pkd and Exp on the Gokul 3-up: blank (written by hand) when no pack date is typed, even if months are given; a typed pack
+/// date fills both, and the expiry is counted from it.
+#[test]
+fn gokul_3up_dates_are_blank_unless_a_pack_date_is_typed() {
+    let (d, db) = mini_db();
+    let out = d.path().join("dates.tspl");
+    set_label_printer(&db, &format!("FILE:{}", out.display()));
+    let one = json!([{ "itemId": "i3", "copies": 1 }]);
+    let r = labels::print_labels(&db, &one, &json!({ "preset": "32x25-3up", "bestBeforeMonths": 6 }));
+    assert_eq!(r["ok"], true, "{r}");
+    let job = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
+    assert!(job.contains("\"Pkd:\"") && job.contains("\"Exp:\""), "{job}");
+    assert!(!job.contains("Pkd:0") && !job.contains("Exp:0"), "no invented date: {job}");
+    let r = labels::print_labels(&db, &one, &json!({ "preset": "32x25-3up", "packDate": "2026-11-07", "bestBeforeMonths": 6 }));
+    assert_eq!(r["ok"], true, "{r}");
+    let job = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
+    assert!(job.contains("\"Pkd:07/11/26\"") && job.contains("\"Exp:07/05/27\""), "{job}");
 }

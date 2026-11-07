@@ -12,6 +12,11 @@ export const GOKUL_FIELDS: LabelFieldChoice = {
   shop: true, name: true, mrp: false, price: true, barcode: false, dates: true, batch: false, net: false, legal: false, qr: true,
 };
 
+/** The Gokul 3-up ribbon sticker (33 x 25 mm): GOKUL, name, QR of the code, rupee price, code, Pkd and Exp. */
+export const RIBBON_FIELDS: LabelFieldChoice = {
+  shop: true, name: true, mrp: false, price: true, barcode: true, dates: true, batch: false, net: false, legal: false, qr: true,
+};
+
 /** Printer built-in fonts 1 to 5: character cell width and height in dots (TSPL). */
 const FONT: Record<number, [number, number]> = { 1: [8, 12], 2: [12, 20], 3: [16, 24], 4: [24, 32], 5: [32, 48] };
 
@@ -50,6 +55,12 @@ export function LabelSvg({ elements, cellW, cellH, scale = PX_PER_DOT }: { eleme
             );
           case 'bar':
             return <rect key={i} x={e.x} y={e.y} width={e.w} height={e.h} fill="#000" />;
+          case 'bitmap':
+            return (
+              <g key={i} fill="#000">
+                {e.rows.flatMap((row, r) => [...row].map((c, k) => (c === '1' ? <rect key={`${r}-${k}`} x={e.x + k} y={e.y + r} width={1} height={1} /> : null)))}
+              </g>
+            );
           case 'frame':
             return <rect key={i} x={e.x + e.t / 2} y={e.y + e.t / 2} width={e.w - e.t} height={e.h - e.t} fill="none" stroke="#000" strokeWidth={e.t} />;
         }

@@ -4,7 +4,10 @@ import { AlertTriangle, Barcode as BarcodeIcon, Minus, Plus, Printer, Search, X 
 import { fuzzyFilter, LABEL_PRESETS, type Item, type LabelOptions, type LabelPresetId, type LabelPreview, type PrinterSettings } from '@gokul/data';
 import { Badge, Button, Checkbox, EmptyState, Input, Money, PageHeader, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../store';
-import { DEFAULT_FIELDS, GOKUL_FIELDS, LabelRoll } from '../components/catalog/LabelPreview';
+import { DEFAULT_FIELDS, GOKUL_FIELDS, LabelRoll, RIBBON_FIELDS } from '../components/catalog/LabelPreview';
+
+/** The fields a sticker size starts with: the Gokul stickers carry their own set. */
+const fieldsFor = (p: LabelPresetId) => (p === 'gokul-small' ? GOKUL_FIELDS : p === '32x25-3up' ? RIBBON_FIELDS : DEFAULT_FIELDS);
 
 const MAX_PREVIEW = 24;
 type Custom = { width: string; height: string; gap: string; columns: string; colGap: string };
@@ -41,7 +44,7 @@ export function Labels() {
       const p = b.printers;
       setPrinter(p);
       setPreset(p.labelPreset);
-      setFields(p.labelPreset === 'gokul-small' ? GOKUL_FIELDS : DEFAULT_FIELDS);
+      setFields(fieldsFor(p.labelPreset));
       setCustom({ width: String(p.labelWidth), height: String(p.labelHeight), gap: String(p.labelGap), columns: String(p.labelColumns), colGap: String(p.labelColGap) });
     }).catch(() => undefined);
   }, []);
@@ -161,7 +164,7 @@ export function Labels() {
             <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
               <div className="w-64">
                 <Select
-                  label="Label size" value={preset} onChange={(e) => { const p = e.target.value as LabelPresetId; setPreset(p); setFields(p === 'gokul-small' ? GOKUL_FIELDS : DEFAULT_FIELDS); }}
+                  label="Label size" value={preset} onChange={(e) => { const p = e.target.value as LabelPresetId; setPreset(p); setFields(fieldsFor(p)); }}
                   options={[...LABEL_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: 'custom', label: 'Custom size' }]}
                 />
                 <div className="mt-1 text-xs text-subtle">{LABEL_PRESETS.find((p) => p.id === preset)?.hint ?? 'Type the size below'}</div>
@@ -198,7 +201,7 @@ export function Labels() {
                 <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted">Batch
                   <input value={batch} placeholder="automatic" onChange={(e) => setBatch(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-sm num text-ink" />
                 </label>
-                <span className="pb-2 text-xs text-subtle">{preset === 'gokul-small' ? 'Pkd and Exp are blank for hand writing unless you fill the date or months.' : 'Months empty: by item (oil 6, jaggery 4, other 9).'}</span>
+                <span className="pb-2 text-xs text-subtle">{preset === 'gokul-small' || preset === '32x25-3up' ? 'Pkd and Exp are blank for hand writing unless you fill the date or months.' : 'Months empty: by item (oil 6, jaggery 4, other 9).'}</span>
               </div>
             )}
           </div>

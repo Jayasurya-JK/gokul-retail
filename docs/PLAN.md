@@ -87,6 +87,10 @@ docs/design/BRIEF.md   design rules every screen follows
    - **Closing stock** is calculated (opening + pressed + purchased + kept − sold − packed − adjusted). The supervisor enters the physical count, the difference is shown, and posting it creates adjustment rows with a reason.
    - The sheet prints and exports as a PDF in the same layout as the paper. Past sheets are read-only once closed.
 
+## Notes for later (from the owner, 7 Nov 2026)
+- **Packing pouch sizes (SSS Brand), in inches:** 50 g → 4×5, 100 g → 4×6, ¼ kg → 5×7, ½ kg → 6×8, 1 kg → 7×10. When packing runs are recorded, the matching pouch should be taken from packing-material stock automatically.
+- **TSC TE244 stickers:** 3 across, ribbon on. One blank row comes partly out after each print, which is the printer's tear-off position. Confirm the printer pulls it back on the next print; otherwise adjust the tear/feed settings.
+
 ## How the design work runs
 - Wave 1 (one Sonnet designer): design system, both app shells, POS Billing (the flagship screen). The owner approves the look.
 - Wave 2 (parallel Sonnet designers): the remaining POS screens and Office screens, all on the Wave 1 system.

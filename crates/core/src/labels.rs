@@ -55,7 +55,14 @@ pub fn spec_from(set: &Value, opts: &Value) -> std::result::Result<Spec, String>
     spec.speed = num("speed", 4.0).clamp(1.0, 8.0) as u8;
     spec.dx = num("offsetX", 0.0).clamp(-80.0, 80.0) as i32;
     spec.dy = num("offsetY", 0.0).clamp(-80.0, 80.0) as i32;
+    spec.start_mm = num("startMm", 0.0).clamp(0.0, 5.0);
     spec.flip = pick(opts, set, "flip").as_bool().unwrap_or(false);
+    spec.ribbon = pick(opts, set, "ribbon").as_bool().unwrap_or(true);
+    spec.rupee = match pick(opts, set, "rupee").as_str() {
+        Some("symbol") => tspl::Rupee::Symbol,
+        Some("text") => tspl::Rupee::Text,
+        _ => tspl::Rupee::Both,
+    };
     spec.validate()?;
     Ok(spec)
 }
@@ -106,9 +113,10 @@ fn legal_line(c: &Config) -> String {
 
 /// The values printed on one item's sticker.
 pub fn label_for(item: &Item, c: &Config, opts: &Value, today: NaiveDate, price_prefix: &str, blank_dates: bool) -> Label {
-    // the Gokul sticker leaves Pkd and Exp empty (written by hand) unless a date or months were asked for
-    let dates_off = blank_dates && opts["packDate"].as_str().unwrap_or("").is_empty() && opts["bestBeforeMonths"].is_null();
-    let packed = opts["packDate"].as_str().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()).unwrap_or(today);
+    // the Gokul sticker leaves Pkd and Exp blank (written by hand) unless a pack date was typed in: no date is ever invented
+    let typed = opts["packDate"].as_str().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    let dates_off = blank_dates && typed.is_none();
+    let packed = typed.unwrap_or(today);
     let months = opts["bestBeforeMonths"].as_u64().map(|m| m as u32).unwrap_or_else(|| default_months(item));
     let bb = if months == 0 { None } else { packed.checked_add_months(Months::new(months)) };
     let batch = {
@@ -174,7 +182,7 @@ fn build(conn: &rusqlite::Connection, entries: &[(String, usize)], opts: &Value)
     let mut labels = Vec::new();
     for (id, copies) in entries {
         let Some(item) = catalog::get_item(conn, id)? else { continue };
-        let l = label_for(&item, &c, opts, today, &prefix, spec.gokul);
+        let l = label_for(&item, &c, opts, today, &prefix, spec.is_gokul());
         for _ in 0..(*copies).clamp(1, 999) {
             labels.push((item.id.clone(), l.clone()));
         }

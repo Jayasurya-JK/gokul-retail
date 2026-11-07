@@ -272,6 +272,12 @@ export interface PrinterSettings {
   labelOffsetY: number;
   /** labels come out upside down: turn the print 180 degrees */
   labelFlip: boolean;
+  /** Extra left start in mm (0 to 5) for the Gokul 3-up content: 0 by default */
+  labelStartMm: number;
+  /** Ribbon (thermal transfer) printing: on for the TE244, off for direct thermal paper */
+  labelRibbon: boolean;
+  /** How the rupee sign prints on the Gokul 3-up: a picture and Rs. (both), the picture only, or Rs. text only */
+  labelRupee: 'both' | 'symbol' | 'text';
   /** Text before the price on the Gokul sticker (the printer cannot print the rupee sign) */
   labelPricePrefix: string;
   /** Read-only: the printers Windows reports right now */
@@ -285,7 +291,7 @@ export const LABEL_PRESETS: { id: Exclude<LabelPresetId, 'custom'>; label: strin
   { id: 'gokul-small', label: 'Gokul small 38 x 25 mm', hint: 'GOKUL, name, QR of the code, price, Pkd and Exp', width: 38, height: 25, gap: 3, columns: 1, colGap: 0 },
   { id: '50x25', label: '50 x 25 mm', hint: 'One across', width: 50, height: 25, gap: 3, columns: 1, colGap: 0 },
   { id: '38x25-2up', label: '38 x 25 mm, 2 across', hint: '79 mm of the 4 inch roll', width: 38, height: 25, gap: 3, columns: 2, colGap: 3 },
-  { id: '32x25-3up', label: '32 x 25 mm, 3 across', hint: '100 mm of the 4 inch roll', width: 32, height: 25, gap: 3, columns: 3, colGap: 2 },
+  { id: '32x25-3up', label: 'Gokul 3-up (33x25)', hint: 'Ribbon sticker: GOKUL, name, QR, rupee price, code, Pkd and Exp. 103 mm of the 104 mm print width', width: 33, height: 25, gap: 3, columns: 3, colGap: 2 },
   { id: '100x50', label: '100 x 50 mm', hint: 'Big sticker, one across', width: 100, height: 50, gap: 3, columns: 1, colGap: 0 },
 ];
 
@@ -306,7 +312,8 @@ export interface LabelFieldChoice {
 export interface LabelOptions {
   preset?: LabelPresetId;
   width?: number; height?: number; gap?: number; columns?: number; colGap?: number;
-  darkness?: number; speed?: number; offsetX?: number; offsetY?: number; flip?: boolean;
+  darkness?: number; speed?: number; offsetX?: number; offsetY?: number; flip?: boolean; startMm?: number;
+  ribbon?: boolean; rupee?: PrinterSettings['labelRupee'];
   /** Label printer name; empty uses the one saved in Settings */
   printer?: string;
   fields?: Partial<LabelFieldChoice>;
@@ -322,7 +329,8 @@ export type LabelElement =
   | { k: 'barcode'; x: number; y: number; h: number; kind: string; data: string; narrow: number; w: number; rects: [number, number][] }
   | { k: 'qr'; x: number; y: number; cell: number; data: string; size: number; rows: string[] }
   | { k: 'bar'; x: number; y: number; w: number; h: number }
-  | { k: 'frame'; x: number; y: number; w: number; h: number; t: number };
+  | { k: 'frame'; x: number; y: number; w: number; h: number; t: number }
+  | { k: 'bitmap'; x: number; y: number; w: number; rows: string[] };
 export interface LabelPreview {
   ok: boolean;
   message: string;
@@ -552,7 +560,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     },
     printers: {
       mode: 'escpos', printLogo: true, billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
-      compat: false, labelPricePrefix: 'Rs.', labelPreset: 'gokul-small', labelWidth: 38, labelHeight: 25, labelGap: 3, labelColumns: 1, labelColGap: 0, labelDarkness: 8,
+      compat: false, labelPricePrefix: 'Rs.', labelPreset: '32x25-3up', labelWidth: 33, labelHeight: 25, labelGap: 3, labelColumns: 3, labelColGap: 2, labelDarkness: 8, labelRibbon: true, labelRupee: 'both', labelStartMm: 0,
       labelSpeed: 4, labelOffsetX: 0, labelOffsetY: 0, labelFlip: false,
       detected: [
         { name: s.printer, kind: 'thermal', ready: true },

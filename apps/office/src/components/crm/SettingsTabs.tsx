@@ -240,7 +240,7 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
   const isTvs = /rp ?3200|tvs/i.test(v.billPrinter);
   const labelOpts = () => ({
     preset: v.labelPreset, width: v.labelWidth, height: v.labelHeight, gap: v.labelGap, columns: v.labelColumns, colGap: v.labelColGap,
-    darkness: v.labelDarkness, speed: v.labelSpeed, offsetX: v.labelOffsetX, offsetY: v.labelOffsetY, flip: v.labelFlip,
+    darkness: v.labelDarkness, speed: v.labelSpeed, offsetX: v.labelOffsetX, offsetY: v.labelOffsetY, flip: v.labelFlip, startMm: v.labelStartMm, ribbon: v.labelRibbon, rupee: v.labelRupee,
   });
   const labelOptions = v.detected.filter((d) => d.kind === 'label' || d.kind === 'other').map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (${d.note || 'not ready'})` }));
   const num = (k: 'labelWidth' | 'labelHeight' | 'labelGap' | 'labelColumns' | 'labelColGap', label: string) => (
@@ -284,7 +284,8 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
             }}
             options={[...LABEL_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: 'custom', label: 'Custom size' }]}
           />
-          <Input label="Text before the price" size="sm" value={v.labelPricePrefix} maxLength={4} onChange={(e) => up('labelPricePrefix', e.target.value)} hint="The printer has no rupee sign" />
+          <Input label="Text before the price" size="sm" value={v.labelPricePrefix} maxLength={4} onChange={(e) => up('labelPricePrefix', e.target.value)} hint="Used with Rs. (see Rupee sign)" />
+          <Select label="Rupee sign" value={v.labelRupee} onChange={(e) => up('labelRupee', e.target.value as PrinterSettings['labelRupee'])} options={[{ value: 'both', label: 'Picture of ₹, then Rs.' }, { value: 'symbol', label: 'Picture of ₹ only' }, { value: 'text', label: 'Rs. text only' }]} />
         </div>
         {v.labelPreset === 'custom' && (
           <div className="mt-3 grid grid-cols-5 gap-2">
@@ -296,6 +297,7 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
           <NumberInput label="Speed (inches per second)" value={String(v.labelSpeed)} decimals={0} size="sm" onValueChange={(x) => up('labelSpeed', Math.min(8, Math.max(1, Number(x || 1))))} />
           {signed('labelOffsetX', 'Shift right (dots, 8 = 1 mm)')}
           {signed('labelOffsetY', 'Shift down (dots, 8 = 1 mm)')}
+          <NumberInput label="Start from left edge (mm, 0 to 5)" value={String(v.labelStartMm)} decimals={1} size="sm" onValueChange={(x) => up('labelStartMm', Math.min(5, Math.max(0, Number(x || 0))))} hint="Adds to the 2 mm safe margin. 0 is normal." />
         </div>
         <Row title="Labels come out upside down" hint="Turns the print 180 degrees."><Switch checked={v.labelFlip} onCheckedChange={(x) => up('labelFlip', x)} /></Row>
         <p className="mt-1 text-xs text-muted">Print the test label, look at the frame against the sticker edge, then use the shifts until it sits square. Barcode labels are made on the Barcode labels screen.</p>
