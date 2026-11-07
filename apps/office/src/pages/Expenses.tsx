@@ -3,7 +3,7 @@ import { Ban, Banknote, Pencil, Plus, Receipt, Settings2, Wallet } from 'lucide-
 import { PAID_FROM_LABEL, type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom, type ExpenseQuery } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, StatTile, dateRangePresets, cn,
-  type ColumnDef, type DateRange,
+  type ColumnDef, type DateRange, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { CategoriesDialog, EditExpenseDialog, NewExpenseDialog, VoidExpenseDialog } from '../components/money/ExpenseDialogs';
@@ -32,6 +32,7 @@ export function Expenses() {
     void api.listExpenseCategories().then(setCats);
   }, [query]);
   useEffect(() => { reload(); }, [reload]);
+  useRefreshOnFocus(reload);
   useEffect(() => { void api.listUsers().then((u) => setUsers(u.map((x) => x.name))); }, []);
 
   useEffect(() => {

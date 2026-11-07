@@ -49,7 +49,7 @@ export interface StaffReportRow { staff: string; bills: number; qty: Milli; tota
 
 export interface StockRow {
   id: string; barcode: string; code: string; name: string; category: string; brand: string; mrp: Paise;
-  price: Paise; qty: Milli; unit: UnitCode; salesTotal: Paise; supplier: string;
+  price: Paise; qty: Milli; unit: UnitCode; salesTotal: Paise; supplier: string; reorderLevel?: Milli;
   cost?: Paise; profitPct?: number; profit?: Paise; costTotal?: Paise; profitTotal?: Paise;
 }
 export interface StockReport {

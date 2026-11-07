@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banknote, MapPin, Pencil, Phone, Plus, Truck } from 'lucide-react';
 import { fuzzyFilter, type SupplierLedger, type SupplierProfile, type SupplierSummary } from '@gokul/data';
 import {
-  Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, TabPanel, Tabs, cn, type ColumnDef,
+  Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { PaymentDialog } from '../components/purchasing/PaymentDialog';
@@ -143,6 +143,7 @@ export function Suppliers() {
     setSelId((cur) => keep ?? cur ?? list.slice().sort((a, b) => b.due - a.due)[0]?.profile.id ?? null);
   }, []);
   useEffect(() => { void reload(); }, [reload]);
+  useRefreshOnFocus(() => { void reload(); });
   useEffect(() => {
     if (!selId) return;
     let live = true;

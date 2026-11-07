@@ -8,7 +8,7 @@ import { ActiveDialog, PickDialog } from './BulkDialogs';
 import { unitText } from './shared';
 
 type Status = 'all' | 'active' | 'inactive';
-type SortKey = 'code' | 'name' | 'category' | 'brand' | 'mrp' | 'price' | 'stock' | 'active';
+type SortKey = 'code' | 'name' | 'category' | 'brand' | 'supplier' | 'mrp' | 'price' | 'stock' | 'active';
 const PAGE = 1000;
 
 const stockState = (r: Item) => (r.stock < 0 ? 'negative' : r.stock === 0 ? 'out' : r.stock <= r.reorderLevel ? 'low' : 'ok');
@@ -58,7 +58,7 @@ export function CatalogItemsPane({ category, brand, cats, brands, canEdit, onCle
   const rows = useMemo(() => {
     if (!sort) return items;
     const key: Record<string, (i: Item) => string | number> = {
-      code: (i) => Number(i.code) || 0, name: (i) => i.name.toLowerCase(), category: (i) => i.category.toLowerCase(), brand: (i) => i.brand.toLowerCase(),
+      code: (i) => Number(i.code) || 0, name: (i) => i.name.toLowerCase(), category: (i) => i.category.toLowerCase(), brand: (i) => i.brand.toLowerCase(), supplier: (i) => (i.supplier ?? '').toLowerCase(),
       mrp: (i) => i.mrp, price: (i) => i.price, stock: (i) => i.stock, active: (i) => (i.active ? 1 : 0),
     };
     const f = key[sort.id as SortKey];
@@ -115,9 +115,10 @@ export function CatalogItemsPane({ category, brand, cats, brands, canEdit, onCle
         },
       },
     ];
-    if (!category) cols.push({ id: 'category', accessorKey: 'category', header: 'Category', meta: { w: '112px' }, cell: (c) => <span className="text-muted">{c.getValue<string>()}</span> });
-    if (!brand) cols.push({ id: 'brand', accessorKey: 'brand', header: 'Brand', meta: { w: '96px' }, cell: (c) => <span className="text-muted">{c.getValue<string>()}</span> });
+    if (!category) cols.push({ id: 'category', accessorKey: 'category', header: 'Category', meta: { w: '128px' }, cell: (c) => <span className="block truncate text-muted" title={c.getValue<string>()}>{c.getValue<string>()}</span> });
+    if (!brand) cols.push({ id: 'brand', accessorKey: 'brand', header: 'Brand', meta: { w: '110px' }, cell: (c) => <span className="block truncate text-muted" title={c.getValue<string>()}>{c.getValue<string>()}</span> });
     cols.push(
+      { id: 'supplier', accessorKey: 'supplier', header: 'Supplier', meta: { w: '120px' }, cell: (c) => <span className="block truncate text-muted" title={c.getValue<string>() ?? ''}>{c.getValue<string>() || '-'}</span> },
       { id: 'mrp', accessorKey: 'mrp', header: 'MRP', meta: { w: '86px', align: 'right', num: true }, cell: (c) => <span className="text-muted"><Money paise={c.getValue<number>()} /></span> },
       { id: 'price', accessorKey: 'price', header: 'Price', meta: { w: '86px', align: 'right', num: true }, cell: (c) => <Money paise={c.getValue<number>()} /> },
       {

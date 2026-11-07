@@ -5,7 +5,7 @@ import {
   cashDiscount, computeTotalsWithDelivery, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
-import { ManagerPinDialog, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
+import { ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, billingStores, refreshTodaySales, SLOT_LABEL, useSession, type BillSlot, type Delivery } from '../store';
 import { plural } from '../plural';
@@ -76,7 +76,14 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const exchangeUsed = exchange ? Math.min(exchange.totals.grand, totals.grand) : 0;
   const due = totals.grand - exchangeUsed;
 
-  useEffect(() => { api.listItems().then(setItems); }, []);
+  /* Items and stock are read from the database again after every bill and whenever this window comes back to the front
+     (Office may have received goods or adjusted stock meanwhile), and the item is re-read when it is added to the bill. */
+  const [tick, setTick] = useState(0);
+  useEffect(() => { api.listItems().then(setItems).catch(() => undefined); }, [lastBill, tick]);
+  useRefreshOnFocus(() => {
+    setTick((t) => t + 1);
+    if (customerId) api.getCustomer(customerId).then((c) => { if (c) useBilling.getState().setCustomer(c); }).catch(() => undefined);
+  }, { f5: false });
   const stockFor = useCallback((l: BillLine) => {
     const it = byId.get(l.itemId);
     if (!it) return null;
@@ -90,7 +97,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (!customerId) { setWallet(null); return; }
     api.getCustomerWallet(customerId).then((w) => live && setWallet(w)).catch(() => live && setWallet(null));
     return () => { live = false; };
-  }, [customerId, lastBill]);
+  }, [customerId, lastBill, tick]);
   useEffect(() => { api.peekNextBillNumber().then(setBillNo); }, [lastBill]);
 
   /* Focus: the scan box owns the keyboard unless a dialog or cell editor is open. */
@@ -180,6 +187,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /* ---------- adding items ---------- */
   const addItem = useCallback((item: Item, qty?: number) => {
     const idx = B.addItem(item, qty ?? 1000);
+    // fresh stock and price straight from the database, for the grid and the "left" figure
+    api.findItemByCode(item.barcode || item.code).then((f) => { if (f && f.id === item.id) setItems((cur) => cur.map((i) => (i.id === f.id ? f : i))); }).catch(() => undefined);
     if (item.stock <= 0) toast.show({ tone: 'warning', title: `${item.name} shows no stock`, detail: 'Billing allowed. Check the shelf.' });
     if (item.loose && qty === undefined) startEdit('qty', idx, '');
   }, [B, startEdit, toast]);
@@ -254,7 +263,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const recall = async (h: HeldBill) => {
     if (lines.length) await api.holdBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: [], ...extras() });
     await api.recallHeld(h.id);
-    const cust = h.customerId ? (await api.listCustomers()).find((c) => c.id === h.customerId) ?? null : null;
+    const cust = h.customerId ? await api.getCustomer(h.customerId) : null;
     B.load(h, cust);
     setHeldCount((await api.listHeld()).length);
     setDialog(null);
@@ -328,11 +337,11 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /** F5: reload everything the screen reads, without touching the bill */
   const refresh = async () => {
     try {
-      const [list, held, cust] = await Promise.all([api.listItems(), api.listHeld(), customerId ? api.listCustomers() : Promise.resolve([] as Customer[])]);
+      const [list, held, fresh] = await Promise.all([api.listItems(), api.listHeld(), customerId ? api.getCustomer(customerId) : Promise.resolve(null)]);
       setItems(list);
       setHeldCount(held.length);
-      const fresh = customerId ? cust.find((c) => c.id === customerId) : undefined;
       if (fresh) B.setCustomer(fresh);
+      setTick((t) => t + 1);
       setBillNo(await api.peekNextBillNumber());
       void refreshTodaySales();
       toast.show({ tone: 'success', title: 'Refreshed', detail: 'Items, stock, customer and today\'s total are up to date.' });

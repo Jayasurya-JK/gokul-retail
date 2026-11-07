@@ -18,3 +18,5 @@ export { api, isTauri } from './tauri/select';
 export { createTauriApi, REAL_METHODS, saveSeedNorms } from './tauri/tauriApi';
 export * from './auth';
 export * from './printed';
+export * from './customerName';
+export * from './stockGroups';

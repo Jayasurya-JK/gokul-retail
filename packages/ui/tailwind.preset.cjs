@@ -18,7 +18,7 @@ module.exports = {
         chrome: { DEFAULT: c('chrome'), ink: c('chrome-ink'), muted: c('chrome-muted') },
         overlay: c('overlay'),
       },
-      fontFamily: { sans: ["'Inter Variable'", 'Inter', "'Segoe UI'", 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ["'Gokul Rupee'", "'Inter Variable'", 'Inter', "'Segoe UI'", 'system-ui', 'sans-serif'] },
       fontSize: {
         xs: ['12px', '16px'], sm: ['13px', '18px'], base: ['14px', '20px'], md: ['16px', '22px'],
         lg: ['20px', '26px'], xl: ['24px', '30px'], '2xl': ['32px', '38px'], '3xl': ['48px', '52px'],

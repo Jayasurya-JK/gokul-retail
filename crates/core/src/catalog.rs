@@ -60,6 +60,9 @@ pub struct ItemInput {
     /// Optional wholesale price (GST inclusive); None or 0 = the item has no wholesale price.
     #[serde(default)]
     pub wholesale_price: Option<i64>,
+    /// Default supplier id. None keeps what is stored, an empty string clears it.
+    #[serde(default)]
+    pub supplier_id: Option<String>,
     #[serde(default)]
     pub reorder_level: i64,
     #[serde(default = "yes")]
@@ -186,6 +189,17 @@ fn sync_brands(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn set_supplier(tx: &rusqlite::Transaction, id: &str, sent: &Option<String>) -> Result<()> {
+    if let Some(s) = sent {
+        let s = s.trim();
+        if !s.is_empty() && tx.query_row("SELECT COUNT(*) FROM suppliers WHERE id=?1", [s], |r| r.get::<_, i64>(0))? == 0 {
+            return crate::error::invalid("That supplier does not exist.");
+        }
+        tx.execute("UPDATE items SET supplier_id=?1 WHERE id=?2", params![Some(s).filter(|x| !x.is_empty()), id])?;
+    }
+    Ok(())
+}
+
 pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
     let issues = validate_item(conn, input)?;
     let blocking = issues.keys().any(|k| !(k == "cost" && input.cost > input.price));
@@ -216,6 +230,7 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
                 ],
             )?;
             tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
+            set_supplier(&tx, id, &input.supplier_id)?;
             audit(&tx, now, OFFICE, "update", "item", id, &name)?;
             id.clone()
         }
@@ -230,6 +245,7 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
                 ],
             )?;
             tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
+            set_supplier(&tx, &id, &input.supplier_id)?;
             audit(&tx, now, OFFICE, "create", "item", &id, &name)?;
             id
         }

@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 import { IndianRupee, Plus, Receipt, ShoppingBag, TrendingUp } from 'lucide-react';
 import { formatQty, formatRupees, type Bill, type DashboardStats, type Item, type TopItem } from '@gokul/data';
-import { Badge, Button, Card, Money, PageHeader, StatTile, type Tone } from '@gokul/ui';
+import { Badge, Button, Card, Money, PageHeader, StatTile, type Tone, useRefreshOnFocus } from '@gokul/ui';
 import { api } from '../store';
 import { rupeeAxis } from '../components/reports/format';
 
@@ -49,12 +49,14 @@ export function Dashboard() {
   const [low, setLow] = useState<Item[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api.dashboard().then(setStats);
     api.topItems(30, 5).then(setTop);
     api.lowStock(12).then(setLow);
     api.listBills({ limit: 14 }).then(setBills);
   }, []);
+  useEffect(() => { load(); }, [load]);
+  useRefreshOnFocus(load);
 
   if (!stats) return <PageHeader title="Dashboard" />;
   const split = [

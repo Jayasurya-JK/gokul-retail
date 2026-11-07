@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MessageCircle, Pencil, Phone, Plus, Users, Wallet } from 'lucide-react';
-import { formatPoints, formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow } from '@gokul/data';
-import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Tabs, TabPanel, useToast, type ColumnDef } from '@gokul/ui';
+import { compareCustomers, isNoName, formatPoints, formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow } from '@gokul/data';
+import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Tabs, TabPanel, cn, useToast, type ColumnDef, useRefreshOnFocus } from '@gokul/ui';
 import { api } from '../store';
 import { CustomerSheet } from '../components/crm/CustomerSheet';
 import { PointsLedgerList } from '../components/crm/PointsParts';
@@ -19,7 +19,7 @@ const columns: ColumnDef<CustomerRow>[] = [
         <span className="flex items-center gap-2.5">
           <Avatar initials={initialsOf(r.name)} color={nameColor(r.name)} size={26} />
           <span className="min-w-0 truncate">
-            <span className="font-medium text-ink">{r.name}</span>
+            {isNoName(r.name) ? <span className="font-medium italic text-muted">No name</span> : <span className="font-medium text-ink">{r.name}</span>}
             {r.business && <span className="ml-1.5 text-xs text-subtle">{r.business}</span>}
           </span>
         </span>
@@ -56,7 +56,7 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
         <div className="flex items-start gap-3">
           <Avatar initials={initialsOf(c.name)} color={nameColor(c.name)} size={42} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-md font-semibold leading-tight text-ink">{c.name}</div>
+            <div className={cn('truncate text-md font-semibold leading-tight', isNoName(c.name) ? 'italic text-muted' : 'text-ink')}>{isNoName(c.name) ? `No name (${c.phone})` : c.name}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted num"><Phone size={13} /> {c.phone}</div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {c.type === 'b2b' ? <Badge tone="info"><Building2 size={11} /> Business</Badge> : <Badge>Retail</Badge>}
@@ -155,7 +155,7 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
   );
 }
 
-type View = 'all' | 'credit' | 'dues' | 'b2b';
+type View = 'all' | 'credit' | 'dues' | 'b2b' | 'inactive' | 'noname';
 
 export function Customers() {
   const toast = useToast();
@@ -173,6 +173,7 @@ export function Customers() {
     setSelId((cur) => keep ?? cur ?? r[0]?.id ?? null);
   }, []);
   useEffect(() => { void reload(); }, [reload]);
+  useRefreshOnFocus(() => { void reload(); });
   useEffect(() => { if (selId) api.getCustomerProfile(selId).then(setProfile); }, [selId, rows]);
 
   useEffect(() => {
@@ -182,12 +183,15 @@ export function Customers() {
   }, []);
 
   const shown = useMemo(() => {
-    const base = rows.filter((r) => (view === 'credit' ? r.creditLimit !== 0 : view === 'dues' ? r.outstanding > 0 : view === 'b2b' ? r.type === 'b2b' : true));
+    const base = rows.filter((r) => view === 'inactive' ? r.active === false : r.active === false ? false : view === 'noname' ? isNoName(r.name) : (view === 'credit' ? r.creditLimit !== 0 : view === 'dues' ? r.outstanding > 0 : view === 'b2b' ? r.type === 'b2b' : true));
     // no cap: every customer is searchable (the table below is virtualised, so thousands of rows stay fast)
-    return fuzzyFilter(base, q, (r) => [r.name, r.id, r.phone.replace(' ', ''), r.business ?? '', r.area], Infinity);
+    const found = fuzzyFilter(base, q, (r) => [r.name, r.id, r.phone.replace(' ', ''), r.business ?? '', r.area], Infinity);
+    // named customers first (A to Z), no-name ones after; while searching, the best match stays first
+    return q.trim() ? found : [...found].sort(compareCustomers);
   }, [rows, q, view]);
 
-  const owing = rows.filter((r) => r.outstanding > 0);
+  const noNameCount = rows.filter((r) => r.active !== false && isNoName(r.name)).length;
+  const owing = rows.filter((r) => r.outstanding > 0 && r.active !== false);
 
   return (
     <>
@@ -197,7 +201,7 @@ export function Customers() {
       />
       <FilterBar trailing={<span><b className="num text-ink">{shown.length.toLocaleString('en-IN')}</b> shown of <b className="num text-ink">{rows.length.toLocaleString('en-IN')}</b> customers</span>}>
         <div className="w-72"><SearchInput placeholder="Search name, phone, code, business or area" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <Segmented<View> value={view} onChange={setView} options={[{ value: 'all', label: 'All' }, { value: 'credit', label: 'Credit' }, { value: 'dues', label: 'With dues' }, { value: 'b2b', label: 'Business' }]} />
+        <Segmented<View> value={view} onChange={setView} options={[{ value: 'all', label: 'All active' }, { value: 'credit', label: 'Credit' }, { value: 'dues', label: 'With dues' }, { value: 'b2b', label: 'Business' }, { value: 'inactive', label: 'Inactive' }, { value: 'noname', label: `No name (needs cleanup) ${noNameCount}` }]} />
       </FilterBar>
       <div className="flex min-h-0 flex-1">
         <DataTable

@@ -5,7 +5,7 @@ import { type Bill, type BillDetail, type CreditNote, type PayMode } from '@goku
 import { printWithToast } from '../printing';
 import { useScanHandler } from '../scanner';
 import { useReceiptConfig } from '../receiptConfig';
-import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useToast, type FKey } from '@gokul/ui';
+import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -42,6 +42,7 @@ export function Sales() {
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BillDetail | null>(null);
   const [version, setVersion] = useState(0);
+  useRefreshOnFocus(() => setVersion((v) => v + 1));
   const [dialog, setDialog] = useState<Dialog>(null);
   const [note, setNote] = useState<CreditNote | null>(null);
   const [notes, setNotes] = useState<CreditNote[]>([]);

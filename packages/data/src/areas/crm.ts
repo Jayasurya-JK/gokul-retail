@@ -79,6 +79,8 @@ export interface CustomerInput {
   address?: string;
   notes?: string;
   creditLimit: Paise;
+  /** Omit to keep what is stored */
+  active?: boolean;
   fatherName?: string;
   dob?: string;
   anniversary?: string;
@@ -431,8 +433,12 @@ export interface LoyaltySettings {
   minRedeem: number;
   /** Points may pay at most this percent of a bill */
   maxPct: number;
-  /** Points lapse when not earned again within this many months (0 = never expire). They come off when "Run expiry" is pressed. */
+  /** Points lapse this many months after they were earned (0 = never expire). Each earning keeps its own date; expiry runs by itself. */
   expiryMonths: number;
+  /** Print "N pts expire dd/mm/yy" on the bill when points lapse within 30 days */
+  printExpiry: boolean;
+  /** The day imported POSBean balances count as earned (yyyy-mm-dd). Changed by the owner in Settings, Loyalty. */
+  goLiveDate: string;
   /** Category ids whose lines earn no points (e.g. Service charges) */
   excludeCategories: string[];
 }
@@ -442,6 +448,8 @@ export interface CustomerWallet {
   storeCredit: Paise;
   creditNotes: { number: string; at: string; balance: Paise }[];
   rules: LoyaltySettings;
+  /** The next points to lapse: how many and on which day (yyyy-mm-dd); null when nothing expires. */
+  nextExpiry: { points: number; on: string } | null;
 }
 /** import = the opening balance brought in from the old software */
 export type PointsKind = 'earn' | 'redeem' | 'reverse' | 'adjust' | 'expire' | 'import';
@@ -466,19 +474,23 @@ export interface PointsOverview {
   pointValue: Paise;
   expiryMonths: number;
   enabled: boolean;
+  /** Points that lapse in the next 30 days, and how many customers hold them */
+  expiring30: { points: number; customers: number };
+  goLiveDate: string;
 }
 export interface PointsQuery {
   q?: string;
-  filter?: 'all' | 'withPoints' | 'zero';
+  filter?: 'all' | 'withPoints' | 'zero' | 'expiring';
   sort?: 'points' | 'name' | 'code' | 'lastEarned' | 'lastRedeemed';
   dir?: 'asc' | 'desc';
   offset?: number;
   limit?: number;
 }
-export interface PointsCustomerRow { id: string; name: string; phone: string; area: string; points: number; lastEarned: string | null; lastRedeemed: string | null }
+export interface PointsCustomerRow { id: string; name: string; phone: string; area: string; points: number; lastEarned: string | null; lastRedeemed: string | null; /** day the oldest points lapse (yyyy-mm-dd) */ expiresOn: string | null }
 export interface PointsPage { rows: PointsCustomerRow[]; /** customers the search matched */ matched: number; /** all customers */ total: number }
 export interface PointsLedgerRow { id: number; at: string; kind: PointsKind; points: number; balanceAfter: number; bill: string | null; note: string; by: string }
-export interface PointsExpiryResult { customers: number; points: number; months: number; done: boolean }
+/** Read-only: customers whose points lapse in the next `days` days (soonest first). */
+export interface PointsExpiring { days: number; customers: number; points: number; rows: { id: string; name: string; phone: string; points: number; expiresOn: string }[] }
 export interface PointsReport {
   from: string; to: string;
   byDay: { date: string; earned: number; redeemed: number; expired: number; adjusted: number }[];
@@ -526,6 +538,8 @@ export interface CrmApi {
   listCustomerRows(): Promise<CustomerRow[]>;
   getCustomerProfile(id: string): Promise<CustomerProfile | null>;
   saveCustomer(input: CustomerInput): Promise<CustomerRow>;
+  /** Switch a customer off (hidden from the POS pickers, refused on new bills) or on again. History stays. */
+  setCustomerActive(customerId: string, active: boolean): Promise<CustomerRow>;
   /** The one credit rule: limit 0 = credit not allowed, above 0 = allowed up to that amount, -1 (NO_CREDIT_LIMIT) = no limit. Needs a manager PIN for a cashier. */
   setCustomerCredit(customerId: string, limit: Paise, managerPin?: string): Promise<CustomerRow>;
   /** Points, store credit (open credit notes) and the loyalty rules for one customer */
@@ -538,8 +552,10 @@ export interface CrmApi {
   listPointsCustomers(query?: PointsQuery): Promise<PointsPage>;
   /** Every earn, redeem, adjust, reverse, expire and import row of one customer, newest first, with the balance after each. */
   getPointsLedger(customerId: string, limit?: number): Promise<PointsLedgerRow[]>;
-  /** Takes off points not earned again within the expiry months. `dryRun` (default) only counts. */
-  runPointsExpiry(dryRun?: boolean): Promise<PointsExpiryResult>;
+  /** Read-only "Expiring soon". Points lapse by themselves on app start and Day open; there is nothing to press. */
+  pointsExpiring(days?: number): Promise<PointsExpiring>;
+  /** Owner only, audited: the day imported points count as earned. Re-dates only the imported lots. */
+  setLoyaltyGoLive(date: string): Promise<{ goLiveDate: string; lots: number }>;
   pointsReport(query?: { from?: string; to?: string }): Promise<PointsReport>;
   /* credit */
   listReceivables(): Promise<ReceivableRow[]>;
@@ -629,7 +645,7 @@ function seedRoles(): RoleDef[] {
 function seedSettings(store: MockStore): SettingsBundle {
   const s = store.settings;
   return {
-    loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100, expiryMonths: 0, excludeCategories: [] },
+    loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100, expiryMonths: 12, printExpiry: true, goLiveDate: '2026-11-07', excludeCategories: [] },
     shop: {
       name: s.shopName, legalName: 'Gokul Oils (Proprietor: Suresh Kumar)', address: '48, Mettupalayam Road, Gandhipuram',
       city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
@@ -746,12 +762,6 @@ export function createCrmMock(store: MockStore): CrmApi {
       pointRows.set(id, rows);
     }
     return rows;
-  };
-  const postPoints = (c: Customer, kind: PointsKind, hundredths: number, note: string) => {
-    const rows = pointsLedgerOf(c.id);
-    const bal = Math.round(c.loyaltyPoints * 100) + hundredths;
-    rows.unshift({ id: ++pointSeq, at: new Date().toISOString(), kind, points: hundredths / 100, balanceAfter: bal / 100, bill: null, note, by: 'Suresh Kumar' });
-    c.loyaltyPoints = bal / 100;
   };
   const lastOf = (id: string, kind: PointsKind): string | null => pointsLedgerOf(id).find((r) => r.kind === kind)?.at ?? null;
   const pointsMatch = (q: { q?: string; filter?: string }): Customer[] => {
@@ -882,7 +892,7 @@ export function createCrmMock(store: MockStore): CrmApi {
       const favourites = [...agg.values()].sort((a, b) => b.amount - a.amount).slice(0, 5);
       return delay({ customer: rowFor(c), favourites, bills: bills.slice(0, 40) });
     },
-    getCustomerWallet: (id) => delay({ points: store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0, pointsValue: Math.round((store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0) * bundle.loyalty.pointValue),  storeCredit: 0, creditNotes: [], rules: bundle.loyalty }),
+    getCustomerWallet: (id) => delay({ points: store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0, pointsValue: Math.round((store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0) * bundle.loyalty.pointValue),  storeCredit: 0, creditNotes: [], rules: bundle.loyalty, nextExpiry: null }),
     listPointsHistory: (id) => delay(pointsLedgerOf(id).slice(0, 100).map((r) => ({ at: r.at, kind: r.kind, points: r.points, note: r.note, by: r.by, bill: r.bill }))),
     getPointsLedger: (id, limit = 500) => delay(pointsLedgerOf(id).slice(0, limit)),
     pointsOverview: () => {
@@ -894,6 +904,7 @@ export function createCrmMock(store: MockStore): CrmApi {
         outstanding, netTotal: outstanding, negativeBalances: 0, negativePoints: 0, liability: Math.round(outstanding * bundle.loyalty.pointValue),
         customersWithPoints: pos.length, customers: store.customers.length, earnedMonth: month('earn'), redeemedMonth: -month('redeem'), expiredMonth: -month('expire'), adjustedMonth: month('adjust'),
         pointValue: bundle.loyalty.pointValue, expiryMonths: bundle.loyalty.expiryMonths, enabled: bundle.loyalty.enabled,
+        expiring30: { points: 0, customers: 0 }, goLiveDate: bundle.loyalty.goLiveDate,
       });
     },
     listPointsCustomers: (q = {}) => {
@@ -902,21 +913,11 @@ export function createCrmMock(store: MockStore): CrmApi {
       const sign = q.dir === 'asc' ? 1 : -1;
       const sorted = [...filtered].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * sign || a.id.localeCompare(b.id); });
       const off = q.offset ?? 0;
-      const rows = sorted.slice(off, off + (q.limit && q.limit > 0 ? q.limit : 100)).map((c) => ({ id: c.id, name: c.name, phone: c.phone, area: c.area, points: c.loyaltyPoints, lastEarned: lastOf(c.id, 'earn'), lastRedeemed: lastOf(c.id, 'redeem') }));
+      const rows = sorted.slice(off, off + (q.limit && q.limit > 0 ? q.limit : 100)).map((c) => ({ id: c.id, name: c.name, phone: c.phone, area: c.area, points: c.loyaltyPoints, lastEarned: lastOf(c.id, 'earn'), lastRedeemed: lastOf(c.id, 'redeem'), expiresOn: null }));
       return delay({ rows, matched: filtered.length, total: store.customers.length });
     },
-    runPointsExpiry: (dryRun = true) => {
-      const months = bundle.loyalty.expiryMonths;
-      if (months <= 0) return Promise.reject(new Error('Points expiry is switched off. Turn it on in Settings, Loyalty.'));
-      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months);
-      let n = 0, tot = 0;
-      for (const c of store.customers) {
-        const recent = pointsLedgerOf(c.id).filter((r) => r.points > 0 && r.kind !== 'expire' && new Date(r.at) >= cutoff).reduce((s, r) => s + Math.round(r.points * 100), 0);
-        const old = Math.round(c.loyaltyPoints * 100) - recent;
-        if (c.loyaltyPoints > 0 && old > 0) { n += 1; tot += old; if (!dryRun) postPoints(c, 'expire', -old, `Expired: not earned in the last ${months} months`); }
-      }
-      return delay({ customers: n, points: tot / 100, months, done: !dryRun });
-    },
+    pointsExpiring: (days = 30) => delay({ days, customers: 0, points: 0, rows: [] }),
+    setLoyaltyGoLive: (date) => { bundle.loyalty.goLiveDate = date; return delay({ goLiveDate: date, lots: 0 }); },
     pointsReport: (q = {}) => {
       const to = q.to ?? dayKey(new Date());
       const from = q.from ?? `${to.slice(0, 8)}01`;
@@ -944,11 +945,18 @@ export function createCrmMock(store: MockStore): CrmApi {
       c.creditLimit = limit;
       return delay(rowFor(c));
     },
+    setCustomerActive: (customerId, active) => {
+      const c = store.customers.find((x) => x.id === customerId);
+      if (!c) return Promise.reject(new Error('Customer not found.'));
+      c.active = active;
+      return delay(rowFor(c));
+    },
     saveCustomer: (input) => {
       const clean = { name: input.name.trim(), phone: input.phone.trim(), area: input.area.trim() };
       let c = input.id ? store.customers.find((x) => x.id === input.id) : undefined;
       if (c) {
         Object.assign(c, clean, { creditLimit: input.creditLimit });
+        if (input.active !== undefined) c.active = input.active;
       } else {
         seq += 1;
         c = { id: `c${seq}`, ...clean, creditLimit: input.creditLimit, outstanding: 0, loyaltyPoints: 0, lastVisit: 'Today' };

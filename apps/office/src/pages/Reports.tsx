@@ -3,7 +3,7 @@ import { BarChart3, ChartNoAxesColumn, FileSpreadsheet, FileText, Printer, Wrenc
 import type { PayMode, ReportParams, ReportResult } from '@gokul/data';
 import {
   Badge, Button, Card, DateRangePicker, EmptyState, FilterBar, Money, PageHeader, Select, dateRangePresets, cn, useToast,
-  type DateRange,
+  type DateRange, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { allReports, reportGroups, type ReportDef } from '../components/reports/catalog';
@@ -103,11 +103,13 @@ export function Reports() {
     mode: def.filters.includes('mode') && mode ? (mode as PayMode) : undefined,
   }), [range, category, cashier, mode, def]);
 
+  const [tick, setTick] = useState(0);
+  useRefreshOnFocus(() => setTick((t) => t + 1));
   useEffect(() => {
     if (def.soon) { setResult(null); return; }
     const n = ++seq.current;
     api.runReport(def.id, params).then((r) => { if (n === seq.current) setResult(r); });
-  }, [def, params]);
+  }, [def, params, tick]);
 
   const act = useCallback((what: string) => toast.show({ tone: 'info', title: `${what} - ${def.name}`, detail: 'Preview only. Exporting is connected when the real database arrives.' }), [toast, def]);
   useEffect(() => {

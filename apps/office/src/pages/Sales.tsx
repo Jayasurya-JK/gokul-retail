@@ -3,7 +3,7 @@ import { Download, Printer, Receipt, Search } from 'lucide-react';
 import { billTitleFor, formatQty, formatRupees, printNumber, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, Tabs, TabPanel,
-  dateRangePresets, useToast, type ColumnDef, type DateRange,
+  dateRangePresets, useToast, type ColumnDef, type DateRange, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { useReceiptConfig } from '../receiptConfig';
@@ -142,6 +142,8 @@ export function Sales() {
   const [opts, setOpts] = useState<SalesFilterOptions>({ counters: [], cashiers: [] });
   const [rows, setRows] = useState<SalesBill[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  useRefreshOnFocus(() => setTick((t) => t + 1));
   const [settings, setSettings] = useState<Settings | null>(null);
 
   useEffect(() => { api.salesFilterOptions().then(setOpts); api.getSettings().then(setSettings); }, []);
@@ -153,7 +155,7 @@ export function Sales() {
       setSelId((cur) => (cur && r.some((b) => b.id === cur) ? cur : r[0]?.id ?? null));
     });
     return () => { live = false; };
-  }, [range, q, counter, cashier, mode, status]);
+  }, [range, q, counter, cashier, mode, status, tick]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

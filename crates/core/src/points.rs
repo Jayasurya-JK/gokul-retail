@@ -1,14 +1,13 @@
 //! Customer Points module: overview, paged customer list, ledger with running balance, manual and bulk adjustment, optional
-//! expiry and the points reports. Everything is on top of `points_ledger` (see `loyalty.rs`): rows are only ever added,
+//! the read-only "expiring soon" view and the points reports. Expiry itself runs by itself (`lots.rs`). Everything is on top of `points_ledger` (see `loyalty.rs`): rows are only ever added,
 //! `customers.loyalty_points` stays equal to the sum of a customer's rows, and amounts are in HUNDREDTHS of a point inside
 //! the database and points with two decimals (`from_hundredths`) in every answer.
 
-use crate::catalog::OFFICE;
-use crate::db::{actor_or, audit, iso};
+use crate::db::iso;
 use crate::error::{invalid, Result};
-use crate::loyalty::{self, fmt_points, from_hundredths};
-use chrono::{Datelike, Local, Months, NaiveDate, TimeZone};
-use rusqlite::{params_from_iter, types::Value as Sql, Connection, TransactionBehavior};
+use crate::loyalty::{self, from_hundredths};
+use chrono::{Datelike, Local, NaiveDate, TimeZone};
+use rusqlite::{params_from_iter, types::Value as Sql, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -61,6 +60,7 @@ fn where_for(q: &PointsQuery) -> (String, Vec<Sql>) {
     match q.filter.as_str() {
         "withPoints" => conds.push("c.loyalty_points > 0".into()),
         "zero" => conds.push("c.loyalty_points = 0".into()),
+        "expiring" => conds.push(format!("EXISTS (SELECT 1 FROM points_lots x WHERE x.customer_id=c.id AND x.remaining>0 AND x.expires_at IS NOT NULL AND x.expires_at<='{}')", iso(Local::now() + chrono::Duration::days(30)))),
         _ => {}
     }
     let w = if conds.is_empty() { "1=1".to_string() } else { conds.join(" AND ") };
@@ -83,6 +83,12 @@ pub fn overview(conn: &Connection) -> Result<Value> {
         )?;
         Ok(if neg { -sum } else { sum })
     };
+    let until = iso(Local::now() + chrono::Duration::days(30));
+    let (exp_pts, exp_n): (i64, i64) = conn.query_row(
+        "SELECT COALESCE(SUM(p),0), COUNT(*) FROM (SELECT SUM(remaining) AS p FROM points_lots WHERE remaining>0 AND expires_at IS NOT NULL AND expires_at<=?1 GROUP BY customer_id)",
+        [&until],
+        |x| Ok((x.get(0)?, x.get(1)?)),
+    )?;
     Ok(json!({
         "outstanding": from_hundredths(out_h),
         "netTotal": from_hundredths(out_h + neg_h),
@@ -98,6 +104,8 @@ pub fn overview(conn: &Connection) -> Result<Value> {
         "pointValue": r.point_value,
         "expiryMonths": r.expiry_months,
         "enabled": r.enabled,
+        "expiring30": { "points": from_hundredths(exp_pts), "customers": exp_n },
+        "goLiveDate": loyalty::rules_json(conn)["goLiveDate"],
     }))
 }
 
@@ -117,7 +125,8 @@ pub fn list_customers(conn: &Connection, q: &PointsQuery) -> Result<Value> {
     let sql = format!(
         "SELECT c.id,c.name,c.phone,c.area,c.loyalty_points,
                 (SELECT MAX(l.at) FROM points_ledger l WHERE l.customer_id=c.id AND l.kind='earn') AS last_earned,
-                (SELECT MAX(l.at) FROM points_ledger l WHERE l.customer_id=c.id AND l.kind='redeem') AS last_redeemed
+                (SELECT MAX(l.at) FROM points_ledger l WHERE l.customer_id=c.id AND l.kind='redeem') AS last_redeemed,
+                (SELECT MIN(x.expires_at) FROM points_lots x WHERE x.customer_id=c.id AND x.remaining>0 AND x.expires_at IS NOT NULL) AS next_expiry
          FROM customers c WHERE {w} ORDER BY {col} {dir}, c.id LIMIT {limit} OFFSET {}",
         q.offset.max(0)
     );
@@ -125,7 +134,8 @@ pub fn list_customers(conn: &Connection, q: &PointsQuery) -> Result<Value> {
     let rows = st
         .query_map(params_from_iter(ps.iter()), |r| {
             Ok(json!({ "id": r.get::<_, String>(0)?, "name": r.get::<_, String>(1)?, "phone": r.get::<_, String>(2)?, "area": r.get::<_, String>(3)?,
-                       "points": from_hundredths(r.get::<_, i64>(4)?), "lastEarned": r.get::<_, Option<String>>(5)?, "lastRedeemed": r.get::<_, Option<String>>(6)? }))
+                       "points": from_hundredths(r.get::<_, i64>(4)?), "lastEarned": r.get::<_, Option<String>>(5)?, "lastRedeemed": r.get::<_, Option<String>>(6)?,
+                       "expiresOn": r.get::<_, Option<String>>(7)?.and_then(|e| crate::db::parse_iso(&e)).map(|d| d.format("%Y-%m-%d").to_string()) }))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(json!({ "rows": rows, "matched": matched, "total": all }))
@@ -182,36 +192,6 @@ pub struct BulkInput {
 /// Refused for every caller, the same as `adjust`.
 pub fn bulk_adjust(_conn: &mut Connection, _i: &BulkInput) -> Result<Value> {
     invalid(POINTS_ONLY_THROUGH_BILLS)
-}
-
-/// Points that lapse under the expiry rule: what a customer holds beyond the points they were given in the last N months
-/// (spending uses the oldest points first). `dry_run` only counts. Needs expiry switched on in Settings.
-pub fn run_expiry(conn: &mut Connection, dry_run: bool) -> Result<Value> {
-    let r = loyalty::rules(conn);
-    if r.expiry_months <= 0 {
-        return invalid("Points expiry is switched off. Turn it on in Settings, Loyalty.");
-    }
-    let cutoff = iso(Local::now().checked_sub_months(Months::new(r.expiry_months as u32)).unwrap_or_else(Local::now));
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let due: Vec<(String, i64)> = {
-        let mut st = tx.prepare(
-            "SELECT c.id, c.loyalty_points - COALESCE((SELECT SUM(l.points) FROM points_ledger l
-                                                        WHERE l.customer_id=c.id AND l.points>0 AND l.kind<>'expire' AND l.at>=?1),0) AS old
-             FROM customers c WHERE c.loyalty_points > 0 ORDER BY c.id",
-        )?;
-        let rows = st.query_map([&cutoff], |x| Ok((x.get::<_, String>(0)?, x.get::<_, i64>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
-        rows.into_iter().filter(|(_, old)| *old > 0).collect()
-    };
-    let total: i64 = due.iter().map(|(_, p)| *p).sum();
-    if !dry_run && !due.is_empty() {
-        let by = actor_or(OFFICE);
-        for (id, p) in &due {
-            loyalty::post(&tx, id, "expire", -p, None, &format!("Expired: not earned in the last {} months", r.expiry_months), &by)?;
-        }
-        audit(&tx, Local::now(), &by, "points_expire", "customers", "points", &format!("{} customers, {} points, older than {} months", due.len(), fmt_points(total), r.expiry_months))?;
-    }
-    tx.commit()?;
-    Ok(json!({ "customers": due.len(), "points": from_hundredths(total), "months": r.expiry_months, "done": !dry_run }))
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

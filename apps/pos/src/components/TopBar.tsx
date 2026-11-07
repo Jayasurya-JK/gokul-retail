@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeftRight, BarChart3, ChevronDown, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, Receipt, ReceiptText, ShieldCheck, ShoppingCart, Undo2, UserRound, Users, Wallet,
@@ -39,6 +39,24 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
   const [keys, setKeys] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  /* The tab strip takes the space left of the fixed right-hand cluster. When the full labels do not fit it switches to
+     icon-only tabs (tooltips keep the names), so nothing ever overlaps or runs off the window. */
+  const navRef = useRef<HTMLElement>(null);
+  const fullWidth = useRef(0);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      if (!compact) fullWidth.current = el.scrollWidth;
+      const tooWide = fullWidth.current > el.clientWidth + 1;
+      if (tooWide !== compact) setCompact(tooWide);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 15000);
@@ -79,7 +97,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     <div className="flex shrink-0 items-center gap-2.5 pr-2">
       <Logo size={30} badge="P" />
       <div className="leading-tight">
-        <div className="text-[13px] font-semibold tracking-tight text-white">{settings?.shopName ?? 'Gokul Oils'}</div>
+        <div className="text-[13px] font-semibold tracking-tight text-white">{settings?.shopName ?? ''}</div>
         <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-chrome-muted">Billing counter</div>
       </div>
     </div>
@@ -102,7 +120,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     <>
       {brand}
       <span className="mx-2 h-6 w-px bg-white/10" />
-      <nav className="flex h-full items-stretch gap-0.5" aria-label="Main menu">
+      <nav ref={navRef} className="flex h-full min-w-0 flex-1 items-stretch gap-0.5 overflow-hidden" aria-label="Main menu">
         {MENU.map((m, i) => {
           const active = (m.match as readonly string[]).includes(pathname);
           const Icon = m.icon;
@@ -111,12 +129,12 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <button
                 onClick={() => nav(m.path)} tabIndex={-1}
                 className={cn(
-                  'relative flex shrink-0 items-center gap-2 whitespace-nowrap px-2.5 text-[13px] font-medium transition-colors min-[1450px]:px-3',
+                  cn('relative flex shrink-0 items-center gap-2 whitespace-nowrap text-[13px] font-medium transition-colors', compact ? 'px-3' : 'px-2.5 min-[1450px]:px-3'),
                   active ? 'text-white' : 'text-chrome-muted hover:bg-white/[0.06] hover:text-white',
                 )}
               >
-                <Icon size={15} className={cn('hidden min-[1450px]:block', active && 'text-yellow')} />
-                {m.label}
+                <Icon size={compact ? 17 : 15} className={cn(compact ? 'block' : 'hidden min-[1450px]:block', active && 'text-yellow')} />
+                {!compact && m.label}
                 {openLines[m.path] > 0 && <span className="num rounded-full bg-yellow px-1.5 text-[10px] font-bold leading-4 text-chrome" title="Items on this bill">{openLines[m.path]}</span>}
                 {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
               </button>
@@ -125,8 +143,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
         })}
       </nav>
 
-      <div className="flex-1" />
-
+      <div className="flex shrink-0 items-center">
       {!BILL_PATHS.includes(pathname) && (
         <Tooltip label="Back to billing" kbd="Esc">
           <button onClick={() => nav('/billing')} tabIndex={-1} aria-label="Back to billing (Esc)" className="ml-3 hidden h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/15 px-2 text-xs font-medium text-white hover:bg-white/10 min-[1450px]:flex">
@@ -141,7 +158,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       >
         <Pause size={13} />
         <span className="num font-semibold">{heldCount}</span><span>held</span>
-        <Kbd tone="chrome">Shift+F6</Kbd>
+        <span className="hidden min-[1500px]:inline"><Kbd tone="chrome">Shift+F6</Kbd></span>
       </button>
 
       <DropMenu
@@ -183,13 +200,15 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
           <div className="g-overlay absolute right-0 top-[calc(100%+6px)] z-[60] w-[248px] overflow-hidden rounded-card border border-line bg-surface text-ink shadow-overlay">
             <div className="border-b border-line bg-surface-2 px-3 py-2.5 text-xs text-muted">
               <div className="flex items-center gap-1.5 font-semibold text-ink"><UserRound size={13} /> {user?.name}</div>
-              <div className="num mt-1">{shift?.counter ?? 'Counter 1'} - shift since {opened ? `${pad(opened.getHours())}:${pad(opened.getMinutes())}` : '--'} ({hrs}h {pad(mins)}m)</div>
+              <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? `${pad(opened.getHours())}:${pad(opened.getMinutes())}` : '--'} ({hrs}h {pad(mins)}m)</div>
             </div>
             <MenuItem icon={<Lock size={15} />} label="Lock counter" kbd="Ctrl+L" onClick={() => go('/lock')} />
             <MenuItem icon={<ArrowLeftRight size={15} />} label="Switch user" onClick={out} />
             <MenuItem icon={<LogOut size={15} />} label="Sign out" onClick={out} danger />
           </div>
         )}
+      </div>
+
       </div>
 
       <ShortcutsSheet open={keys} onClose={() => setKeys(false)} />

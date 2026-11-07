@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HandCoins, Pencil, Phone, Plus, Receipt, Search, ShoppingCart, Star, UserRound, UserPlus } from 'lucide-react';
-import { formatPoints, formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustomerWallet, type CustStatement, type PointsLedgerRow } from '@gokul/data';
-import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useToast, type FKey } from '@gokul/ui';
+import { compareCustomers, isNoName, formatPoints, formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustomerWallet, type CustStatement, type PointsLedgerRow } from '@gokul/data';
+import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useBilling } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -40,6 +40,7 @@ export function Customers() {
   const [collecting, setCollecting] = useState(false);
   const [version, setVersion] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  useRefreshOnFocus(() => setVersion((v) => v + 1));
 
   useEffect(() => {
     let live = true;
@@ -50,7 +51,7 @@ export function Customers() {
   const list = useMemo(() => {
     const t = query.trim().toLowerCase();
     const f = t ? rows.filter((r) => `${r.name} ${r.phone} ${r.area} ${r.business ?? ''}`.toLowerCase().includes(t)) : rows;
-    return [...f].sort((a, b) => (b.outstanding - a.outstanding) || a.name.localeCompare(b.name));
+    return [...f].sort((a, b) => (b.outstanding - a.outstanding) || compareCustomers(a, b));
   }, [rows, query]);
 
   useEffect(() => { setSelId((cur) => (cur && list.some((c) => c.id === cur) ? cur : list[0]?.id ?? null)); }, [list]);
@@ -149,9 +150,9 @@ export function Customers() {
                   className={cn('relative flex h-[60px] cursor-default items-center gap-3 border-b border-line/70 px-4 [content-visibility:auto] [contain-intrinsic-size:auto_60px]', on ? 'bg-primary-soft' : 'hover:bg-surface-2')}
                 >
                   {on && <span className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-muted">{initialsOf(c.name)}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-muted">{isNoName(c.name) ? '#' : initialsOf(c.name)}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-ink">{c.name}{c.business && <span className="ml-1.5 font-normal text-muted">{c.business}</span>}</div>
+                    <div className="truncate text-sm font-semibold text-ink">{isNoName(c.name) ? <><span className="num">{c.phone}</span> <span className="font-normal italic text-muted">No name</span></> : c.name}{c.business && <span className="ml-1.5 font-normal text-muted">{c.business}</span>}</div>
                     <div className="num mt-0.5 truncate text-xs text-muted">{c.phone} - {c.area}</div>
                   </div>
                   {c.outstanding > 0 ? (
@@ -174,7 +175,7 @@ export function Customers() {
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-md font-bold text-primary-fg">{initialsOf(sel.name)}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5">
-                    <h2 className="truncate text-xl font-bold tracking-tight text-ink">{sel.name}</h2>
+                    <h2 className="truncate text-xl font-bold tracking-tight text-ink">{isNoName(sel.name) ? <><span className="num">{sel.phone}</span> <span className="text-md font-normal italic text-muted">No name</span></> : sel.name}</h2>
                     {sel.type === 'b2b' && <Badge tone="info">Business</Badge>}
                     {sel.outstanding > sel.creditLimit && sel.creditLimit > 0 && <Badge tone="danger">Over credit limit</Badge>}
                   </div>
@@ -263,7 +264,7 @@ export function Customers() {
               </div>
 
               <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2 px-6 py-2.5">
-                <Button variant="primary" size="lg" icon={<ShoppingCart size={16} />} kbd="Enter" onClick={newBill}>New bill for {sel.name.split(' ')[0]}</Button>
+                <Button variant="primary" size="lg" icon={<ShoppingCart size={16} />} kbd="Enter" onClick={newBill}>New bill for {isNoName(sel.name) ? sel.phone : sel.name.split(' ')[0]}</Button>
                 <Button size="lg" icon={<HandCoins size={16} />} kbd="F4" disabled={sel.outstanding <= 0} onClick={() => setCollecting(true)}>Collect payment</Button>
               </div>
             </>
@@ -321,6 +322,7 @@ function PointsCard({ customerId, version }: { customerId: string; version: numb
         <div><div className="text-xs text-muted">Worth at the counter</div><div className="num text-base font-semibold text-ink">{wallet ? formatRupees(wallet.pointsValue) : '-'}</div></div>
         {wallet && wallet.rules.enabled && <div className="ml-auto text-right text-xs text-subtle">Needs {wallet.rules.minRedeem} points to use<br />Earns 1 point per {formatRupees(wallet.rules.rupeesPerPoint * 100, { decimals: false })}</div>}
       </div>
+      {wallet?.nextExpiry && <div className="mt-3 rounded-control bg-warning-soft px-3 py-1.5 text-xs text-warning"><b className="num">{formatPoints(wallet.nextExpiry.points)}</b> points expire on <b>{new Date(`${wallet.nextExpiry.on}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b></div>}
       <div className="mt-3 overflow-hidden rounded-control border border-line">
         {rows === null && <div className="px-3 py-3 text-sm text-muted">Loading</div>}
         {rows?.length === 0 && <div className="px-3 py-3 text-sm text-subtle">No points yet. They are earned on every bill.</div>}
@@ -399,7 +401,7 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
   };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()} width={540} title={existing ? 'Edit customer' : 'New customer'} description={existing ? existing.name : 'Saved on this computer'}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} width={540} title={existing ? 'Edit customer' : 'New customer'} description={existing ? existing.name : 'Added to your customer list'}>
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <Input data-autofocus autoFocus label="Name" value={f.name} onChange={set('name')} error={err.name} placeholder="Customer or shop name" />

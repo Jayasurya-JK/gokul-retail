@@ -30,8 +30,14 @@ export interface CoreApi {
   findItemByCode(codeOrBarcode: string): Promise<Item | null>;
   searchItems(query: string, limit?: number): Promise<Item[]>;
 
+  /** Active customers only. The POS pickers use searchCustomers instead, this list is for small jobs. */
   listCustomers(): Promise<Customer[]>;
-  searchCustomers(query: string, limit?: number): Promise<Customer[]>;
+  /** Searches ALL active customers by name, mobile, code and area (every word must match). Empty query = recent customers. `offset` pages. */
+  searchCustomers(query: string, limit?: number, offset?: number): Promise<Customer[]>;
+  /** One customer by id, active or not (null when it does not exist). */
+  getCustomer(id: string): Promise<Customer | null>;
+  /** How many active customers can be searched. */
+  countCustomers(): Promise<number>;
 
   listBills(filter?: BillFilter): Promise<Bill[]>;
   getBill(id: string): Promise<Bill | null>;

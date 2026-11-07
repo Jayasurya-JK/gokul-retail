@@ -25,19 +25,22 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   error?: ReactNode;
   icon?: ReactNode;
   kbd?: string;
+  /** Short text inside the box on the left (for example the rupee sign), centred on the box, same size as the value */
+  leading?: string;
   size?: 'sm' | 'md' | 'lg';
 }
 const inputSizes = { sm: 'h-7 text-sm', md: 'h-8 text-sm', lg: 'h-11 text-md' };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, icon, kbd, size = 'md', className, ...rest }, ref,
+  { label, hint, error, icon, kbd, leading, size = 'md', className, ...rest }, ref,
 ) {
   const control = (
     <div className="relative flex items-center">
       {icon && <span className="pointer-events-none absolute left-2.5 text-subtle">{icon}</span>}
+      {leading && !icon && <span className={cn('pointer-events-none absolute left-2.5 flex h-full items-center leading-none text-subtle', size === 'lg' ? 'text-md' : 'text-sm')}>{leading}</span>}
       <input
         ref={ref}
-        className={cn(fieldBase, inputSizes[size], icon ? 'pl-8' : 'px-2.5', kbd ? 'pr-12' : icon ? 'pr-2.5' : '', !!error && 'border-danger focus:border-danger focus:ring-danger/25', className)}
+        className={cn(fieldBase, inputSizes[size], icon ? 'pl-8' : leading ? 'pl-7 pr-2.5' : 'px-2.5', kbd ? 'pr-12' : icon ? 'pr-2.5' : '', !!error && 'border-danger focus:border-danger focus:ring-danger/25', className)}
         {...rest}
       />
       {kbd && <span className="pointer-events-none absolute right-2"><Kbd>{kbd}</Kbd></span>}
@@ -67,7 +70,8 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
       inputMode="decimal"
       autoComplete="off"
       value={value}
-      className={cn('text-right num', prefix && 'pl-7', className)}
+      leading={prefix}
+      className={cn('text-right num', className)}
       onChange={(e) => {
         const raw = e.target.value.replace(/[^\d.]/g, '');
         const parts = raw.split('.');
@@ -77,13 +81,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
       {...rest}
     />
   );
-  if (!prefix) return input;
-  return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-sm text-subtle">{prefix}</span>
-      {input}
-    </div>
-  );
+  return input;
 });
 
 export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {

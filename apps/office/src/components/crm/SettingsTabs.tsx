@@ -5,7 +5,7 @@ import { LABEL_PRESETS, type HardwareSettings, type LabelPresetId } from '@gokul
 import type { Category } from '@gokul/data';
 import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Checkbox, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
-import { api } from '../../store';
+import { api, useSession } from '../../store';
 import { BillFormatPreview } from './BillFormatPreview';
 import { ago, fmtDateTime, Segmented } from './common';
 
@@ -529,6 +529,20 @@ export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySet
   const up = <K extends keyof LoyaltySettings>(k: K, val: LoyaltySettings[K]) => set({ ...v, [k]: val });
   const num = (x: string, min: number, max: number) => Math.min(max, Math.max(min, Number(x || min)));
   const nav = useNavigate();
+  const toast = useToast();
+  const isOwner = useSession((s) => s.user?.role) === 'owner';
+  const [goLive, setGoLive] = useState(v.goLiveDate);
+  const [savedGoLive, setSavedGoLive] = useState(v.goLiveDate);
+  const [savingGoLive, setSavingGoLive] = useState(false);
+  const changeGoLive = async () => {
+    setSavingGoLive(true);
+    try {
+      await api.setLoyaltyGoLive(goLive);
+      setSavedGoLive(goLive); up('goLiveDate', goLive);
+      toast.show({ tone: 'success', title: 'Go-live date changed', detail: 'Imported points now count as earned on that day.' });
+    } catch (e) { toast.show({ tone: 'error', title: 'Go-live date not changed', detail: e instanceof Error ? e.message : undefined }); }
+    setSavingGoLive(false);
+  };
   const [cats, setCats] = useState<Category[]>([]);
   useEffect(() => { let live = true; api.listCategories().then((c) => live && setCats([...c])); return () => { live = false; }; }, []);
   return (
@@ -551,11 +565,20 @@ export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySet
         </Row>
       </Card>
       <Card title="Points expiry">
-        <Row title="Points expire" hint="Off by default. When on, points a customer has not earned again within the months below can be taken off.">
+        <Row title="Points expire" hint="On by default. Each earning expires this many months after it was earned, and points used are taken from the oldest first. Expiry runs by itself when the app starts and when the day opens.">
           <Switch checked={v.expiryMonths > 0} onCheckedChange={(x) => up('expiryMonths', x ? 12 : 0)} />
         </Row>
-        <Row title="Expire after (months)" hint="Nothing is removed automatically: press Run expiry on the Loyalty points page, which shows what would lapse first.">
+        <Row title="Expire after (months)" hint="Applies to points earned from now on. Points already earned keep their own expiry date.">
           <div className="w-28"><NumberInput value={String(v.expiryMonths || '')} decimals={0} size="sm" disabled={v.expiryMonths === 0} onValueChange={(x) => up('expiryMonths', num(x, 1, 120))} /></div>
+        </Row>
+        <Row title="Print expiry on the bill" hint="Adds a line such as 12.40 pts expire 07/11/27 when a customer's points lapse within 30 days.">
+          <Switch checked={v.printExpiry} onCheckedChange={(x) => up('printExpiry', x)} />
+        </Row>
+        <Row title="Go-live date for imported points" hint={isOwner ? 'The day the POSBean balances count as earned; they expire one year after it. Changing it moves only the imported points. Saved at once and recorded in the audit log.' : 'Only the owner can change this date.'}>
+          <div className="flex items-center gap-2">
+            <input type="date" value={goLive} max={new Date().toISOString().slice(0, 10)} disabled={!isOwner} onChange={(e) => e.target.value && setGoLive(e.target.value)} aria-label="Go-live date for imported points" className="num h-8 w-[136px] rounded-control border border-line bg-surface px-2 text-sm text-ink outline-none focus:border-primary disabled:opacity-60" />
+            <Button size="sm" disabled={!isOwner || savingGoLive || goLive === savedGoLive || !goLive} onClick={() => void changeGoLive()}>Change</Button>
+          </div>
         </Row>
       </Card>
       <Card title="Not earned on these categories">
@@ -572,7 +595,7 @@ export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySet
       <Card title="Customer points">
         <p className="text-sm text-muted">See who holds points, the full ledger, expiry and reports.</p>
         <Button className="mt-3" icon={<Star size={14} />} onClick={() => nav('/loyalty-points')}>Open Loyalty points</Button>
-        <p className="mt-2 text-xs text-subtle">Only the owner can change these settings. Points change only through bills; expiry is the one manual step.</p>
+        <p className="mt-2 text-xs text-subtle">Only the owner can change these settings. Points change only through bills.</p>
       </Card>
     </div>
   );

@@ -7,7 +7,7 @@ import {
 } from '@gokul/data';
 import { printWithToast } from '../printing';
 import { beepError, useScanHandler } from '../scanner';
-import { Badge, Button, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
+import { Badge, Button, Kbd, ManagerPinDialog, Money, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -86,11 +86,13 @@ export function Returns() {
     requestAnimationFrame(() => areaRef.current?.focus());
   }, []);
 
+  const [focusTick, setFocusTick] = useState(0);
+  useRefreshOnFocus(() => setFocusTick((t) => t + 1), { f5: false });
   useEffect(() => {
     const today = new Date();
     const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     void api.listBillsOn({ date: key }).then((r) => setRecent(r.filter((b) => b.status !== 'cancelled').slice(0, 7)));
-  }, [made]);
+  }, [made, focusTick]);
 
   const prefill = (loc.state as { billNumber?: string } | null)?.billNumber;
   useEffect(() => { if (prefill) void load(prefill); }, [prefill, load]);

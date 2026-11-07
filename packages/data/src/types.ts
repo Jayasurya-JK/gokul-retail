@@ -34,6 +34,9 @@ export interface Item {
   cost: Paise;
   /** Optional wholesale price per unit, GST inclusive: used when a bill is switched to wholesale mode */
   wholesalePrice?: Paise;
+  /** Default supplier (from the POSBean link or the item editor) */
+  supplierId?: string;
+  supplier?: string;
   stock: Milli;
   reorderLevel: Milli;
   active: boolean;
@@ -48,6 +51,8 @@ export interface Customer {
   outstanding: Paise;
   loyaltyPoints: number;
   lastVisit: string;
+  /** False = switched off: not offered at the counter, cannot go on a new bill. Missing means active. */
+  active?: boolean;
 }
 
 /** credit_note = store credit (a credit note spent in parts); points = loyalty points redeemed */

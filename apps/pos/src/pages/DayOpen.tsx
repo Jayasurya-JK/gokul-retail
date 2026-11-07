@@ -75,7 +75,7 @@ export function DayOpen() {
 
           <div className="mx-4 divide-y divide-line rounded-xl border border-line text-base">
             <Info k="Date" v={today} />
-            <Info k="Counter" v={status?.shift?.counter ?? 'Counter 1'} />
+            <Info k="Counter" v={status?.shift?.counter ?? '-'} />
             <Info k="Cashier" v={user?.name ?? ''} />
           </div>
 

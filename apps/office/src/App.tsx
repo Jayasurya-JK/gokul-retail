@@ -63,6 +63,8 @@ function Shell() {
   const signOut = useSession((s) => s.signOut);
   const loc = useLocation();
   const navigate = useNavigate();
+  const [shop, setShop] = useState<{ shopName: string; counter: string } | null>(null);
+  useEffect(() => { if (user) api.getSettings().then(setShop).catch(() => undefined); }, [user, loc.pathname]);
   if (!user) return <Navigate to="/login" replace />;
   return (
     <OfficeLayout
@@ -70,7 +72,7 @@ function Shell() {
       user={{ name: user.name, role: user.role, initials: user.initials }}
       onLogout={() => { signOut(); navigate('/login'); }}
       statusLeft={<><span className="flex items-center gap-1.5"><StatusDot tone="success" /> Database connected</span><BackupStatusText /></>}
-      statusRight={<span>Gokul Oils, Counter 1 online</span>}
+      statusRight={<span>{shop ? `${shop.shopName} - ${shop.counter}` : ''}</span>}
     >
       <Routes>
         <Route path="/" element={<Dashboard />} />

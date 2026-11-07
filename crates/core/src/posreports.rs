@@ -185,7 +185,8 @@ pub fn stock_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
     let text = q.query.clone().unwrap_or_default().trim().to_lowercase();
     let mut st = conn.prepare(
         "SELECT i.id,COALESCE(b.barcode,''),i.code,i.name,c.name,i.brand,i.mrp,i.cost,i.price,i.stock,i.unit,i.gst_rate,
-                COALESCE((SELECT p.supplier_name FROM purchase_lines pl JOIN purchases p ON p.id=pl.purchase_id WHERE pl.item_id=i.id ORDER BY p.id DESC LIMIT 1),'')
+                i.reorder_level,
+                COALESCE((SELECT s.name FROM suppliers s WHERE s.id=i.supplier_id),(SELECT p.supplier_name FROM purchase_lines pl JOIN purchases p ON p.id=pl.purchase_id WHERE pl.item_id=i.id ORDER BY p.id DESC LIMIT 1),'')
          FROM items i JOIN categories c ON c.id=i.category_id LEFT JOIN barcodes b ON b.item_id=i.id AND b.is_primary=1
          WHERE i.kind='item' AND i.service=0 AND i.active=1 ORDER BY i.name COLLATE NOCASE",
     )?;
@@ -194,7 +195,7 @@ pub fn stock_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
     let mut rs = st.query([])?;
     while let Some(r) = rs.next()? {
         let (barcode, code, name, cat, brand, supplier): (String, String, String, String, String, String) =
-            (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(12)?);
+            (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(13)?);
         if !text.is_empty() {
             let hay = format!("{barcode} {code} {name} {cat} {brand} {supplier}").to_lowercase();
             if !text.split_whitespace().all(|w| hay.contains(w)) {
@@ -214,7 +215,7 @@ pub fn stock_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
         rows.push(json!({
             "id": r.get::<_, String>(0)?, "barcode": barcode, "code": code, "name": name, "category": cat, "brand": brand,
             "mrp": mrp, "cost": cost, "profitPct": pct, "profit": profit, "price": price, "qty": stock, "unit": r.get::<_, String>(10)?,
-            "costTotal": cost_total, "profitTotal": profit_total, "salesTotal": sales_total, "supplier": supplier,
+            "costTotal": cost_total, "profitTotal": profit_total, "salesTotal": sales_total, "supplier": supplier, "reorderLevel": r.get::<_, i64>(12)?,
         }));
     }
     Ok(json!({ "rows": rows, "totals": { "items": rows.len(), "costTotal": t_cost, "profitTotal": t_profit, "salesTotal": t_sales } }))

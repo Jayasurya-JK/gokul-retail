@@ -1,7 +1,7 @@
 /* Desktop-app base: fills the window, no page scroll, native-feeling chrome. */
 html, body, #root { height: 100%; width: 100%; margin: 0; overflow: hidden; }
 body {
-  font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Gokul Rupee', 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
   font-size: 14px; line-height: 1.4;
   font-feature-settings: 'tnum' 1, 'cv11' 1, 'ss03' 1;
   background: rgb(var(--bg)); color: rgb(var(--ink));

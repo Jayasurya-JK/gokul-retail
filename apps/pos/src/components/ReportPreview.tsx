@@ -34,7 +34,7 @@ export function ReportPreview({ data, settings }: { data: ReportData; settings: 
   return (
     <div className="mx-auto w-[330px] rounded-sm bg-white px-4 py-5 font-mono text-[12.5px] leading-[1.5] text-black shadow-pop ring-1 ring-line">
       <div className="text-center">
-        <div className="text-[15px] font-bold uppercase tracking-wide">{settings?.shopName ?? 'Gokul Oils'}</div>
+        <div className="text-[15px] font-bold uppercase tracking-wide">{settings?.shopName ?? ''}</div>
         <div>{settings?.address}</div>
         <div>GSTIN {settings?.gstin}</div>
         <div>Ph {settings?.phone}</div>

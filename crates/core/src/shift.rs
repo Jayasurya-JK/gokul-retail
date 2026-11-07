@@ -78,6 +78,7 @@ pub fn open_day(conn: &mut Connection, user_id: &str, counts: &DenomCounts) -> R
     let id = tx.last_insert_rowid();
     audit(&tx, now, &user, "open_day", "shift", &id.to_string(), &format!("opening cash {opening} paise"))?;
     tx.commit()?;
+    crate::lots::expire_quietly(conn); // points past their expiry date lapse when the day opens
     Ok(Shift { id: format!("sh-{id}"), user_id: user_id.into(), counter: settings.counter, opened_at: iso(now), opening_cash: opening })
 }
 

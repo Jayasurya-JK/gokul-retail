@@ -109,7 +109,7 @@ pub fn sales_filter_options(conn: &Connection) -> Result<Value> {
 // Customers
 // =====================================================================
 
-const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes,c.father_name,c.dob,c.anniversary,c.pan,c.locality,c.route,c.credit_days,c.opening_balance";
+const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes,c.father_name,c.dob,c.anniversary,c.pan,c.locality,c.route,c.credit_days,c.opening_balance,c.active";
 
 type Spend = (i64, i64, Option<String>);
 
@@ -144,6 +144,8 @@ fn customer_row(r: &rusqlite::Row, now: chrono::DateTime<Local>, spend: &HashMap
     }
     m.insert("creditDays".into(), json!(r.get::<_, i64>(21)?));
     m.insert("openingBalance".into(), json!(r.get::<_, i64>(22)?));
+    m.insert("active".into(), json!(r.get::<_, i64>(23)? != 0));
+    m.insert("noName".into(), json!(is_no_name(&r.get::<_, String>(1)?)));
     m.insert("totalSpend".into(), json!(total));
     m.insert("visits".into(), json!(visits));
     m.insert("avgBill".into(), json!(if visits > 0 { round_div(total, visits) } else { 0 }));
@@ -219,6 +221,9 @@ pub struct CustomerInput {
     pub address: Option<String>,
     #[serde(default)]
     pub credit_limit: i64,
+    /// Inactive customers are hidden from the POS pickers and cannot be put on a new bill. `None` keeps what is stored.
+    #[serde(default)]
+    pub active: Option<bool>,
     #[serde(default)]
     pub notes: Option<String>,
     // Customer Profile (POS) fields
@@ -235,9 +240,9 @@ pub struct CustomerInput {
     #[serde(default)]
     pub route: Option<String>,
     #[serde(default)]
-    pub credit_days: i64,
+    pub credit_days: Option<i64>,
     #[serde(default)]
-    pub opening_balance: i64,
+    pub opening_balance: Option<i64>,
 }
 
 /// The one credit rule: 0 = credit not allowed, positive = credit up to that amount (paise), -1 = no limit (explicit).
@@ -273,7 +278,7 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
     let email = i.email.clone().unwrap_or_default().trim().to_string();
     let address = i.address.clone().unwrap_or_default().trim().to_string();
     let notes = i.notes.clone().unwrap_or_default().trim().to_string();
-    if i.credit_days < 0 || i.opening_balance < 0 {
+    if i.credit_days.unwrap_or(0) < 0 || i.opening_balance.unwrap_or(0) < 0 {
         return invalid("Credit days and opening balance cannot be negative.");
     }
     let t = |o: &Option<String>| o.clone().unwrap_or_default().trim().to_string();
@@ -286,21 +291,30 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
     if !pan.is_empty() && !(pan.len() == 10 && pan.chars().all(|c| c.is_ascii_alphanumeric())) {
         return invalid("PAN looks wrong. It has 10 letters and digits, e.g. ABCDE1234F.");
     }
+    let keep = |sent: &Option<String>, v: &String| sent.as_ref().map(|_| v.clone());
     let now = Local::now();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let id = match &i.id {
         Some(id) => {
             let n = tx.execute(
-                "UPDATE customers SET name=?1,phone=?2,area=?3,credit_limit=?4,type=?5,business=?6,gstin=?7,email=?8,address=?9,notes=?10 WHERE id=?11",
-                params![name, i.phone.trim(), i.area.trim(), i.credit_limit, if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes, id],
+                "UPDATE customers SET name=?1,phone=?2,area=?3,credit_limit=?4,type=?5,business=?6,
+                   gstin=COALESCE(?7,gstin),email=COALESCE(?8,email),address=COALESCE(?9,address),notes=COALESCE(?10,notes) WHERE id=?11",
+                params![name, i.phone.trim(), i.area.trim(), i.credit_limit, if b2b { "b2b" } else { "retail" }, business,
+                        if b2b { keep(&i.gstin, &gstin) } else { Some(String::new()) }, keep(&i.email, &email), keep(&i.address, &address), keep(&i.notes, &notes), id],
             )?;
             if n == 0 {
                 return invalid("Customer not found.");
             }
+            // A field the screen did not send keeps what is stored (the Office sheet has no father name, notes, POSBean opening balance ...).
             tx.execute(
-                "UPDATE customers SET father_name=?1,dob=?2,anniversary=?3,pan=?4,locality=?5,route=?6,credit_days=?7,opening_balance=?8 WHERE id=?9",
-                params![father, dob, anniv, pan, locality, route, i.credit_days, i.opening_balance, id],
+                "UPDATE customers SET father_name=COALESCE(?1,father_name),dob=COALESCE(?2,dob),anniversary=COALESCE(?3,anniversary),pan=COALESCE(?4,pan),
+                   locality=COALESCE(?5,locality),route=COALESCE(?6,route),credit_days=COALESCE(?7,credit_days),opening_balance=COALESCE(?8,opening_balance) WHERE id=?9",
+                params![keep(&i.father_name, &father), keep(&i.dob, &dob), keep(&i.anniversary, &anniv), keep(&i.pan, &pan), keep(&i.locality, &locality), keep(&i.route, &route),
+                        i.credit_days, i.opening_balance, id],
             )?;
+            if let Some(a) = i.active {
+                tx.execute("UPDATE customers SET active=?1 WHERE id=?2", params![a as i64, id])?;
+            }
             audit(&tx, now, OFFICE, "update", "customer", id, name)?;
             id.clone()
         }
@@ -313,13 +327,27 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
             )?;
             tx.execute(
                 "UPDATE customers SET father_name=?1,dob=?2,anniversary=?3,pan=?4,locality=?5,route=?6,credit_days=?7,opening_balance=?8 WHERE id=?9",
-                params![father, dob, anniv, pan, locality, route, i.credit_days, i.opening_balance, id],
+                params![father, dob, anniv, pan, locality, route, i.credit_days.unwrap_or(0), i.opening_balance.unwrap_or(0), id],
             )?;
             audit(&tx, now, OFFICE, "create", "customer", &id, name)?;
             id
         }
     };
     let row = one_customer(&tx, &id)?.ok_or_else(|| db::internal("Customer vanished"))?;
+    tx.commit()?;
+    Ok(row)
+}
+
+/// Switch a customer on or off for the counter. History, balance and points stay; the POS stops offering the customer.
+pub fn set_customer_active(conn: &mut Connection, id: &str, active: bool) -> Result<Value> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let name: String = tx
+        .query_row("SELECT name FROM customers WHERE id=?1", [id], |r| r.get(0))
+        .optional()?
+        .ok_or_else(|| crate::error::ApiError::Invalid("Customer not found.".into()))?;
+    tx.execute("UPDATE customers SET active=?1 WHERE id=?2", params![active as i64, id])?;
+    audit(&tx, Local::now(), OFFICE, if active { "activate" } else { "deactivate" }, "customer", id, &name)?;
+    let row = one_customer(&tx, id)?.ok_or_else(|| db::internal("Customer vanished"))?;
     tx.commit()?;
     Ok(row)
 }
@@ -1032,4 +1060,13 @@ pub fn restore_backup(conn: &Connection, id: &str) -> Result<Value> {
     }
     audit(conn, Local::now(), OFFICE, "restore_staged", "database", &path, "")?;
     Ok(json!({ "ok": true, "message": "Backup checked. Close Gokul POS and Gokul Office, then open one again to finish restoring." }))
+}
+
+/// A stored name that is not a name ("0", ".", "-", empty, "none"). Same rule as `NO_NAME_SQL` and the TypeScript `isNoName`.
+pub fn is_no_name(name: &str) -> bool {
+    let t = name.trim().to_lowercase();
+    if t.is_empty() || ["none", "null", "nil", "na", "n/a", "no name", "noname", "unknown", "customer"].contains(&t.as_str()) {
+        return true;
+    }
+    !t.chars().any(|c| !(c.is_ascii() && !c.is_ascii_alphabetic()) )
 }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Barcode, Check, Eye, EyeOff, Package, Plus, Search, X } from 'lucide-react';
 import { formatQty, fuzzyFilter, type Category, type Item } from '@gokul/data';
 import {
-  Badge, Button, Checkbox, DataTable, EmptyState, FilterBar, Input, Kbd, Money, PageHeader, Select, Sheet, useToast, type ColumnDef,
+  Badge, Button, Checkbox, DataTable, EmptyState, FilterBar, Input, Kbd, Money, PageHeader, Select, Sheet, useToast, type ColumnDef, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { ItemForm } from '../components/catalog/ItemForm';
@@ -36,6 +36,7 @@ export function Items() {
     return x;
   }, []);
   useEffect(() => { void reload().then((x) => setSelId((s) => s ?? x[0]?.id ?? null)); }, [reload]);
+  useRefreshOnFocus(() => { void reload(); });
 
   const rows = useMemo(() => {
     const base = items.filter((i) =>

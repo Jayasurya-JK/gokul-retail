@@ -32,6 +32,8 @@ export interface ItemInput {
   cost: Paise;
   /** Optional wholesale price (GST inclusive); leave empty for none */
   wholesalePrice?: Paise;
+  /** Default supplier id; empty string clears it, omit to keep */
+  supplierId?: string;
   reorderLevel: Milli;
   active: boolean;
 }

@@ -1,3 +1,14 @@
+/* The rupee sign. Inter's latin-ext file holds the real U+20B9 glyph at every weight; this face pins it to that one character so
+   the sign always matches the digits (never a thin system fallback) and is loaded before first paint (see main.tsx). Offline: bundled. */
+@font-face {
+  font-family: 'Gokul Rupee';
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 900;
+  src: url('../../../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+20B9;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

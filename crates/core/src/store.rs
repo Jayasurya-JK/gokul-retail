@@ -8,7 +8,6 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use argon2::{Algorithm, Argon2, Params, Version};
 use chrono::Local;
 use rusqlite::{params, Connection, OptionalExtension, Row};
-use std::collections::HashMap;
 
 // ---------- PINs ----------
 
@@ -173,7 +172,8 @@ pub fn list_categories(conn: &Connection) -> Result<Vec<Category>> {
 }
 
 pub(crate) const ITEM_SELECT: &str = "SELECT i.id,i.code,COALESCE(b.barcode,''),i.name,i.name_ta,i.category_id,c.name,i.brand,i.unit,i.loose,i.pack_size,
-    i.hsn,i.gst_rate,i.mrp,i.price,i.cost,i.stock,i.reorder_level,i.active,i.shelf_life,i.shelf_life_unit,i.wholesale_price
+    i.hsn,i.gst_rate,i.mrp,i.price,i.cost,i.stock,i.reorder_level,i.active,i.shelf_life,i.shelf_life_unit,i.wholesale_price,
+    i.supplier_id,COALESCE((SELECT s.name FROM suppliers s WHERE s.id=i.supplier_id),'')
     FROM items i JOIN categories c ON c.id=i.category_id LEFT JOIN barcodes b ON b.item_id=i.id AND b.is_primary=1";
 
 pub(crate) fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
@@ -200,6 +200,8 @@ pub(crate) fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
         shelf_life: r.get(19)?,
         shelf_life_unit: r.get(20)?,
         wholesale_price: r.get(21)?,
+        supplier_id: r.get(22)?,
+        supplier: r.get(23)?,
     })
 }
 
@@ -276,24 +278,72 @@ fn customer_from_row(r: &Row, now: chrono::DateTime<Local>) -> rusqlite::Result<
 
 const CUSTOMER_SELECT: &str = "SELECT id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at FROM customers";
 
+/// Every ACTIVE customer (inactive ones are hidden from the counter; Office lists them through `listCustomerRows`).
 pub fn list_customers(conn: &Connection) -> Result<Vec<Customer>> {
     let now = Local::now();
-    let mut st = conn.prepare_cached(&format!("{CUSTOMER_SELECT} ORDER BY rowid"))?;
+    let mut st = conn.prepare_cached(&format!("{CUSTOMER_SELECT} WHERE active=1 ORDER BY rowid"))?;
     let v = st.query_map([], |r| customer_from_row(r, now))?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
 }
 
-pub fn search_customers(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Customer>> {
+/// One customer by id (active or not), so a held bill can still show who it was for.
+pub fn get_customer(conn: &Connection, id: &str) -> Result<Option<Customer>> {
     let now = Local::now();
-    let all = list_customers(conn)?;
-    let rows: Vec<(String, [String; 4])> = all
-        .iter()
-        .map(|c| (c.id.clone(), [c.name.clone(), c.phone.replacen(' ', "", 1), String::new(), String::new()]))
-        .collect();
-    let ids = fuzzy_pick(&rows, query, limit);
-    let by_id: HashMap<&str, &Customer> = all.iter().map(|c| (c.id.as_str(), c)).collect();
-    let _ = now;
-    Ok(ids.iter().filter_map(|id| by_id.get(id.as_str()).map(|c| (*c).clone())).collect())
+    Ok(conn.query_row(&format!("{CUSTOMER_SELECT} WHERE id=?1"), [id], |r| customer_from_row(r, now)).optional()?)
+}
+
+/// How many active customers the counter can search.
+pub fn count_customers(conn: &Connection) -> Result<i64> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM customers WHERE active=1", [], |r| r.get(0))?)
+}
+
+/// SQL for "this name is not a name": empty, only digits/punctuation, or a placeholder word. Display and sort only.
+const NO_NAME_SQL: &str = "(TRIM(name)='' OR LOWER(TRIM(name)) IN ('none','null','nil','na','n/a','no name','noname','unknown','customer') OR NOT (name GLOB '*[^ -@[-`{-~]*'))";
+
+fn like_escape(s: &str) -> String {
+    s.replace('!', "!!").replace('%', "!%").replace('_', "!_")
+}
+
+/// Search ALL active customers in SQL: every word must appear in the name, mobile number (spaces ignored), code or area.
+/// Best first (exact code or mobile, then name starts with, then mobile starts with, then anywhere). An empty query gives
+/// the recent customers (latest visit first). `offset` pages through the results.
+pub fn search_customers(conn: &Connection, query: &str, limit: usize, offset: usize) -> Result<Vec<Customer>> {
+    let now = Local::now();
+    let limit = limit.clamp(1, 500) as i64;
+    let offset = offset as i64;
+    let words: Vec<String> = query.split_whitespace().take(5).map(|w| like_escape(&w.to_lowercase())).collect();
+    if words.is_empty() {
+        let mut st = conn.prepare_cached(&format!(
+            "{CUSTOMER_SELECT} WHERE active=1 ORDER BY (last_visit_at IS NULL), last_visit_at DESC, {NO_NAME_SQL}, name COLLATE NOCASE, rowid LIMIT ?1 OFFSET ?2"
+        ))?;
+        return Ok(st.query_map(params![limit, offset], |r| customer_from_row(r, now))?.collect::<rusqlite::Result<Vec<_>>>()?);
+    }
+    let mut conds = String::new();
+    for i in 0..words.len() {
+        conds.push_str(&format!(
+            " AND (LOWER(name) LIKE ?{n} ESCAPE '!' OR REPLACE(phone,' ','') LIKE ?{n} ESCAPE '!' OR LOWER(id) LIKE ?{n} ESCAPE '!' OR LOWER(area) LIKE ?{n} ESCAPE '!')",
+            n = i + 3
+        ));
+    }
+    let q = query.trim().to_lowercase();
+    let qph: String = q.split_whitespace().collect();
+    let sql = format!(
+        "{CUSTOMER_SELECT} WHERE active=1{conds}
+         ORDER BY CASE WHEN LOWER(id)=?1 OR REPLACE(phone,' ','')=?2 THEN 0
+                       WHEN LOWER(name)=?1 THEN 1
+                       WHEN LOWER(name) LIKE ?{p} ESCAPE '!' THEN 2
+                       WHEN REPLACE(phone,' ','') LIKE ?{p} ESCAPE '!' OR LOWER(id) LIKE ?{p} ESCAPE '!' THEN 3
+                       ELSE 4 END,
+                  {NO_NAME_SQL}, (last_visit_at IS NULL), last_visit_at DESC, name COLLATE NOCASE, rowid
+         LIMIT {limit} OFFSET {offset}",
+        p = words.len() + 3
+    );
+    let mut args: Vec<String> = vec![q, qph];
+    args.extend(words.iter().map(|w| format!("%{w}%")));
+    args.push(format!("{}%", words.join(" ")));
+    let mut st = conn.prepare(&sql)?;
+    let v = st.query_map(rusqlite::params_from_iter(args.iter()), |r| customer_from_row(r, now))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(v)
 }
 
 pub fn quick_add_customer(conn: &mut Connection, name: &str, phone: &str) -> Result<Customer> {

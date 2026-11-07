@@ -6,7 +6,7 @@ import {
   type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom,
 } from '@gokul/data';
 import { printDoc } from '../printing';
-import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast } from '@gokul/ui';
+import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -61,6 +61,7 @@ export function Expenses() {
     setCashIn(entries.filter((e) => e.kind === 'in').reduce((s, e) => s + e.amount, 0));
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useRefreshOnFocus(() => { void refresh(); });
   useEffect(() => { amountRef.current?.focus(); }, []);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);

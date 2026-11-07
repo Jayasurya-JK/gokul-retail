@@ -117,6 +117,8 @@ enum Rule {
     Open,
     /// The role must hold this permission; there is no PIN way round it.
     Perm(&'static str),
+    /// The owner only.
+    Owner,
     /// The role holds the permission and the action is not on its "needs manager PIN" list, or the call carries a manager PIN.
     PermPin { perm: &'static str, action: &'static str, pin_arg: usize, pin_key: Option<&'static str> },
     /// The role must hold the permission AND the call must carry a manager or owner PIN, every time (no "PIN not required" setting).
@@ -143,9 +145,9 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => Perm("canManageUsers"),
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => Perm("canChangeSettings"),
-        "runReport" | "pointsOverview" | "pointsReport" => Perm("canSeeReports"),
+        "runReport" | "pointsOverview" | "pointsReport" | "pointsExpiring" => Perm("canSeeReports"),
         "adjustPoints" | "bulkAdjustPoints" => PermAndPin { perm: "canEditPrices", action_what: "change customer points" },
-        "runPointsExpiry" => Perm("canEditPrices"),
+        "setLoyaltyGoLive" => Owner,
         "cancelBill" => PermPin { perm: "canCancelBill", action: "cancel_bill", pin_arg: 0, pin_key: Some("managerPin") },
         "createReturn" => PermPin { perm: "canReturn", action: "return", pin_arg: 0, pin_key: Some("managerPin") },
         "addCashEntry" if args.first().map(|a| a["kind"] == "out").unwrap_or(false) => {
@@ -174,9 +176,9 @@ fn describe(method: &str) -> &'static str {
         "setCustomerCredit" => "allow credit for a customer",
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => "manage users",
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => "change settings or backups",
-        "runReport" | "pointsOverview" | "pointsReport" => "see reports",
+        "runReport" | "pointsOverview" | "pointsReport" | "pointsExpiring" => "see reports",
         "adjustPoints" | "bulkAdjustPoints" => "change customer points",
-        "runPointsExpiry" => "expire points",
+        "setLoyaltyGoLive" => "change the points go-live date",
         "cancelBill" => "cancel a bill",
         "createReturn" => "give a refund",
         "addCashEntry" => "take cash out of the drawer",
@@ -280,6 +282,13 @@ pub fn authorize(conn: &Connection, actor: &Actor, method: &str, args: &mut Vec<
     stamp_identity(actor, method, args);
     match rule_for(method, args) {
         Rule::Open => Ok(None),
+        Rule::Owner => {
+            if actor.role == "owner" {
+                Ok(None)
+            } else {
+                invalid(format!("Only the owner can {}.", describe(method)))
+            }
+        }
         Rule::Perm(perm) => {
             if actor.has(perm) {
                 // Changing a price on an existing item is its own permission.

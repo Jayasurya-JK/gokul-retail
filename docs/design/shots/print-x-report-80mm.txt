@@ -8,9 +8,9 @@
              X REPORT (day so far)
              The day is still open
 ------------------------------------------------
-Printed 07-11-2026                      09:45 PM
+Printed 07-11-2026                      11:43 PM
 Counter                                Counter 1
-Opened by Cashier            07-11-2026 09:45 PM
+Opened by Cashier            07-11-2026 11:43 PM
 ------------------------------------------------
 Bills                                          0
 Items sold                                     0

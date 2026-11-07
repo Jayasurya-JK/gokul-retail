@@ -67,7 +67,7 @@ export function Lock() {
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
 
       <header className="relative flex h-16 shrink-0 items-center justify-between px-8">
-        <div className="flex items-center gap-2.5"><Logo size={30} badge="P" /><span className="text-md font-semibold tracking-tight text-white">{settings?.shopName ?? 'Gokul Oils'}</span><span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-chrome-muted">POS</span></div>
+        <div className="flex items-center gap-2.5"><Logo size={30} badge="P" /><span className="text-md font-semibold tracking-tight text-white">{settings?.shopName ?? ''}</span><span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-chrome-muted">POS</span></div>
         <div className="text-right">
           <div className="num text-2xl font-semibold leading-none text-white">{pad(now.getHours() % 12 || 12)}:{pad(now.getMinutes())} <span className="text-sm font-medium text-chrome-muted">{now.getHours() >= 12 ? 'PM' : 'AM'}</span></div>
           <div className="mt-1 text-xs text-chrome-muted">{now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
@@ -78,7 +78,7 @@ export function Lock() {
         <div className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-chrome-ink"><LockIcon size={12} /> Counter locked{mins > 0 ? ` ${mins} min ago` : ''}</div>
         <span className="mt-6 flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold text-white shadow-overlay ring-4 ring-white/10" style={{ background: user.color }}>{user.initials}</span>
         <div className="mt-4 text-2xl font-semibold tracking-tight text-white">{user.name}</div>
-        <div className="mt-0.5 text-sm capitalize text-chrome-muted">{user.role} - {settings?.counter ?? 'Counter 1'}</div>
+        <div className="mt-0.5 text-sm capitalize text-chrome-muted">{user.role} - {settings?.counter ?? '-'}</div>
 
         <div className={cn('mt-9 flex gap-4', error && 'animate-[shake_0.35s]')}>
           {Array.from({ length: PIN_LEN }, (_, i) => (

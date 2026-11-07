@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banknote, FileText, Plus, ShoppingCart } from 'lucide-react';
 import { fuzzyFilter, type Grn, type SupplierSummary } from '@gokul/data';
 import {
-  Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, StatTile, cn, type ColumnDef,
+  Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, StatTile, cn, type ColumnDef, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { PurchaseEntry } from '../components/purchasing/PurchaseEntry';
@@ -95,6 +95,7 @@ export function Purchases() {
     setSelId((cur) => select ?? cur ?? g[0]?.id ?? null);
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useRefreshOnFocus(() => { void load(); });
 
   const rows = useMemo(() => {
     const base = grns.filter((g) => (sup === 'all' || g.supplierId === sup) && (status === 'all' || g.status === status));

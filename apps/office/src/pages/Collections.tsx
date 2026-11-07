@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Banknote, MessageCircle, Printer, Wallet } from 'lucide-react';
 import { formatRupees, fuzzyFilter, type AgeingKey, type CustStatement, type ReceivableRow, type Settings } from '@gokul/data';
-import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, useToast, type ColumnDef } from '@gokul/ui';
+import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, useToast, type ColumnDef, useRefreshOnFocus } from '@gokul/ui';
 import { api } from '../store';
 import { RecordPaymentDialog, ReminderDialog } from '../components/crm/CollectionDialogs';
 import { ago, DetailPane, fmtShort, SectionLabel, SplitBar } from '../components/crm/common';
@@ -116,6 +116,7 @@ export function Collections() {
     setSelId((cur) => (cur && r.some((x) => x.customerId === cur) ? cur : r[0]?.customerId ?? null));
   }, []);
   useEffect(() => { void reload(); void api.getSettings().then(setShop); }, [reload]);
+  useRefreshOnFocus(() => { void reload(); });
   useEffect(() => { if (params.get('c')) setParams({}, { replace: true }); }, [params, setParams]);
   useEffect(() => { if (selId) api.getStatement(selId).then(setSt); else setSt(null); }, [selId, rows]);
 
@@ -185,7 +186,7 @@ export function Collections() {
         }}
       />
       <ReminderDialog
-        row={sel} shop={shop?.shopName ?? 'Gokul Oils'} open={remind} onClose={() => setRemind(false)}
+        row={sel} shop={shop?.shopName ?? ''} open={remind} onClose={() => setRemind(false)}
         onSend={async () => {
           await api.logReminder(sel!.customerId);
           setRemind(false);

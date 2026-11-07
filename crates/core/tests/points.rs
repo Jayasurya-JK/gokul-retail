@@ -185,45 +185,6 @@ fn points_change_only_through_bills_so_manual_adjust_is_refused_and_changes_noth
 }
 
 #[test]
-fn expiry_takes_off_only_points_older_than_the_window_and_only_when_on() {
-    let (_d, db) = {
-        let (d, db) = mini_db();
-        db.with(|c| {
-            let old = "2025-01-01T00:00:00.000Z";
-            c.execute("INSERT INTO customers(id,name,phone,created_at) VALUES('c2','Old points','90000 00001','2025-01-01T00:00:00Z'),('c3','Fresh points','90000 00002','2025-01-01T00:00:00Z')", [])?;
-            // c2: 10.00 earned long ago, 3.00 earned today, 4.00 spent a month ago: 9.00 left, of which the old part is 6.00
-            for (id, at, kind, p) in [("c2", old, "earn", 1000), ("c2", "2099-01-01T00:00:00.000Z", "earn", 300), ("c2", "2026-10-01T00:00:00.000Z", "redeem", -400), ("c3", "2099-01-01T00:00:00.000Z", "earn", 500)] {
-                c.execute("INSERT INTO points_ledger(customer_id,at,kind,points,note,by_name) VALUES(?1,?2,?3,?4,'t','t')", params![id, at, kind, p])?;
-                c.execute("UPDATE customers SET loyalty_points=loyalty_points+?2 WHERE id=?1", params![id, p])?;
-            }
-            Ok(())
-        })
-        .unwrap();
-        (d, db)
-    };
-    let owner = sign_in(&db, "u1", "1111", true);
-    assert!(call(&db, &owner, "runPointsExpiry", json!([false])).unwrap_err().contains("switched off"));
-    db.with(|c| set_setting(c, "loyalty.expiryMonths", "12")).unwrap();
-    let preview = call(&db, &owner, "runPointsExpiry", json!([true])).unwrap();
-    assert_eq!((preview["customers"].clone(), preview["points"].clone(), preview["done"].clone()), (json!(1), json!(6.0), json!(false)));
-    assert_eq!(db.with(|c| Ok(balance(c, "c2"))).unwrap(), 900, "a preview changes nothing");
-    let done = call(&db, &owner, "runPointsExpiry", json!([false])).unwrap();
-    assert_eq!((done["customers"].clone(), done["points"].clone()), (json!(1), json!(6.0)));
-    db.with(|c| {
-        assert_eq!((balance(c, "c2"), balance(c, "c3")), (300, 500));
-        Ok(())
-    })
-    .unwrap();
-    let ov = call(&db, &owner, "pointsOverview", json!([])).unwrap();
-    assert_eq!(ov["expiredMonth"], json!(6.0));
-    assert_eq!(call(&db, &owner, "getPointsLedger", json!(["c2"])).unwrap()[0]["kind"], "expire");
-    // a second run finds nothing more
-    assert_eq!(call(&db, &owner, "runPointsExpiry", json!([false])).unwrap()["customers"], 0);
-    // a cashier is refused
-    assert!(call(&db, &sign_in(&db, "u3", "1234", false), "runPointsExpiry", json!([false])).is_err());
-}
-
-#[test]
 fn report_groups_by_local_day_and_ranks_customers() {
     let (_d, db) = mini_db();
     db.with(|c| {
@@ -243,7 +204,8 @@ fn report_groups_by_local_day_and_ranks_customers() {
     // the settings screen round trip keeps the two new rules
     let owner = sign_in(&db, "u1", "1111", true);
     let mut bundle = call(&db, &owner, "getSettingsBundle", json!([])).unwrap();
-    assert_eq!(bundle["loyalty"]["expiryMonths"], 0);
+    assert_eq!(bundle["loyalty"]["expiryMonths"], 12, "expiry is on at 12 months by default");
+    assert_eq!(bundle["loyalty"]["goLiveDate"], "2026-11-07");
     bundle["loyalty"]["expiryMonths"] = json!(18);
     bundle["loyalty"]["excludeCategories"] = json!(["_service"]);
     let saved = call(&db, &owner, "saveSettingsBundle", json!([bundle])).unwrap();
@@ -280,7 +242,7 @@ fn migration_9_rebuilds_the_ledger_without_losing_a_row() {
     }
     let db = Db::open(&path).unwrap();
     db.with(|c| {
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 9);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, gokul_core::db::latest_version());
         assert_eq!(count(c, "points_ledger"), 2);
         assert_eq!(loyalty::balance(c, "C02607")?, 7856);
         let (id, note): (i64, String) = c.query_row("SELECT id,note FROM points_ledger WHERE customer_id='C02607'", [], |r| Ok((r.get(0)?, r.get(1)?)))?;

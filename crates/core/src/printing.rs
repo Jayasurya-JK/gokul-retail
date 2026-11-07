@@ -397,6 +397,12 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
             }
             if crate::loyalty::rules(conn).enabled {
                 d.line(format!("Points : {}", crate::loyalty::fmt_points(crate::loyalty::balance(conn, id)?)));
+                if crate::loyalty::rules(conn).print_expiry {
+                    if let Some((pts, day)) = crate::lots::expiring_within(conn, id, 30)? {
+                        let short = chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d").map(|x| x.format("%d/%m/%y").to_string()).unwrap_or(day);
+                        d.line(format!("{} pts expire {}", crate::loyalty::fmt_points(pts), short));
+                    }
+                }
             }
         }
         d.rule();

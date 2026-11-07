@@ -44,7 +44,7 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg text-ink">
       {/* Top bar */}
       <header className="flex h-12 shrink-0 items-center gap-3 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">
-        <div className="flex w-[216px] items-center gap-2.5">
+        <div className="flex w-[216px] shrink-0 items-center gap-2.5">
           <Logo size={30} badge="O" />
           <div className="leading-tight">
             <div className="text-[13px] font-semibold tracking-tight text-white">Gokul Office</div>
@@ -53,13 +53,13 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
         </div>
         <button
           onClick={() => setPaletteOpen(true)}
-          className="mx-auto flex h-8 w-full max-w-[460px] items-center gap-2 rounded-md border border-white/10 bg-white/[0.07] px-2.5 text-xs text-chrome-muted transition-colors hover:bg-white/[0.12]"
+          className="mx-auto flex h-8 w-full min-w-0 max-w-[460px] items-center gap-2 rounded-md border border-white/10 bg-white/[0.07] px-2.5 text-xs text-chrome-muted transition-colors hover:bg-white/[0.12]"
         >
           <Search size={14} />
           <span className="flex-1 text-left">Search screens and actions</span>
           <Kbd tone="chrome">Ctrl+K</Kbd>
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <Tooltip label={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
             <button onClick={toggleTheme} className="flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted hover:bg-white/10 hover:text-white" aria-label="Toggle theme">
               {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}

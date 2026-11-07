@@ -3,15 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Download, Settings2, Star, Users } from 'lucide-react';
 import { formatPoints, formatRupees, type PointsCustomerRow, type PointsOverview, type PointsReport } from '@gokul/data';
 import {
-  Button, Card, DataTable, DateRangePicker, Dialog, EmptyState, FilterBar, PageHeader, SearchInput, Tabs, TabPanel, dateRangePresets, useToast,
+  Button, Card, DataTable, DateRangePicker, EmptyState, FilterBar, PageHeader, SearchInput, Tabs, TabPanel, dateRangePresets, useToast,
   type ColumnDef, type DateRange,
 } from '@gokul/ui';
 import { api } from '../store';
-import { PointsLedgerList } from '../components/crm/PointsParts';
+import { PointsLedgerList, fmtDay } from '../components/crm/PointsParts';
 import { Avatar, DetailPane, csvCell, downloadText, fmtShort, initialsOf, nameColor, Segmented } from '../components/crm/common';
 
 const PAGE = 200;
-type Filter = 'all' | 'withPoints' | 'zero';
+type Filter = 'all' | 'withPoints' | 'zero' | 'expiring';
 type Sort = { id: string; desc: boolean } | null;
 
 const when = (iso: string | null) => (iso ? fmtShort(iso) : <span className="text-subtle">-</span>);
@@ -32,6 +32,7 @@ const columns: ColumnDef<PointsCustomerRow>[] = [
   },
   { id: 'phone', header: 'Mobile', enableSorting: false, meta: { w: '108px', num: true }, accessorFn: (r) => r.phone },
   { id: 'points', header: 'Points', meta: { w: '104px', align: 'right', num: true }, accessorFn: (r) => r.points, cell: (c) => <b className={c.getValue<number>() > 0 ? 'text-ink' : c.getValue<number>() < 0 ? 'text-danger' : 'text-subtle'}>{formatPoints(c.getValue<number>())}</b> },
+  { id: 'expiresOn', header: 'Next expiry', enableSorting: false, meta: { w: '112px', align: 'right' }, accessorFn: (r) => r.expiresOn ?? '', cell: (c) => (c.row.original.expiresOn ? fmtDay(c.row.original.expiresOn) : <span className="text-subtle">-</span>) },
   { id: 'lastEarned', header: 'Last earned', meta: { w: '112px', align: 'right' }, accessorFn: (r) => r.lastEarned ?? '', cell: (c) => when(c.row.original.lastEarned) },
   { id: 'lastRedeemed', header: 'Last redeemed', meta: { w: '124px', align: 'right' }, accessorFn: (r) => r.lastRedeemed ?? '', cell: (c) => when(c.row.original.lastRedeemed) },
 ];
@@ -39,10 +40,11 @@ const columns: ColumnDef<PointsCustomerRow>[] = [
 /* ------------------------------------------------------------------ */
 /* Customers tab: server-paged table + ledger side panel               */
 /* ------------------------------------------------------------------ */
-function CustomersTab({ overview }: { overview: PointsOverview | null }) {
+function CustomersTab({ overview, filterRequest }: { overview: PointsOverview | null; filterRequest: { filter: Filter; n: number } }) {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  useEffect(() => { if (filterRequest.n > 0) setFilter(filterRequest.filter); }, [filterRequest]);
   const [sort, setSort] = useState<Sort>({ id: 'points', desc: true });
   const [rows, setRows] = useState<PointsCustomerRow[]>([]);
   const [matched, setMatched] = useState(0);
@@ -99,7 +101,7 @@ function CustomersTab({ overview }: { overview: PointsOverview | null }) {
         trailing={<span><b className="num text-ink">{matched.toLocaleString('en-IN')}</b> of <b className="num text-ink">{total.toLocaleString('en-IN')}</b> customers</span>}
       >
         <div className="w-80"><SearchInput placeholder="Search name, mobile, code or area" value={q} onChange={(e) => setQ(e.target.value)} autoFocus /></div>
-        <Segmented<Filter> value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'withPoints', label: 'With points' }, { value: 'zero', label: 'No points' }]} />
+        <Segmented<Filter> value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'withPoints', label: 'With points' }, { value: 'zero', label: 'No points' }, { value: 'expiring', label: 'Expiring in 30 days' }]} />
         <span className="mx-1 h-5 w-px bg-line" />
         <Button icon={<Download size={14} />} onClick={() => void exportCsv()} disabled={matched === 0}>Export Excel (CSV)</Button>
       </FilterBar>
@@ -230,23 +232,11 @@ function Tile({ label, value, hint, accent, action }: { label: string; value: st
 /* ------------------------------------------------------------------ */
 export function LoyaltyPoints() {
   const nav = useNavigate();
-  const toast = useToast();
   const [tab, setTab] = useState('customers');
   const [ov, setOv] = useState<PointsOverview | null>(null);
-  const [expiry, setExpiry] = useState<null | { customers: number; points: number; months: number }>(null);
+  const [filterReq, setFilterReq] = useState<{ filter: Filter; n: number }>({ filter: 'all', n: 0 });
   const load = useCallback(() => { api.pointsOverview().then(setOv).catch(() => setOv(null)); }, []);
   useEffect(() => { load(); }, [load]);
-
-  const previewExpiry = async () => {
-    try { const r = await api.runPointsExpiry(true); setExpiry(r); } catch (e) { toast.show({ tone: 'error', title: 'Cannot run expiry', detail: e instanceof Error ? e.message : undefined }); }
-  };
-  const runExpiry = async () => {
-    try {
-      const r = await api.runPointsExpiry(false);
-      setExpiry(null); load();
-      toast.show({ tone: 'success', title: 'Points expired', detail: `${formatPoints(r.points)} points taken off ${r.customers.toLocaleString('en-IN')} customers.` });
-    } catch (e) { toast.show({ tone: 'error', title: 'Expiry not run', detail: e instanceof Error ? e.message : undefined }); }
-  };
 
   return (
     <>
@@ -261,24 +251,14 @@ export function LoyaltyPoints() {
         <Tile label="Customers with points" value={ov ? ov.customersWithPoints.toLocaleString('en-IN') : '-'} hint={ov ? `of ${ov.customers.toLocaleString('en-IN')} customers` : ''} />
         <Tile label="Earned this month" value={ov ? formatPoints(ov.earnedMonth) : '-'} hint="On bills since the 1st" />
         <Tile label="Redeemed this month" value={ov ? formatPoints(ov.redeemedMonth) : '-'} hint={ov ? `Worth ${formatRupees(Math.round(ov.redeemedMonth * ov.pointValue), { decimals: false })} off bills` : ''} />
-        <Tile label="Expired this month" value={ov ? formatPoints(ov.expiredMonth) : '-'} hint={ov ? (ov.expiryMonths > 0 ? `After ${ov.expiryMonths} months` : 'Expiry is off') : ''}
-          action={ov && ov.expiryMonths > 0 ? <button type="button" onClick={() => void previewExpiry()} className="text-xs font-medium text-primary hover:underline">Run expiry...</button> : undefined} />
+        <Tile label="Expiring in next 30 days" value={ov ? formatPoints(ov.expiring30.points) : '-'}
+          hint={ov ? (ov.expiryMonths > 0 ? `${ov.expiring30.customers.toLocaleString('en-IN')} customers · expired this month ${formatPoints(ov.expiredMonth)}` : 'Expiry is off') : ''}
+          action={ov && ov.expiring30.customers > 0 ? <button type="button" onClick={() => { setTab('customers'); setFilterReq((f) => ({ filter: 'expiring', n: f.n + 1 })); }} className="text-xs font-medium text-primary hover:underline">See list</button> : undefined} />
       </div>
       <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1" tabs={[{ value: 'customers', label: 'Customers' }, { value: 'reports', label: 'Reports' }]}>
-        <TabPanel value="customers" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><CustomersTab overview={ov} /></TabPanel>
+        <TabPanel value="customers" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><CustomersTab overview={ov} filterRequest={filterReq} /></TabPanel>
         <TabPanel value="reports" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><ReportsTab /></TabPanel>
       </Tabs>
-      <Dialog
-        open={expiry !== null} onOpenChange={(o) => !o && setExpiry(null)} size="sm" title="Run points expiry?"
-        footer={<><Button onClick={() => setExpiry(null)} kbd="Esc">Not now</Button><Button variant="primary" disabled={!expiry || expiry.customers === 0} onClick={() => void runExpiry()} kbd="Enter">Expire these points</Button></>}
-      >
-        {expiry && (
-          <div className="space-y-3 text-sm text-ink">
-            <p>{expiry.customers === 0 ? `No customer has points older than ${expiry.months} months.` : <><b className="num">{formatPoints(expiry.points)}</b> points held by <b className="num">{expiry.customers.toLocaleString('en-IN')}</b> customers were not earned again in the last {expiry.months} months and will lapse.</>}</p>
-            <p className="text-xs text-muted">Each customer gets an Expired line in their ledger. Points they earned or were given recently are kept. Spending is counted against the oldest points first.</p>
-          </div>
-        )}
-      </Dialog>
     </>
   );
 }

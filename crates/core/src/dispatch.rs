@@ -138,8 +138,11 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "listCustomers" => ok(store::list_customers(c)?),
         "searchCustomers" => {
             let limit = arg::<Option<usize>>(a, 1, "limit")?.unwrap_or(30);
-            ok(store::search_customers(c, &arg::<String>(a, 0, "query")?, limit)?)
+            let offset = arg::<Option<usize>>(a, 2, "offset")?.unwrap_or(0);
+            ok(store::search_customers(c, &arg::<String>(a, 0, "query")?, limit, offset)?)
         }
+        "getCustomer" => ok(store::get_customer(c, &arg::<String>(a, 0, "id")?)?),
+        "countCustomers" => ok(store::count_customers(c)?),
         "listBills" => ok(bills::list_bills(c, &arg::<Option<BillFilter>>(a, 0, "filter")?.unwrap_or_default())?),
         "getBill" => ok(bills::get_bill(c, &arg::<String>(a, 0, "id")?)?),
         "saveBill" => ok(bills::save_bill(c, &arg::<BillDraft>(a, 0, "draft")?)?),
@@ -278,10 +281,12 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "getPointsLedger" => ok(crate::points::ledger(c, &arg::<String>(a, 0, "customerId")?, arg::<Option<i64>>(a, 1, "limit")?.unwrap_or(500))?),
         "adjustPoints" => ok(crate::points::adjust(c, &arg::<crate::points::AdjustInput>(a, 0, "input")?)?),
         "bulkAdjustPoints" => ok(crate::points::bulk_adjust(c, &arg::<crate::points::BulkInput>(a, 0, "input")?)?),
-        "runPointsExpiry" => ok(crate::points::run_expiry(c, arg::<Option<bool>>(a, 0, "dryRun")?.unwrap_or(true))?),
+        "pointsExpiring" => ok(crate::lots::expiring_soon(c, arg::<Option<i64>>(a, 0, "days")?.unwrap_or(30))?),
+        "setLoyaltyGoLive" => ok(crate::lots::set_go_live_date(c, &arg::<String>(a, 0, "date")?, &crate::db::actor_or("Office"))?),
         "pointsReport" => ok(crate::points::report(c, &arg::<Option<crate::points::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
         "setCustomerCredit" => ok(crm::set_customer_credit(c, &arg::<String>(a, 0, "customerId")?, arg::<i64>(a, 1, "limit")?, "")?),
         "saveCustomer" => ok(crm::save_customer(c, &arg::<crm::CustomerInput>(a, 0, "input")?)?),
+        "setCustomerActive" => ok(crm::set_customer_active(c, &arg::<String>(a, 0, "customerId")?, arg::<bool>(a, 1, "active")?)?),
         "listReceivables" => ok(crm::list_receivables(c)?),
         "getStatement" => ok(crm::get_statement(c, &arg::<String>(a, 0, "customerId")?)?),
         "recordCollection" => ok(crm::record_collection(c, &arg::<crm::CollectionInput>(a, 0, "input")?)?),
@@ -351,7 +356,7 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
 /// Methods the Rust backend implements (the TypeScript selector uses this list; kept in sync by a test).
 pub const METHODS: &[&str] = &[
     "getSettings", "listUsers", "verifyPin", "currentShift", "listItems", "listCategories", "findItemByCode", "searchItems",
-    "listCustomers", "searchCustomers", "listBills", "getBill", "saveBill", "holdBill", "listHeld", "recallHeld", "dashboard",
+    "listCustomers", "searchCustomers", "getCustomer", "countCustomers", "setCustomerActive", "listBills", "getBill", "saveBill", "holdBill", "listHeld", "recallHeld", "dashboard",
     "topItems", "lowStock", "listStockMovements", "getDayStatus", "openDay", "listCashEntries", "addCashEntry", "shiftSummary",
     "verifyManagerPin", "closeDay", "peekNextBillNumber", "quickAddCustomer", "listBillsOn", "getBillDetail", "findBillForReturn",
     "cancelBill", "recordReprint", "createReturn", "listCreditNotes", "getPendingExchange", "clearPendingExchange",
@@ -362,7 +367,7 @@ pub const METHODS: &[&str] = &[
     "searchPurchasable", "listGrns", "getGrn", "createGrn", "listSupplierSummaries", "getSupplierLedger", "saveSupplier", "recordSupplierPayment",
     "listSeedProfiles", "saveSeedNorms", "listPressingBatches", "createPressingBatch", "moveBatchToBarrel", "listBarrels", "listPackTargets",
     "listPackRuns", "createPackRun",
-    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "pointsOverview", "listPointsCustomers", "getPointsLedger", "adjustPoints", "bulkAdjustPoints", "runPointsExpiry", "pointsReport", "listReceivables", "getStatement",
+    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "pointsOverview", "listPointsCustomers", "getPointsLedger", "pointsExpiring", "setLoyaltyGoLive", "pointsReport", "listReceivables", "getStatement",
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",

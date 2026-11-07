@@ -48,7 +48,7 @@ export function MillSheetPage() {
   const [list, setList] = useState<MillSheetSummary[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [shop, setShop] = useState('Gokul Oils');
+  const [shop, setShop] = useState('');
   const [state, setState] = useState<'saved' | 'dirty' | 'saving'>('saved');
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);

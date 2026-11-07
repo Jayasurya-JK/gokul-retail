@@ -35,6 +35,7 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+mod link;
 mod people;
 
 const IMPORT_BY: &str = "import";
@@ -58,10 +59,10 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    const USAGE: &str = "Usage: gokul-import [items] [--csv <file>] [--db <file>] | customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run] | suppliers [--csv <file>] [--db <file>] [--dry-run] | points [--csv <file>] [--db <file>] [--dry-run] | credit [--csv <file>] [--db <file>] [--dry-run]";
+    const USAGE: &str = "Usage: gokul-import [items] [--csv <file>] [--db <file>] | customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run] | suppliers [--csv <file>] [--db <file>] [--dry-run] | points [--csv <file>] [--db <file>] [--dry-run] | credit [--csv <file>] [--db <file>] [--dry-run] | link-suppliers [--csv <file>] [--db <file>] [--dry-run]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = match args.first().map(String::as_str) {
-        Some(w @ ("items" | "customers" | "suppliers" | "points" | "credit")) => {
+        Some(w @ ("items" | "customers" | "suppliers" | "points" | "credit" | "link-suppliers")) => {
             let w = w.to_string();
             args.remove(0);
             w
@@ -83,6 +84,23 @@ fn run() -> Result<(), String> {
             "--no-outstanding" if cmd == "customers" => no_outstanding = true,
             other => return Err(format!("unknown option '{other}'. {USAGE}")),
         }
+    }
+    if cmd == "link-suppliers" {
+        let path = csv_path.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("data").join("import").join("clean").join("items_stock.csv"));
+        let db_path = db_path.unwrap_or_else(db::default_db_path);
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        println!("CSV: {}
+Database: {}", path.display(), db_path.display());
+        let db = Db::open(&db_path).map_err(|e| e.to_string())?;
+        let (notes, summary) = db.with(|c| Ok(link::link_suppliers(c, &text, dry_run))).map_err(|e| e.to_string())??;
+        println!("
+Notes ({}; first 30 shown):", notes.len());
+        for n in notes.iter().take(30) {
+            println!("  - {n}");
+        }
+        println!("
+{summary}");
+        return Ok(());
     }
     let clean = |file: &str| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("data").join("import").join("clean").join(file);
     if cmd != "items" {

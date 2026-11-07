@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Boxes, SlidersHorizontal } from 'lucide-react';
-import { Button, PageHeader, Tabs } from '@gokul/ui';
+import { Button, PageHeader, Tabs, useRefreshOnFocus } from '@gokul/ui';
 import { StockLevels } from '../components/catalog/StockLevels';
 import { StockAdjustments } from '../components/catalog/StockAdjustments';
 import { StockTake } from '../components/catalog/StockTake';
@@ -11,6 +11,7 @@ export function Stock() {
   const [adjusting, setAdjusting] = useState(false);
   const [version, setVersion] = useState(0);
   const bump = () => setVersion((v) => v + 1);
+  useRefreshOnFocus(bump);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

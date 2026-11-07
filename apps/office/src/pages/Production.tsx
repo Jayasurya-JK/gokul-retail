@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRightLeft, Factory, Flame, PackageOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { type Barrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
-  Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef,
+  Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
 import { PressingForm, MoveToBarrelDialog } from '../components/purchasing/PressingForm';
@@ -219,6 +219,7 @@ export function Production() {
     setSelRun((c) => opts?.run ?? c ?? r[0]?.id ?? null);
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useRefreshOnFocus(() => { void load(); });
 
   const shown = useMemo(() => batches.filter((b) => (seedFilter === 'all' || b.seed === seedFilter) && (phaseFilter === 'all' || b.phase === phaseFilter)), [batches, seedFilter, phaseFilter]);
   const batch = batches.find((b) => b.id === selBatch) ?? null;

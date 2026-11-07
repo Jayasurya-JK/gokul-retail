@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LayoutGrid, Tag, Tags } from 'lucide-react';
 import type { CountedBrand, CountedCategory, NameResult } from '@gokul/data';
-import { Kbd, PageHeader, cn } from '@gokul/ui';
+import { Kbd, PageHeader, cn, useRefreshOnFocus } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { ManagedList } from '../components/catalog/ManagedList';
 import { CatalogItemsPane } from '../components/catalog/CatalogItemsPane';
@@ -19,6 +19,7 @@ export function Categories() {
     setCats(c); setBrands(b);
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useRefreshOnFocus(() => { void refresh(); });
   // A renamed-away or deleted selection must not stay applied.
   useEffect(() => { if (catId && cats.length && !cats.some((c) => c.id === catId)) setCatId(null); }, [cats, catId]);
   useEffect(() => { if (brandId && brands.length && !brands.some((b) => b.id === brandId)) setBrandId(null); }, [brands, brandId]);

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft, PackageSearch, Search, UserPlus } from 'lucide-react';
-import { creditLeft, formatQty, formatRupees, type Customer, type HeldBill, type Item } from '@gokul/data';
+import { creditLeft, formatQty, isNoName, formatRupees, type Customer, type HeldBill, type Item } from '@gokul/data';
 import { Badge, Button, Dialog, Kbd, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 import { plural } from '../plural';
@@ -49,7 +49,7 @@ export function ItemSearchDialog({ open, onClose, seed, onPick }: { open: boolea
           placeholder="Type item name, code or barcode" spellCheck={false} autoComplete="off"
           className="h-14 flex-1 bg-transparent text-lg text-ink placeholder:text-subtle"
         />
-        {q && <span className="num text-xs text-subtle">{list.length} found</span>}
+        {q && <span className="num text-xs text-subtle">{list.length}{list.length >= 40 ? '+' : ''} found</span>}
         <Kbd>Esc</Kbd>
       </div>
       <div className={cn('grid h-8 items-center border-b border-line bg-surface-2 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted', ITEM_COLS)}>
@@ -103,6 +103,7 @@ export function ItemSearchDialog({ open, onClose, seed, onPick }: { open: boolea
 
 /* ---------- F3 Customer ---------- */
 type CustRow = { kind: 'walkin' } | { kind: 'new' } | { kind: 'cust'; c: Customer };
+const CUST_PAGE = 30;
 const phoneOk = (d: string) => /^[6-9]\d{9}$/.test(d);
 const fmtPhone = (d: string) => (d.length > 5 ? `${d.slice(0, 5)} ${d.slice(5)}` : d);
 
@@ -118,13 +119,29 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
   const phoneRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (open) { setQ(''); setMode('list'); setName(''); setPhone(''); setErr({}); setBusy(false); } }, [open]);
+  const [total, setTotal] = useState<number | null>(null);
+  const [more, setMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const loadingMore = useRef(false);
+  useEffect(() => { if (open) { setQ(''); setMode('list'); setName(''); setPhone(''); setErr({}); setBusy(false); setList([]); setMore(false); api.countCustomers().then(setTotal).catch(() => setTotal(null)); } }, [open]);
+  // Every keystroke searches ALL customers in the database (name, mobile, code, area); an empty box shows the recent ones.
   useEffect(() => {
     if (!open) return;
     let live = true;
-    api.searchCustomers(q, 30).then((r) => live && setList(r));
+    setLoading(true);
+    api.searchCustomers(q, CUST_PAGE, 0).then((r) => { if (live) { setList(r); setMore(r.length >= CUST_PAGE); setLoading(false); } }).catch(() => live && setLoading(false));
     return () => { live = false; };
   }, [q, open]);
+  /** Next page of the same search, added below what is shown */
+  const loadMore = useCallback(() => {
+    if (!more || loadingMore.current) return;
+    loadingMore.current = true;
+    const at = list.length;
+    api.searchCustomers(q, CUST_PAGE, at).then((r) => {
+      setList((cur) => (cur.length === at ? [...cur, ...r] : cur));
+      setMore(r.length >= CUST_PAGE);
+    }).catch(() => undefined).finally(() => { loadingMore.current = false; });
+  }, [more, list.length, q]);
 
   const rows = useMemo<CustRow[]>(() => [{ kind: 'walkin' }, ...list.map((c) => ({ kind: 'cust' as const, c })), { kind: 'new' }], [list]);
 
@@ -144,6 +161,8 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
     else startNew();
   };
   const { hi, setHi, onKeyDown } = useListNav(rows, pickRow, q);
+  // reaching the last rows (arrow keys or scrolling) fetches the next page
+  useEffect(() => { if (open && mode === 'list' && hi >= rows.length - 4) loadMore(); }, [hi, rows.length, open, mode, loadMore]);
 
   const save = async () => {
     const n = name.trim();
@@ -176,12 +195,13 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
             <input
               ref={searchRef} data-autofocus value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); startNew(); } else onKeyDown(e); }}
-              placeholder="Customer name or mobile number" spellCheck={false} autoComplete="off"
+              placeholder={total ? `Search ${total.toLocaleString('en-IN')} customers by name, mobile, code or area` : 'Customer name, mobile, code or area'} spellCheck={false} autoComplete="off"
               className="h-14 flex-1 bg-transparent text-lg text-ink placeholder:text-subtle"
             />
             <Kbd>Esc</Kbd>
           </div>
-          <ul className="h-[352px] overflow-y-auto">
+          <ul className="h-[352px] overflow-y-auto" onScroll={(e) => { const t = e.currentTarget; if (t.scrollHeight - t.scrollTop - t.clientHeight < 120) loadMore(); }}>
+            {!q.trim() && list.length > 0 && <li className="sticky top-0 z-10 flex h-6 items-center bg-surface-2 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted">Recent customers</li>}
             {rows.map((r, i) => {
               const active = i === hi;
               const cls = cn('relative flex h-[54px] items-center gap-3 px-4', active && 'bg-primary-soft');
@@ -215,10 +235,12 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
               return (
                 <li key={c.id} className={cls} {...common}>
                   {bar}
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-muted">{c.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}</span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-muted">{isNoName(c.name) ? '#' : c.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-medium text-ink"><Highlight text={c.name} q={q} /></span>
-                    <span className="block truncate text-xs text-muted num">{c.phone} - {c.area} - visited {c.lastVisit}</span>
+                    {isNoName(c.name)
+                      ? <span className="block truncate text-base font-medium text-ink"><span className="num"><Highlight text={c.phone} q={q} /></span> <span className="text-sm font-normal italic text-muted">No name</span></span>
+                      : <span className="block truncate text-base font-medium text-ink"><Highlight text={c.name} q={q} /></span>}
+                    <span className="block truncate text-xs text-muted num">{c.id}{isNoName(c.name) ? '' : ` - ${c.phone}`}{c.area ? ` - ${c.area}` : ''} - visited {c.lastVisit}</span>
                   </span>
                   {c.outstanding > 0 && <Badge tone="warning">Owes {formatRupees(c.outstanding, { decimals: false })}</Badge>}
                   {left !== null && c.outstanding === 0 && <span className="text-xs text-subtle">Credit {formatRupees(left, { decimals: false })}</span>}
@@ -231,7 +253,9 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
             <span className="flex items-center gap-1"><Kbd>Up</Kbd><Kbd>Down</Kbd> move</span>
             <span className="flex items-center gap-1"><Kbd><CornerDownLeft size={10} /></Kbd> select</span>
             <span className="flex items-center gap-1"><Kbd>Ctrl+N</Kbd> new customer</span>
-            <span className="ml-auto">{list.length} customers</span>
+            <span className="ml-auto num">{q.trim()
+              ? `${list.length}${more ? '+' : ''} found${loading ? '...' : ''}`
+              : `Type to search ${total === null ? 'all' : total.toLocaleString('en-IN')} customers`}</span>
           </div>
         </>
       ) : (

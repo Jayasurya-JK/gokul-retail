@@ -77,9 +77,10 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     // Customer
     let mut customer_name = draft.customer_name.clone().filter(|n| !n.trim().is_empty());
     if let Some(cid) = &draft.customer_id {
-        let name: Option<String> = tx.query_row("SELECT name FROM customers WHERE id=?1", [cid], |r| r.get(0)).optional()?;
+        let name: Option<(String, i64)> = tx.query_row("SELECT name, active FROM customers WHERE id=?1", [cid], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
         match name {
-            Some(n) => customer_name = customer_name.or(Some(n)),
+            Some((_, 0)) => return invalid("This customer is inactive. Pick another customer or bill as walk-in."),
+            Some((n, _)) => customer_name = customer_name.or(Some(n)),
             None => return invalid("This customer no longer exists"),
         }
     } else if credit > 0 {

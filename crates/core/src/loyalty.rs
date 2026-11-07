@@ -42,10 +42,12 @@ pub struct Rules {
     pub point_value: i64,
     pub min_redeem: i64,
     pub max_pct: i64,
-    /// Points not earned again within this many months lapse when expiry is run; 0 = points never expire.
+    /// Points lapse this many months after they were earned (each earning keeps its own date); 0 = points never expire.
     pub expiry_months: i64,
     /// Category ids whose lines earn no points (e.g. Service charges).
     pub exclude: Vec<String>,
+    /// Print "N pts expire dd/mm/yy" on the bill when points lapse within 30 days.
+    pub print_expiry: bool,
 }
 
 pub fn rules(conn: &Connection) -> Rules {
@@ -65,7 +67,8 @@ pub fn rules(conn: &Connection) -> Rules {
         point_value: n("loyalty.pointValue", 100).max(1),
         min_redeem: n("loyalty.minRedeem", 100).max(1),
         max_pct: n("loyalty.maxPct", 100).clamp(1, 100),
-        expiry_months: n("loyalty.expiryMonths", 0).clamp(0, 120),
+        expiry_months: n("loyalty.expiryMonths", 12).clamp(0, 120),
+        print_expiry: n("loyalty.printExpiry", 1) != 0,
         exclude: m.get("loyalty.excludeCategories").map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
     }
 }
@@ -73,7 +76,8 @@ pub fn rules(conn: &Connection) -> Rules {
 pub fn rules_json(conn: &Connection) -> Value {
     let r = rules(conn);
     json!({ "enabled": r.enabled, "rupeesPerPoint": r.rupees_per_point, "pointValue": r.point_value, "minRedeem": r.min_redeem, "maxPct": r.max_pct,
-            "expiryMonths": r.expiry_months, "excludeCategories": r.exclude })
+            "expiryMonths": r.expiry_months, "excludeCategories": r.exclude,
+            "printExpiry": r.print_expiry, "goLiveDate": crate::lots::go_live_date(conn).to_string() })
 }
 
 pub fn save_rules(conn: &Connection, v: &Value) -> Result<()> {
@@ -86,6 +90,9 @@ pub fn save_rules(conn: &Connection, v: &Value) -> Result<()> {
     // Expiry and excluded categories are optional in the call (an older screen may not send them): keep what is stored then.
     if v["expiryMonths"].is_number() {
         set_setting(conn, "loyalty.expiryMonths", &n("expiryMonths", 0, 0, 120).to_string())?;
+    }
+    if let Some(b) = v["printExpiry"].as_bool() {
+        set_setting(conn, "loyalty.printExpiry", if b { "1" } else { "0" })?;
     }
     if let Some(a) = v["excludeCategories"].as_array() {
         let ids: Vec<&str> = a.iter().filter_map(|x| x.as_str()).map(str::trim).filter(|x| !x.is_empty() && !x.contains(',')).collect();
@@ -103,12 +110,16 @@ pub(crate) fn post(conn: &Connection, customer_id: &str, kind: &str, points: i64
     if points == 0 {
         return Ok(());
     }
+    let at = iso(Local::now());
     conn.execute(
         "INSERT INTO points_ledger(customer_id,at,kind,points,bill_id,note,by_name) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-        params![customer_id, iso(Local::now()), kind, points, bill_id, note, by],
+        params![customer_id, at, kind, points, bill_id, note, by],
     )?;
+    let ledger_id = conn.last_insert_rowid();
     // the cached balance on the customer always equals the ledger
     conn.execute("UPDATE customers SET loyalty_points=loyalty_points+?2 WHERE id=?1", params![customer_id, points])?;
+    // lots: an earning starts a lot, points used come from the oldest lot, a cancel or return reverses the same lots
+    crate::lots::on_post(conn, customer_id, kind, points, bill_id, ledger_id, &at, note, false)?;
     Ok(())
 }
 
@@ -251,7 +262,8 @@ pub fn wallet(conn: &Connection, customer_id: &str) -> Result<Value> {
     let store_credit: i64 = notes.iter().map(|n| n["balance"].as_i64().unwrap_or(0)).sum();
     let r = rules(conn);
     let pts = balance(conn, customer_id)?;
-    Ok(json!({ "points": from_hundredths(pts), "pointsValue": pts * r.point_value / 100, "storeCredit": store_credit, "creditNotes": notes, "rules": rules_json(conn) }))
+    Ok(json!({ "points": from_hundredths(pts), "pointsValue": pts * r.point_value / 100, "storeCredit": store_credit, "creditNotes": notes, "rules": rules_json(conn),
+               "nextExpiry": crate::lots::next_expiry(conn, customer_id)? }))
 }
 
 pub fn history(conn: &Connection, customer_id: &str, limit: i64) -> Result<Vec<Value>> {

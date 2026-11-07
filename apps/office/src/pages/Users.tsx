@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import type { Role, RoleDef, UserAccount, UserInput } from '@gokul/data';
-import { Badge, Button, DataTable, Dialog, Drawer, EmptyState, IconButton, Input, PageHeader, Select, Switch, Tabs, TabPanel, useToast, type ColumnDef, type Tone } from '@gokul/ui';
+import { Badge, Button, DataTable, Dialog, Drawer, EmptyState, IconButton, Input, PageHeader, Select, Switch, Tabs, TabPanel, useToast, type ColumnDef, type Tone, useRefreshOnFocus } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { RolesMatrix } from '../components/crm/RolesMatrix';
 import { SaveBar } from '../components/crm/SaveBar';
@@ -76,6 +76,7 @@ export function Users() {
     setUsers(u); setSaved(r); setDraft(r);
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useRefreshOnFocus(() => { void load(); });
 
   const dirty = useMemo(() => JSON.stringify(saved) !== JSON.stringify(draft), [saved, draft]);
   const refreshUsers = async () => setUsers(await api.listUserAccounts());

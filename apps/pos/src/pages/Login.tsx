@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Delete, LockKeyhole } from 'lucide-react';
-import { countdownText, lockedSeconds, type User } from '@gokul/data';
+import { countdownText, lockedSeconds, type Settings, type User } from '@gokul/data';
 import { Kbd, Logo, PosLayout, cn, useCountdown } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -14,12 +14,14 @@ export function Login() {
   const printer = usePrinterStatus();
   const signIn = useSession((s) => s.signIn);
   const [users, setUsers] = useState<User[]>([]);
-  const [sel, setSel] = useState(2);
+  const [shop, setShop] = useState<Settings | null>(null);
+  const [sel, setSel] = useState(0);
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lockUntil, setLockUntil] = useState<Record<string, number>>({});
 
+  useEffect(() => { api.getSettings().then(setShop).catch(() => undefined); }, []);
   useEffect(() => {
     api.listUsers().then((u) => {
       setUsers(u);
@@ -136,10 +138,10 @@ export function Login() {
         <div className="relative text-xs font-medium uppercase tracking-[0.18em] text-chrome-muted">Gokul Retail</div>
         <div className="relative">
           <Logo size={112} className="mb-6 drop-shadow-2xl" />
-          <div className="text-3xl font-semibold leading-tight tracking-tight text-white" style={{ fontSize: 40, lineHeight: '46px' }}>Gokul Oils</div>
-          <div className="mt-2 text-md text-chrome-muted">Wood-pressed oils, ghee and groceries</div>
+          <div className="text-3xl font-semibold leading-tight tracking-tight text-white" style={{ fontSize: 40, lineHeight: '46px' }}>{shop?.shopName ?? ''}</div>
+          <div className="mt-2 text-md text-chrome-muted">{shop?.address ?? ''}</div>
           <div className="mt-8 grid max-w-md grid-cols-2 gap-x-8 gap-y-3 text-sm">
-            <Info k="Counter" v="Counter 1" />
+            <Info k="Counter" v={shop?.counter ?? '-'} />
             <Info k="Printer" v={printer.configured ? `${printer.name}${printer.ready ? ", ready" : ", not ready"}` : "Not set up yet"} />
             <Info k="Today" v={today} />
             <Info k="Data" v="Saved on this computer" />

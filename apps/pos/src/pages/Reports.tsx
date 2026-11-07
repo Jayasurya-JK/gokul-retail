@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BarChart3, ChevronRight, CreditCard, Download, Package, RefreshCw, Search, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, BarChart3, ChevronRight, CreditCard, Download, Package, RefreshCw, Search, Users } from 'lucide-react';
 import {
-  formatQty, formatRupees, type PaymodeReport, type SalesReport, type SalesReportRow, type Staff, type StaffReportRow, type StockReport, type StockRow,
+  formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type PaymodeReport, type SalesReport, type SalesReportRow, type Staff, type StaffReportRow, type StockReport, type StockRow,
 } from '@gokul/data';
-import { Badge, Button, DateRangePicker, EmptyState, Money, PosLayout, cn, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
+import { Badge, Button, DateRangePicker, EmptyState, Money, PosLayout, cn, useRefreshOnFocus, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -131,6 +131,7 @@ export function SalesReportPage() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
+  useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
   useEffect(() => {
     let live = true;
@@ -290,6 +291,7 @@ export function PaymodeReportPage() {
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
+  useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
   useEffect(() => {
     let live = true;
@@ -354,6 +356,29 @@ export function PaymodeReportPage() {
 /* ================================================================== */
 /* Stock                                                               */
 /* ================================================================== */
+type StockCol = { key: string; label: string; right?: boolean; w: string; cost?: boolean; get: (r: StockRow) => string | number };
+const STOCK_COLS: StockCol[] = [
+  { key: 'barcode', label: 'Barcode', w: '128px', get: (r) => r.barcode },
+  { key: 'name', label: 'Product', w: 'minmax(190px,2.2fr)', get: (r) => r.name.toLowerCase() },
+  { key: 'category', label: 'Category', w: 'minmax(130px,1.1fr)', get: (r) => r.category.toLowerCase() },
+  { key: 'brand', label: 'Brand', w: 'minmax(110px,1fr)', get: (r) => r.brand.toLowerCase() },
+  { key: 'mrp', label: 'MRP', right: true, w: '78px', get: (r) => r.mrp },
+  { key: 'cost', label: 'Cost', right: true, w: '78px', cost: true, get: (r) => r.cost ?? 0 },
+  { key: 'profitPct', label: 'Profit %', right: true, w: '76px', cost: true, get: (r) => r.profitPct ?? 0 },
+  { key: 'profit', label: 'Profit', right: true, w: '78px', cost: true, get: (r) => r.profit ?? 0 },
+  { key: 'price', label: 'Sales price', right: true, w: '90px', get: (r) => r.price },
+  { key: 'qty', label: 'Qty', right: true, w: '84px', get: (r) => r.qty },
+  { key: 'costTotal', label: 'Cost total', right: true, w: '100px', cost: true, get: (r) => r.costTotal ?? 0 },
+  { key: 'profitTotal', label: 'Profit total', right: true, w: '100px', cost: true, get: (r) => r.profitTotal ?? 0 },
+  { key: 'salesTotal', label: 'Sales total', right: true, w: '104px', get: (r) => r.salesTotal },
+  { key: 'supplier', label: 'Supplier', w: 'minmax(130px,1.2fr)', get: (r) => r.supplier.toLowerCase() },
+];
+const GROUPS: { id: GroupBy; label: string }[] = [{ id: 'none', label: 'None (A-Z)' }, { id: 'category', label: 'Category' }, { id: 'brand', label: 'Brand' }, { id: 'supplier', label: 'Supplier' }];
+const QUICK: { id: StockFilter; label: string }[] = [{ id: 'all', label: 'All' }, { id: 'low', label: 'Low stock' }, { id: 'out', label: 'Out / negative' }, { id: 'has', label: 'Has stock' }];
+const chip = (on: boolean) => cn('h-8 shrink-0 rounded-control border px-2.5 text-xs font-medium transition-colors', on ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted hover:bg-surface-3');
+
+type StockLineItem = { kind: 'group'; g: StockGroup<StockRow> } | { kind: 'row'; r: StockRow };
+
 export function StockPage() {
   useScreenKeys('Stock', [['Search by name, barcode, brand or supplier', ['Type']], ...REPORT_KEYS.slice(2)]);
   const toast = useToast();
@@ -363,6 +388,11 @@ export function StockPage() {
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [filter, setFilter] = useState<StockFilter>('all');
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'name', dir: 1 });
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
   const boxRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { boxRef.current?.focus(); }, []);
@@ -378,27 +408,58 @@ export function StockPage() {
     return () => { live = false; window.clearTimeout(t); };
   }, [query, tick, toast]);
 
-  const rows = data?.rows ?? [];
-  const shown = rows.slice(0, ROW_CAP);
-  const cols = canCost
-    ? '132px minmax(170px,2.2fr) minmax(84px,1fr) minmax(66px,.7fr) minmax(68px,.6fr) minmax(68px,.6fr) minmax(76px,.5fr) minmax(66px,.6fr) minmax(90px,.7fr) minmax(66px,.6fr) minmax(90px,.8fr) minmax(98px,.8fr) minmax(94px,.8fr) minmax(104px,1.2fr)'
-    : '122px minmax(190px,2.2fr) 100px 84px 72px 80px 84px 100px 120px';
+  const defs = useMemo(() => STOCK_COLS.filter((c) => canCost || !c.cost), [canCost]);
+  const cols = defs.map((c) => c.w).join(' ');
+
+  /* filter, then sort; the totals in the footer follow the filter */
+  const rows = useMemo(() => {
+    const f = (data?.rows ?? []).filter((r) => passesStockFilter(filter, r.qty, r.reorderLevel ?? 0));
+    const col = STOCK_COLS.find((c) => c.key === sort.key) ?? STOCK_COLS[1];
+    return [...f].sort((a, b) => {
+      const x = col.get(a), y = col.get(b);
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'en', { numeric: true });
+      return (c || a.name.localeCompare(b.name)) * sort.dir;
+    });
+  }, [data, filter, sort]);
+  const totals = useMemo(() => rows.reduce((t, r) => ({ cost: t.cost + (r.costTotal ?? 0), profit: t.profit + (r.profitTotal ?? 0), sales: t.sales + r.salesTotal }), { cost: 0, profit: 0, sales: 0 }), [rows]);
+
+  const groups = useMemo(() => groupStock(rows, groupBy, (r) => ({ key: groupBy === 'category' ? r.category : groupBy === 'brand' ? r.brand : r.supplier, qty: r.qty, sales: r.salesTotal, cost: r.costTotal, profit: r.profitTotal }), groupBy === 'supplier' ? 'No supplier' : 'Not set'), [rows, groupBy]);
+  const lines = useMemo<StockLineItem[]>(() => {
+    if (groupBy === 'none') return rows.slice(0, ROW_CAP).map((r) => ({ kind: 'row', r }));
+    return groups.flatMap<StockLineItem>((g) => [{ kind: 'group', g }, ...(closed.has(g.key) ? [] : g.rows.map((r) => ({ kind: 'row' as const, r })))]);
+  }, [rows, groups, groupBy, closed]);
+  const rowCount = lines.filter((l) => l.kind === 'row').length;
 
   const save = useCallback(() => {
-    if (!data) return;
-    const head = ['Barcode', 'Product', 'Category', 'Brand', 'MRP', ...(canCost ? ['Cost', 'Profit %', 'Profit'] : []), 'Sales price', 'Qty', ...(canCost ? ['Cost total', 'Profit total'] : []), 'Sales total', 'Supplier'];
-    downloadCsv('stock.csv', head, data.rows.map((r) => [
-      r.barcode, r.name, r.category, r.brand, rupeesCell(r.mrp), ...(canCost ? [rupeesCell(r.cost ?? 0), r.profitPct ?? 0, rupeesCell(r.profit ?? 0)] : []),
-      rupeesCell(r.price), formatQty(r.qty, r.qty % 1000 !== 0), ...(canCost ? [rupeesCell(r.costTotal ?? 0), rupeesCell(r.profitTotal ?? 0)] : []), rupeesCell(r.salesTotal), r.supplier,
-    ]));
-  }, [data, canCost]);
-  useReportKeys({ move: (by) => setSel((s) => Math.max(0, Math.min(shown.length - 1, s + by))), enter: () => undefined, fetch: () => setTick((t) => t + 1), save });
+    downloadCsv('stock.csv', defs.map((c) => c.label), rows.map((r) => defs.map((c) => {
+      if (['mrp', 'cost', 'profit', 'price', 'costTotal', 'profitTotal', 'salesTotal'].includes(c.key)) return rupeesCell(Number(c.get(r)));
+      if (c.key === 'qty') return formatQty(r.qty, r.qty % 1000 !== 0);
+      if (c.key === 'name') return r.name;
+      if (c.key === 'category') return r.category;
+      if (c.key === 'brand') return r.brand;
+      if (c.key === 'supplier') return r.supplier;
+      return c.get(r);
+    })));
+  }, [rows, defs]);
+  useReportKeys({ move: (by) => setSel((s) => Math.max(0, Math.min(rowCount - 1, s + by))), enter: () => undefined, fetch: () => setTick((t) => t + 1), save });
 
-  const t = data?.totals;
+  const toggle = (k: string) => setClosed((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const onSort = (key: string) => setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: STOCK_COLS.find((c) => c.key === key)?.right ? -1 : 1 }));
+  let rowNo = -1;
   return (
     <Frame
-      icon={<Package size={18} />} title="Stock" subtitle={data ? `${data.totals.items} items` : ' '}
-      controls={<SearchBox value={query} onChange={setQuery} placeholder="Name, barcode, brand or supplier" inputRef={boxRef} />}
+      icon={<Package size={18} />} title="Stock" subtitle={data ? `${rows.length} of ${data.totals.items} items` : ' '}
+      controls={
+        <>
+          <SearchBox value={query} onChange={setQuery} placeholder="Name, barcode, brand or supplier" inputRef={boxRef} />
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">Group by
+            <select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setClosed(new Set()); }} className={selectCls} aria-label="Group by">
+              {GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+            </select>
+          </label>
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden">{QUICK.map((q) => <button key={q.id} onClick={() => setFilter(q.id)} className={chip(filter === q.id)} tabIndex={-1}>{q.label}</button>)}</div>
+        </>
+      }
       actions={
         <>
           <Button icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />} kbd="F5" onClick={() => setTick((x) => x + 1)}>Fetch</Button>
@@ -407,25 +468,49 @@ export function StockPage() {
       }
       footer={
         <>
-          <Total label="Items">{t?.items ?? 0}</Total>
-          {canCost && <Total label="Cost total">{formatRupees(t?.costTotal ?? 0, { decimals: false })}</Total>}
-          {canCost && <Total label="Profit total" tone="success">{formatRupees(t?.profitTotal ?? 0, { decimals: false })}</Total>}
+          <Total label="Items">{rows.length}</Total>
+          {canCost && <Total label="Cost total">{formatRupees(totals.cost, { decimals: false })}</Total>}
+          {canCost && <Total label="Profit total" tone="success">{formatRupees(totals.profit, { decimals: false })}</Total>}
           <span className="flex-1" />
-          <Total label="Sales total" tone="primary">{formatRupees(t?.salesTotal ?? 0, { decimals: false })}</Total>
+          <Total label="Sales total" tone="primary">{formatRupees(totals.sales, { decimals: false })}</Total>
         </>
       }
     >
-      <Grid
-        cols={cols}
-        head={canCost
-          ? ['Barcode', 'Product', 'Category', 'Brand', 'MRP', 'Cost', 'Profit %', 'Profit', 'Sales price', 'Qty', 'Cost total', 'Profit total', 'Sales total', 'Supplier']
-          : ['Barcode', 'Product', 'Category', 'Brand', 'MRP', 'Sales price', 'Qty', 'Sales total', 'Supplier']}
-        right={canCost ? [4, 5, 6, 7, 8, 9, 10, 11, 12] : [4, 5, 6, 7]}
-        minWidth={canCost ? 1290 : 900}
-      >
-        {!loading && rows.length === 0 && <EmptyState icon={<Package size={22} />} title={query ? `No item matches "${query}"` : 'No items'} className="py-16" />}
-        {shown.map((r, i) => <StockLine key={r.id} r={r} cols={cols} canCost={canCost} on={i === sel} onSelect={() => setSel(i)} />)}
-      </Grid>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div style={{ minWidth: canCost ? 1500 : 1000 }}>
+          <div className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: cols }}>
+            {defs.map((c) => (
+              <button
+                key={c.key} onClick={() => onSort(c.key)} tabIndex={-1} title={`Sort by ${c.label}`}
+                className={cn('flex h-full items-center gap-1 truncate px-2 uppercase hover:text-ink', c.right && 'justify-end', sort.key === c.key && 'text-primary')}
+              >
+                <span className="truncate">{c.label}</span>{sort.key === c.key && (sort.dir === 1 ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+              </button>
+            ))}
+          </div>
+          {!loading && rows.length === 0 && <EmptyState icon={<Package size={22} />} title={query ? `No item matches "${query}"` : 'No items'} className="py-16" />}
+          {lines.map((l) => {
+            if (l.kind === 'group') {
+              const open = !closed.has(l.g.key);
+              return (
+                <button key={`g-${l.g.key}`} onClick={() => toggle(l.g.key)} tabIndex={-1} className="flex h-10 w-full items-center gap-3 border-b border-line bg-surface-3 px-3 text-left text-sm font-semibold text-ink hover:bg-surface-2">
+                  <ChevronRight size={15} className={cn('shrink-0 text-muted transition-transform', open && 'rotate-90')} />
+                  <span className="truncate">{l.g.label}</span>
+                  <span className="shrink-0 text-xs font-normal text-muted">{l.g.count} items</span>
+                  <span className="flex-1" />
+                  <span className="num shrink-0 text-xs font-medium text-muted">Qty {formatQty(l.g.qty, l.g.qty % 1000 !== 0)}</span>
+                  {canCost && <span className="num shrink-0 text-xs font-medium text-muted">Cost {formatRupees(l.g.cost, { decimals: false })}</span>}
+                  {canCost && <span className={cn('num shrink-0 text-xs font-medium', l.g.profit < 0 ? 'text-danger' : 'text-success')}>Profit {formatRupees(l.g.profit, { decimals: false })}</span>}
+                  <span className="num shrink-0 text-xs font-semibold text-primary">Sales {formatRupees(l.g.sales, { decimals: false })}</span>
+                </button>
+              );
+            }
+            rowNo += 1;
+            const my = rowNo;
+            return <StockLine key={l.r.id} r={l.r} cols={cols} canCost={canCost} on={my === sel} onSelect={() => setSel(my)} />;
+          })}
+        </div>
+      </div>
     </Frame>
   );
 }
@@ -436,9 +521,9 @@ function StockLine({ r, cols, canCost, on, onSelect }: { r: StockRow; cols: stri
   return (
     <div onMouseDown={onSelect} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', on && 'bg-primary-soft/60')} style={{ gridTemplateColumns: cols }}>
       <span className="num truncate px-2 text-xs text-muted">{r.barcode}</span>
-      <span className="truncate px-2 font-medium text-ink">{r.name}</span>
-      <span className="truncate px-2 text-muted">{r.category}</span>
-      <span className="truncate px-2 text-muted">{r.brand}</span>
+      <span className="truncate px-2 font-medium text-ink" title={r.name}>{r.name}</span>
+      <span className="truncate px-2 text-muted" title={r.category}>{r.category}</span>
+      <span className="truncate px-2 text-muted" title={r.brand}>{r.brand}</span>
       <span className="px-2 text-right text-muted"><Money paise={r.mrp} symbol={false} /></span>
       {canCost && <>
         <span className="px-2 text-right text-muted"><Money paise={r.cost ?? 0} symbol={false} /></span>
@@ -452,7 +537,7 @@ function StockLine({ r, cols, canCost, on, onSelect }: { r: StockRow; cols: stri
         <span className="px-2 text-right text-muted"><Money paise={r.profitTotal ?? 0} symbol={false} /></span>
       </>}
       <span className="px-2 text-right"><Money paise={r.salesTotal} symbol={false} /></span>
-      <span className="truncate px-2 text-muted">{r.supplier || '-'}</span>
+      <span className="truncate px-2 text-muted" title={r.supplier}>{r.supplier || '-'}</span>
     </div>
   );
 }
@@ -469,6 +554,7 @@ export function StaffReportPage() {
   const [rows, setRows] = useState<StaffReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
+  useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
   useEffect(() => {
     let live = true;

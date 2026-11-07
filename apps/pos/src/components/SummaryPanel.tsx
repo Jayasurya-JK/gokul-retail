@@ -97,6 +97,11 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             <CustStat k="Points" v={formatPoints(wallet?.points ?? customer.loyaltyPoints)} />
           </span>
         )}
+        {customer && wallet?.nextExpiry && (
+          <span className="mt-1.5 flex w-full items-center justify-between rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning">
+            <span><b className="num">{formatPoints(wallet.nextExpiry.points)}</b> points expire on</span><b className="num">{new Date(`${wallet.nextExpiry.on}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
+          </span>
+        )}
         {customer && (wallet?.storeCredit ?? 0) > 0 && (
           <span className="mt-1.5 flex w-full items-center justify-between rounded-md bg-success-soft px-2 py-1 text-xs font-medium text-success">
             <span>Wallet balance</span><b className="num">{formatRupees(wallet!.storeCredit, { decimals: false })}</b>

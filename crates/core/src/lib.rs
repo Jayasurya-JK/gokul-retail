@@ -14,6 +14,7 @@ pub mod error;
 pub mod expenses;
 pub mod labels;
 pub mod loyalty;
+pub mod lots;
 pub mod points;
 pub mod mill;
 pub mod money;

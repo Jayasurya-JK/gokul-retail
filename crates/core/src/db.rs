@@ -18,7 +18,14 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (7, include_str!("../migrations/007_shelf_life.sql")),
     (8, include_str!("../migrations/008_pos_parallel.sql")),
     (9, include_str!("../migrations/009_points_module.sql")),
+    (10, include_str!("../migrations/010_points_lots.sql")),
+    (11, include_str!("../migrations/011_customer_active.sql")),
 ];
+
+/// The schema version this build brings every database up to.
+pub fn latest_version() -> i64 {
+    MIGRATIONS.last().map(|m| m.0).unwrap_or(0)
+}
 
 pub struct Db {
     conn: Mutex<Connection>,
@@ -34,6 +41,7 @@ impl Db {
         let _ = apply_pending_restore(path); // a staged restore waits if another app still has the database open
         let mut conn = open_connection(path)?;
         migrate(&mut conn)?;
+        crate::lots::expire_quietly(&mut conn); // points past their expiry date lapse on every app start
         Ok(Db { conn: Mutex::new(conn), path: path.to_path_buf() })
     }
 
@@ -84,6 +92,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
             continue;
         }
         tx.execute_batch(sql)?;
+        if *version == 10 {
+            crate::lots::backfill(&tx)?; // lots from the existing ledger, in the same transaction
+        }
         tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
         tx.commit()?;
     }

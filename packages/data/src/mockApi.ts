@@ -57,8 +57,11 @@ export function createMockApi(): Api {
     },
     searchItems: async (q, limit = 50) => fuzzyFilter(items, q, (i) => [i.name, i.code, i.barcode, i.nameTa ?? ''], limit),
 
-    listCustomers: async () => customers,
-    searchCustomers: async (q, limit = 30) => fuzzyFilter(customers, q, (c) => [c.name, c.phone.replace(' ', '')], limit),
+    listCustomers: async () => customers.filter((c) => c.active !== false),
+    searchCustomers: async (q, limit = 30, offset = 0) =>
+      fuzzyFilter(customers.filter((c) => c.active !== false), q, (c) => [c.name, c.phone.replace(' ', ''), c.id, c.area], limit + offset).slice(offset),
+    getCustomer: async (id) => customers.find((c) => c.id === id) ?? null,
+    countCustomers: async () => customers.filter((c) => c.active !== false).length,
 
     listBills: async (f = {}) => {
       let out = bills;

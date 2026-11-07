@@ -44,6 +44,11 @@ pub struct Item {
     /// Optional wholesale price per unit (GST inclusive), used when a bill is switched to wholesale mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wholesale_price: Option<i64>,
+    /// Default supplier (id and name), when linked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supplier_id: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub supplier: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

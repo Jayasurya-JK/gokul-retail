@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { CustomerInput, CustomerRow, CustomerType } from '@gokul/data';
-import { Button, Drawer, Field, Input, NumberInput } from '@gokul/ui';
+import { Button, Drawer, Field, Input, NumberInput, Switch } from '@gokul/ui';
 import { paiseToRupees, rupeesToPaise, Segmented } from './common';
 
 const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 interface Draft {
-  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; email: string; address: string; limit: string; unlimited: boolean;
+  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; email: string; address: string; limit: string; unlimited: boolean; active: boolean;
 }
 
-const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', email: '', address: '', limit: '0', unlimited: false };
+const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', email: '', address: '', limit: '0', unlimited: false, active: true };
 
 const fromRow = (c: CustomerRow): Draft => ({
   name: c.name, phone: c.phone, area: c.area, type: c.type, business: c.business ?? '', gstin: c.gstin ?? '', email: c.email ?? '',
-  address: c.address ?? '', limit: c.creditLimit > 0 ? paiseToRupees(c.creditLimit) : '0', unlimited: c.creditLimit < 0,
+  address: c.address ?? '', limit: c.creditLimit > 0 ? paiseToRupees(c.creditLimit) : '0', unlimited: c.creditLimit < 0, active: c.active !== false,
 });
 
 /** Add / edit customer side sheet. Ctrl+S saves. */
@@ -44,7 +44,7 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
     try {
       await onSave({
         id: customer?.id, name: d.name, phone: d.phone, area: d.area, type: d.type, business: d.business, gstin: d.gstin,
-        email: d.email, address: d.address, creditLimit: d.unlimited ? -1 : rupeesToPaise(d.limit),
+        email: d.email, address: d.address, creditLimit: d.unlimited ? -1 : rupeesToPaise(d.limit), active: d.active,
       });
     } finally { setBusy(false); }
   };
@@ -81,6 +81,13 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
         <div className="grid grid-cols-2 gap-3">
           <Input label="Phone" value={d.phone} onChange={(e) => set('phone', e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} error={err('phone')} placeholder="98421 07731" className="num" />
           <Input label="Area" value={d.area} onChange={(e) => set('area', e.target.value)} placeholder="Gandhipuram" />
+        </div>
+        <div className="flex items-center justify-between rounded-card border border-line bg-surface-2 p-3">
+          <div>
+            <div className="text-sm font-semibold text-ink">Active customer</div>
+            <div className="text-xs text-muted">{d.active ? 'Offered at the billing counter.' : 'Hidden from the billing counter and cannot be put on a new bill. History is kept.'}</div>
+          </div>
+          <Switch checked={d.active} onCheckedChange={(v) => set('active', v)} />
         </div>
         <Input label="Email (optional)" value={d.email} onChange={(e) => set('email', e.target.value)} error={err('email')} />
         <Input label="Address (optional)" value={d.address} onChange={(e) => set('address', e.target.value)} />

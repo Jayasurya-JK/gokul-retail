@@ -13,7 +13,7 @@ interface FormState {
   name: string; nameTa: string; code: string; barcodes: string[]; barcodeDraft: string;
   categoryId: string; brand: string; unit: UnitCode; loose: boolean; packSize: string; parentId: string; scaleCode: string;
   shelfLife: string; shelfLifeUnit: 'days' | 'months';
-  hsn: string; gstRate: string; mrp: string; price: string; wholesale: string; cost: string; reorder: string; active: boolean;
+  hsn: string; gstRate: string; mrp: string; price: string; wholesale: string; cost: string; reorder: string; active: boolean; supplierId: string;
 }
 
 const LOOSE_UNITS: UnitCode[] = ['kg', 'l', 'g', 'ml'];
@@ -23,7 +23,7 @@ const rupees = (p: number) => (p ? (p / 100).toFixed(2).replace(/\.00$/, '') : '
 
 const blank = (): FormState => ({
   name: '', nameTa: '', code: '', barcodes: [], barcodeDraft: '', categoryId: '', brand: 'Gokul', unit: 'btl', loose: false,
-  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', wholesale: '', cost: '', reorder: '', active: true,
+  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', wholesale: '', cost: '', reorder: '', active: true, supplierId: '',
 });
 
 function toInput(f: FormState, id?: string): ItemInput {
@@ -33,7 +33,7 @@ function toInput(f: FormState, id?: string): ItemInput {
     shelfLife: Number(f.shelfLife) > 0 ? Number(f.shelfLife) : undefined, shelfLifeUnit: f.shelfLifeUnit,
     gstRate: Number(f.gstRate) as Item['gstRate'],
     mrp: parsePaise(f.mrp) ?? 0, price: parsePaise(f.price) ?? 0, cost: parsePaise(f.cost) ?? 0, wholesalePrice: parsePaise(f.wholesale) ?? undefined,
-    reorderLevel: parseQty(f.reorder) ?? 0, active: f.active,
+    reorderLevel: parseQty(f.reorder) ?? 0, active: f.active, supplierId: f.supplierId,
   };
 }
 
@@ -51,6 +51,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
   const [loaded, setLoaded] = useState(!itemId);
   const [cats, setCats] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [looseItems, setLooseItems] = useState<Item[]>([]);
   const [issues, setIssues] = useState<ItemIssues>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -60,9 +61,9 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
   useEffect(() => {
     let live = true;
     (async () => {
-      const [c, b, l] = await Promise.all([api.listCategories(), api.listBrands(), api.listLooseItems()]);
+      const [c, b, l, sup] = await Promise.all([api.listCategories(), api.listBrands(), api.listLooseItems(), api.listSuppliers()]);
       if (!live) return;
-      setCats(c); setBrands(b); setLooseItems(l);
+      setCats(c); setBrands(b); setLooseItems(l); setSuppliers(sup.map((x) => ({ id: x.id, name: x.name })));
       if (itemId) {
         const d = await api.getItemDetail(itemId);
         if (!live || !d) return;
@@ -71,7 +72,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
           name: i.name, nameTa: i.nameTa ?? '', code: i.code, barcodes: d.barcodes, barcodeDraft: '', categoryId: i.categoryId, brand: i.brand,
           unit: i.unit, loose: i.loose, packSize: i.packSize ?? '', parentId: d.parentId, scaleCode: d.scaleCode, shelfLife: i.shelfLife ? String(i.shelfLife) : '', shelfLifeUnit: i.shelfLifeUnit ?? 'months', hsn: i.hsn,
           gstRate: String(i.gstRate), mrp: rupees(i.mrp), price: rupees(i.price), wholesale: rupees(i.wholesalePrice ?? 0), cost: rupees(i.cost),
-          reorder: i.reorderLevel ? String(i.reorderLevel / 1000) : '', active: i.active,
+          reorder: i.reorderLevel ? String(i.reorderLevel / 1000) : '', active: i.active, supplierId: i.supplierId ?? '',
         });
         setLoaded(true);
       } else {
@@ -163,6 +164,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
                 <Select label="Category" value={f.categoryId} onChange={(e) => set('categoryId', e.target.value)} options={[{ value: '', label: 'Choose category' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]} />
                 <Select label="Brand" value={f.brand} onChange={(e) => set('brand', e.target.value)} options={brands.map((b) => ({ value: b.name, label: b.name }))} />
               </div>
+              <div className="mt-3"><Select label="Supplier" value={f.supplierId} onChange={(e) => set('supplierId', e.target.value)} options={[{ value: '', label: 'No supplier' }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]} /></div>
               {err('categoryId') && <div className="mt-1 text-xs text-danger">{err('categoryId')}</div>}
             </Section>
 

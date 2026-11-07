@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, MoonStar, Printer, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { countedTotal, formatRupees, type DenomCounts, type ShiftSummary, type ZReport } from '@gokul/data';
 import { printDoc, printWithToast } from '../printing';
-import { Badge, Button, Dialog, Kbd, Money, PosLayout, cn, useToast } from '@gokul/ui';
+import { Badge, Button, Dialog, Kbd, Money, PosLayout, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -30,7 +30,9 @@ export function DayClose() {
   const [dlg, setDlg] = useState<Dlg>(null);
   const [report, setReport] = useState<ZReport | null>(null);
 
-  useEffect(() => { api.shiftSummary().then(setSummary); }, []);
+  const loadSummary = useCallback(() => { void api.shiftSummary().then(setSummary); }, []);
+  useEffect(() => { loadSummary(); }, [loadSummary]);
+  useRefreshOnFocus(loadSummary);
 
   const counted = countedTotal(counts);
   const expected = summary?.expectedCash ?? 0;

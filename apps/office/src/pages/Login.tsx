@@ -9,7 +9,7 @@ export function Login() {
   const nav = useNavigate();
   const signIn = useSession((s) => s.signIn);
   const [users, setUsers] = useState<User[]>([]);
-  const [uid, setUid] = useState('u1');
+  const [uid, setUid] = useState('');
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
 
@@ -17,7 +17,9 @@ export function Login() {
 
   useEffect(() => {
     api.listUsers().then((u) => {
-      setUsers(u.filter((x) => x.role !== 'cashier'));
+      const staff = u.filter((x) => x.role !== 'cashier');
+      setUsers(staff);
+      setUid((cur) => (staff.some((x) => x.id === cur) ? cur : (staff.find((x) => x.role === 'owner') ?? staff[0])?.id ?? ''));
       setLockUntil(Object.fromEntries(u.filter((x) => x.lockedForSecs).map((x) => [x.id, Date.now() + (x.lockedForSecs ?? 0) * 1000])));
     });
   }, []);
