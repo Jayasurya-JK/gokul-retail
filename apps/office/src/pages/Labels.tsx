@@ -10,6 +10,8 @@ import { DEFAULT_FIELDS, GOKUL_FIELDS, LabelRoll, RIBBON_FIELDS } from '../compo
 const fieldsFor = (p: LabelPresetId) => (p === 'gokul-small' ? GOKUL_FIELDS : p === '32x25-3up' ? RIBBON_FIELDS : DEFAULT_FIELDS);
 
 const MAX_PREVIEW = 24;
+/** Today as YYYY-MM-DD in the shop's local time (the default Pkd shown in the dialog). */
+const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 type Custom = { width: string; height: string; gap: string; columns: string; colGap: string };
 
 export function Labels() {
@@ -24,7 +26,8 @@ export function Labels() {
   const [custom, setCustom] = useState<Custom>({ width: '50', height: '25', gap: '3', columns: '1', colGap: '0' });
   const [fields, setFields] = useState(GOKUL_FIELDS);
   const [months, setMonths] = useState('');
-  const [packDate, setPackDate] = useState('');
+  const [packDate, setPackDate] = useState(todayIso);
+  const [expDate, setExpDate] = useState('');
   const [batch, setBatch] = useState('');
   const [preview, setPreview] = useState<LabelPreview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,8 +62,8 @@ export function Labels() {
   const opts: LabelOptions = useMemo(() => ({
     preset,
     ...(preset === 'custom' ? { width: Number(custom.width) || 0, height: Number(custom.height) || 0, gap: Number(custom.gap) || 0, columns: Number(custom.columns) || 1, colGap: Number(custom.colGap) || 0 } : {}),
-    fields, packDate: packDate || undefined, bestBeforeMonths: months === '' ? undefined : Number(months), batch: batch.trim() || undefined,
-  }), [preset, custom, fields, packDate, months, batch]);
+    fields, packDate: packDate || undefined, expDate: expDate || undefined, bestBeforeMonths: months === '' ? undefined : Number(months), batch: batch.trim() || undefined,
+  }), [preset, custom, fields, packDate, expDate, months, batch]);
   const columns = preview?.spec?.columns ?? (LABEL_PRESETS.find((p) => p.id === preset)?.columns ?? (Number(custom.columns) || 1));
 
   // the preview is drawn by the same code that makes the printer commands
@@ -192,16 +195,21 @@ export function Labels() {
             </div>
             {(fields.dates || fields.batch) && (
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="flex flex-col gap-1 text-xs font-medium text-muted">Packed on
+                <label className="flex flex-col gap-1 text-xs font-medium text-muted">Pkd (packed on)
                   <input type="date" value={packDate} onChange={(e) => setPackDate(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-sm num text-ink" />
                 </label>
-                <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted">Best before (months)
-                  <input value={months} placeholder="blank" inputMode="numeric" onChange={(e) => setMonths(e.target.value.replace(/\D/g, ''))} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-right text-sm num text-ink" />
+                <label className="flex flex-col gap-1 text-xs font-medium text-muted">Exp (best before)
+                  <input type="date" value={expDate} onChange={(e) => setExpDate(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-sm num text-ink" />
                 </label>
+                {!(preset === 'gokul-small' || preset === '32x25-3up') && (
+                  <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted">Best before (months)
+                    <input value={months} placeholder="blank" inputMode="numeric" onChange={(e) => setMonths(e.target.value.replace(/\D/g, ''))} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-right text-sm num text-ink" />
+                  </label>
+                )}
                 <label className="flex w-40 flex-col gap-1 text-xs font-medium text-muted">Batch
                   <input value={batch} placeholder="automatic" onChange={(e) => setBatch(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-sm num text-ink" />
                 </label>
-                <span className="pb-2 text-xs text-subtle">{preset === 'gokul-small' || preset === '32x25-3up' ? 'Pkd and Exp are blank for hand writing unless you fill the date or months.' : 'Months empty: by item (oil 6, jaggery 4, other 9).'}</span>
+                <span className="pb-2 text-xs text-subtle">{preset === 'gokul-small' || preset === '32x25-3up' ? 'Pkd is today unless you change it (clear it to leave Pkd and Exp blank). Exp empty: each item uses its shelf life, blank for an item without one. Check the preview before printing.' : 'Exp empty: by months or the shelf life of the item, else oil 6, jaggery 4, other 9 months.'}</span>
               </div>
             )}
           </div>
@@ -216,6 +224,7 @@ export function Labels() {
               )}
             </span>
             <span className="flex items-center gap-2">
+              {preview?.spec && (preview.spec.alignXMm || preview.spec.alignYMm || preview.spec.pitchAdjustMm) ? <span title="From Settings, Printers, Label alignment. The preview shows the sticker; the printer prints the content moved by this much.">Aligned {preview.spec.alignXMm ?? 0} / {preview.spec.alignYMm ?? 0} mm{preview.spec.pitchAdjustMm ? `, pitch ${preview.spec.pitchAdjustMm} mm` : ''}</span> : null}
               {total > MAX_PREVIEW && <span>Showing first {MAX_PREVIEW} of {total}</span>}
               {total > 0 && <Badge tone="primary">{total} labels, {picked.length} {picked.length === 1 ? 'item' : 'items'}</Badge>}
             </span>

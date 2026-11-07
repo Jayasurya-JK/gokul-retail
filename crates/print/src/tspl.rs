@@ -95,6 +95,24 @@ pub struct Spec {
     pub rupee: Rupee,
     /// Extra left start in mm (0 to 5): the Gokul 3-up content starts this much further in from the left edge. 0 by default.
     pub start_mm: f64,
+    /// Alignment read from the calibration row, in mm (0.5 steps, -4 to +4): where the real sticker edge falls on the printed
+    /// ruler. Every element is moved by this much (positive = right / down) so the print lands on the sticker.
+    pub align_x_mm: f64,
+    pub align_y_mm: f64,
+    /// Extra mm added per column step across the roll (-1 to +1, 0.1 steps), when the 2nd and 3rd stickers drift.
+    pub pitch_adjust_mm: f64,
+    /// Pull the row that the printer pushed to the tear bar back to the print head before printing (`SET TEAR ON` + `BACKFEED`).
+    pub pull_back: bool,
+    /// How far the printer feeds a row past the head to reach the tear bar (mm); the job starts by backing the media by this.
+    pub pull_back_mm: f64,
+}
+
+/// The tear bar distance of the TE244 in mm, the default of the pull-back. Calibrate it on the real printer.
+pub const DEFAULT_PULL_BACK_MM: f64 = 12.0;
+
+/// Signed millimetres to dots (203 dpi).
+pub fn mm_dots(mm: f64) -> i32 {
+    (mm * DPM).round() as i32
 }
 
 impl Spec {
@@ -107,7 +125,17 @@ impl Spec {
         Spec {
             width: p.width, height: p.height, gap: p.gap, columns: p.columns, col_gap: p.col_gap, darkness: 8, speed: 4, dx: 0, dy: 0, flip: false,
             style, ribbon: true, rupee: Rupee::Both, start_mm: 0.0,
+            align_x_mm: 0.0, align_y_mm: 0.0, pitch_adjust_mm: 0.0, pull_back: true, pull_back_mm: DEFAULT_PULL_BACK_MM,
         }
+    }
+    /// Total shift of column `c` in dots: its place on the roll, the calibration alignment, the pitch correction and the
+    /// older "Shift right" dots.
+    pub fn shift_x(&self, c: u32) -> i32 {
+        self.col_x(c) as i32 + self.dx + mm_dots(self.align_x_mm) + (c as f64 * self.pitch_adjust_mm * DPM).round() as i32
+    }
+    /// Total shift down in dots: the calibration alignment plus the older "Shift down" dots.
+    pub fn shift_y(&self) -> i32 {
+        self.dy + mm_dots(self.align_y_mm)
     }
     /// True for the shop's own stickers (Gokul small and Gokul 3-up).
     pub fn is_gokul(&self) -> bool {
@@ -201,34 +229,34 @@ pub enum El {
     Bitmap { x: u32, y: u32, w: u32, rows: Vec<String> },
 }
 
-/// The rupee sign: an 8 x 10 design ('1' = ink) drawn at 2 x 2 dots per cell, so the strokes are 2 dots thick and clean (no
-/// dithering). The result is 16 x 20 dots, the cap height of the 16 x 24 printer font the price uses. It is sent as a TSPL BITMAP
-/// because the built-in fonts have no rupee glyph.
-const RUPEE_DESIGN: [&str; 10] = [
-    "11111110",
-    "10000011",
-    "10000011",
-    "11111110",
-    "10001100",
-    "10000110",
-    "11111111",
-    "10000011",
-    "11111111",
-    "10000000",
-];
+/// The rupee sign, 16 x 20 dots, drawn from shapes with 2 dot strokes: two bars across the top, the bowl on the right and the
+/// diagonal leg. It is sent as a TSPL BITMAP because the built-in fonts have no rupee glyph.
 const RUPEE_W: u32 = 16;
 const RUPEE_H: u32 = 20;
 /// One small space between the rupee picture and the text after it.
 const RUPEE_GAP: u32 = 6;
 
 fn rupee_rows() -> Vec<String> {
-    RUPEE_DESIGN
-        .iter()
-        .flat_map(|r| {
-            let wide: String = r.chars().flat_map(|c| [c, c]).collect();
-            [wide.clone(), wide]
-        })
-        .collect()
+    let (w, h) = (RUPEE_W as usize, RUPEE_H as usize);
+    let mut g = vec![vec![b'0'; w]; h];
+    let mut fill = |x0: usize, x1: usize, y0: usize, y1: usize| {
+        for row in g.iter_mut().take(y1 + 1).skip(y0) {
+            for c in row.iter_mut().take(x1 + 1).skip(x0) {
+                *c = b'1';
+            }
+        }
+    };
+    fill(1, 14, 0, 1); // top bar
+    fill(1, 14, 5, 6); // second bar
+    fill(11, 12, 2, 4); // bowl, right side above the second bar
+    fill(11, 12, 7, 8); // bowl, right side below it
+    fill(10, 10, 9, 9); // bowl, rounded corner
+    fill(3, 10, 10, 11); // bowl, bottom
+    for y in 10..h {
+        let x = 3 + (y - 10); // the leg runs from the bowl's left end down to the right
+        fill(x, (x + 2).min(w - 1), y, y);
+    }
+    g.into_iter().map(|r| String::from_utf8(r).unwrap()).collect()
 }
 
 fn rupee_el(x: u32, y: u32) -> El {
@@ -436,11 +464,13 @@ fn qr_matrix(src: &str) -> Option<(u32, Vec<String>)> {
     Some((size as u32, rows))
 }
 
-/// The Gokul 3-up sticker (33 x 25 mm, ribbon printing). Everything is inside the 2 mm safe margin:
-/// row 1: GOKUL in bold on the left, "Pkd:" and "Exp:" in the small font on the right (blank unless dates were given);
-/// row 2: the item name in capitals, centred;
-/// row 3: one block, centred in the space left: the QR of the item code (63 dots for the usual 13 digit code), and to its
-/// right the rupee picture and the price, with the code number under them. Nothing is drawn below the block.
+/// The Gokul 3-up sticker (33 x 25 mm, ribbon printing). Everything is inside the 2 mm safe margin and the three parts are spread
+/// evenly down the safe box (equal space above, between and below):
+/// part 1: GOKUL in bold on the left, "Pkd:dd/mm/yy" and "Exp:dd/mm/yy" in the small font right aligned (the dates are blank
+///         unless given; room for a full date is always kept, so GOKUL never meets the dates);
+/// part 2: the item name in capitals, centred;
+/// part 3: one block, centred across the box: the QR of the item code, and to its right the rupee picture and the price, with the
+///         code number under them. Nothing is drawn below the block.
 fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
     let cw = spec.cell_w();
     let top = SAFE_DOTS;
@@ -449,21 +479,19 @@ fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
     let right = cw.saturating_sub(SAFE_DOTS);
     let avail_w = right.saturating_sub(left);
     let src = [l.barcode.trim(), l.code.trim()].into_iter().find(|s| !s.is_empty()).unwrap_or("").to_string();
-    let mut els = Vec::new();
 
-    // row 1, right: Pkd and Exp in the small font, right aligned to the margin
+    // part 1: the dates (relative y from the part's top) and GOKUL
     let pkd: Vec<String> = if f.dates { vec![ascii(&format!("Pkd:{}", l.pack_date)), ascii(&format!("Exp:{}", l.best_before))] } else { vec![] };
-    let dates_w = pkd.iter().map(|t| text_w(t, 1, 1)).max().unwrap_or(0);
+    // room for "Pkd:dd/mm/yy" (12 characters) even while the date is blank, so a handwritten or later date cannot meet GOKUL
+    let dates_w = if pkd.is_empty() { 0 } else { pkd.iter().map(|t| text_w(t, 1, 1)).max().unwrap_or(0).max(12 * font_size(1).0) };
     let dates_h = if pkd.is_empty() { 0 } else { 26 };
+    let mut head: Vec<(u32, u32, El)> = Vec::new(); // (x, y relative to the part, element with y = 0)
     for (i, t) in pkd.iter().enumerate() {
-        let x = right.saturating_sub(text_w(t, 1, 1));
-        els.push(El::Text { x, y: top + i as u32 * 14, font: 1, xm: 1, ym: 1, text: t.clone() });
+        head.push((right.saturating_sub(text_w(t, 1, 1)), i as u32 * 14, El::Text { x: 0, y: 0, font: 1, xm: 1, ym: 1, text: t.clone() }));
     }
-
-    // row 1, left: GOKUL in the biggest printer font that fits beside the dates, printed twice 2 dots apart so it looks bold
-    let mut top_h = 0;
+    let mut shop_h = 0;
     if f.shop && !l.shop.trim().is_empty() {
-        let room = avail_w.saturating_sub(dates_w + 10);
+        let room = avail_w.saturating_sub(dates_w + 8 + 2); // 2 dots for the second, bold pass
         let shop = ascii(&l.shop.to_uppercase());
         let (fo, cols) = [4u8, 3, 2]
             .into_iter()
@@ -471,29 +499,32 @@ fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
             .find(|(_, c)| shop.chars().count() <= *c)
             .unwrap_or((1, (room / font_size(1).0) as usize));
         if let Some(t) = wrap(&shop, cols, 1).into_iter().next() {
-            els.push(El::Text { x: left, y: top, font: fo, xm: 1, ym: 1, text: t.clone() });
-            els.push(El::Text { x: left + 2, y: top, font: fo, xm: 1, ym: 1, text: t });
-            top_h = font_size(fo).1;
+            head.push((left, 0, El::Text { x: 0, y: 0, font: fo, xm: 1, ym: 1, text: t.clone() }));
+            head.push((left + 2, 0, El::Text { x: 0, y: 0, font: fo, xm: 1, ym: 1, text: t }));
+            shop_h = font_size(fo).1;
         }
     }
-    let mut y = top + top_h.max(dates_h) + 4;
+    let head_h = shop_h.max(dates_h);
 
-    // row 2: the item name in capitals, centred: the 12 x 20 font, cut with ".." when it is too long
+    // part 2: the item name, centred
+    let mut name_el: Option<(u32, El)> = None;
     if f.name {
         let name = ascii(&l.name.replace(" (Loose)", "").to_uppercase());
         let cols = (avail_w / font_size(2).0) as usize;
         if let Some(t) = wrap(&name, cols, 1).into_iter().next() {
             let x = left + avail_w.saturating_sub(text_w(&t, 2, 1)) / 2;
-            els.push(El::Text { x, y, font: 2, xm: 1, ym: 1, text: t });
-            y += font_size(2).1 + 4;
+            name_el = Some((x, El::Text { x: 0, y: 0, font: 2, xm: 1, ym: 1, text: t }));
         }
     }
+    let name_h = if name_el.is_some() { font_size(2).1 } else { 0 };
 
-    // row 3: the QR, then the price and the code, one block centred in the space above the bottom margin
-    let slot_h = bottom.saturating_sub(y);
+    // part 3: the QR, then the price and the code
+    let min_gap = 6;
+    let parts = (head_h > 0) as u32 + (name_h > 0) as u32 + 1;
+    let slot_h = (bottom - top).saturating_sub(head_h + name_h + min_gap * (parts + 1));
     let qr = if f.qr && !src.is_empty() { qr_matrix(&src) } else { None };
     let qr_cell = match &qr {
-        Some((size, _)) => [3u32, 2, 1].into_iter().find(|c| size * c <= slot_h && size * c <= avail_w * 45 / 100).unwrap_or(1),
+        Some((size, _)) => [3u32, 2, 1].into_iter().find(|c| size * c <= slot_h.max(*size) && size * c <= avail_w * 45 / 100).unwrap_or(1),
         None => 0,
     };
     let qr_w = qr.as_ref().map(|(size, _)| size * qr_cell).unwrap_or(0);
@@ -513,8 +544,6 @@ fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
     let price_txt = if f.price { wrap(&price, (col_max.saturating_sub(glyph_w) / font_size(pf).0) as usize, 1).into_iter().next() } else { None };
     let price_h = if price_txt.is_some() { font_size(pf).1 } else { 0 };
     let price_w = price_txt.as_ref().map(|t| glyph_w + text_w(t, pf, 1)).unwrap_or(0);
-
-    // the code number under the price: the same value as the QR
     let code_txt = if f.barcode && !src.is_empty() { wrap(&src, (col_max / font_size(1).0) as usize, 1).into_iter().next() } else { None };
     let code_h = if code_txt.is_some() { font_size(1).1 } else { 0 };
     let code_w = code_txt.as_ref().map(|t| text_w(t, 1, 1)).unwrap_or(0);
@@ -524,13 +553,38 @@ fn layout_ribbon(spec: &Spec, f: &Fields, l: &Label) -> Vec<El> {
     let gap = if qr_w > 0 && col_w > 0 { qr_gap } else { 0 };
     let block_w = qr_w + gap + col_w;
     let body_h = qr_w.max(col_h);
+
+    // equal space above, between and below the parts
+    let used = head_h + name_h + body_h;
+    let spare = (bottom - top).saturating_sub(used);
+    let space = spare / (parts + 1);
+    let mut els = Vec::new();
+    let mut y = top + space;
+    if head_h > 0 {
+        for (x, dy, mut e) in head {
+            if let El::Text { x: ex, y: ey, font, .. } = &mut e {
+                *ex = x;
+                // the small date lines sit in the middle of the GOKUL line
+                *ey = y + dy + if *font == 1 { (head_h - dates_h) / 2 } else { 0 };
+            }
+            els.push(e);
+        }
+        y += head_h + space;
+    }
+    if let Some((x, mut e)) = name_el {
+        if let El::Text { x: ex, y: ey, .. } = &mut e {
+            *ex = x;
+            *ey = y;
+        }
+        els.push(e);
+        y += name_h + space;
+    }
     let block_x = left + avail_w.saturating_sub(block_w) / 2;
-    let body_y = y + slot_h.saturating_sub(body_h) / 2;
     if let Some((_, rows)) = qr {
-        els.push(El::Qr { x: block_x, y: body_y, cell: qr_cell, data: src.clone(), size: rows.len() as u32, rows });
+        els.push(El::Qr { x: block_x, y: y + body_h.saturating_sub(qr_w) / 2, cell: qr_cell, data: src.clone(), size: rows.len() as u32, rows });
     }
     let cx = block_x + qr_w + gap;
-    let mut ty = body_y + body_h.saturating_sub(col_h) / 2;
+    let mut ty = y + body_h.saturating_sub(col_h) / 2;
     if let Some(t) = &price_txt {
         if glyph {
             els.push(rupee_el(cx, ty + price_h.saturating_sub(RUPEE_H) / 2));
@@ -870,6 +924,11 @@ fn emit_el(out: &mut Vec<u8>, e: &El, dx: i32, dy: i32) {
 }
 
 fn header(spec: &Spec) -> Vec<u8> {
+    header_ex(spec, 0)
+}
+
+/// `extra_back` more dots of BACKFEED on top of the pull-back (used only by the measuring calibration row).
+fn header_ex(spec: &Spec, extra_back: u32) -> Vec<u8> {
     let mut s = String::new();
     s.push_str(&format!("SIZE {} mm,{} mm\r\n", fmt_mm(spec.total_width_mm()), fmt_mm(spec.height)));
     s.push_str(&format!("GAP {} mm,0 mm\r\n", fmt_mm(spec.gap)));
@@ -878,6 +937,18 @@ fn header(spec: &Spec) -> Vec<u8> {
     s.push_str(&format!("DENSITY {}\r\n", spec.darkness.min(15)));
     s.push_str(&format!("SPEED {}\r\n", spec.speed.clamp(1, 8)));
     s.push_str(if spec.ribbon { "SET RIBBON ON\r\n" } else { "SET RIBBON OFF\r\n" });
+    if spec.pull_back {
+        // The printer feeds the finished row on to the tear bar (SET TEAR ON), so the next job must start by backing the media up to
+        // the print head by the same distance (BACKFEED n, n in dots; TSPL2 manual, "BACKFEED & BACKUP" and "SET TEAR & SET
+        // STRIPER"). Without it the next row prints that far down the roll and a blank row is wasted. SET REPRINT OFF stops a
+        // reprint after a paper or ribbon error.
+        s.push_str("SET TEAR ON\r\n");
+        s.push_str("SET REPRINT OFF\r\n");
+    }
+    let back = if spec.pull_back { dots(spec.pull_back_mm.clamp(0.0, 30.0)) } else { 0 } + extra_back;
+    if back > 0 {
+        s.push_str(&format!("BACKFEED {back}\r\n"));
+    }
     s.push_str("CODEPAGE 437\r\n");
     s.into_bytes()
 }
@@ -886,9 +957,9 @@ fn header(spec: &Spec) -> Vec<u8> {
 fn emit_row(out: &mut Vec<u8>, spec: &Spec, f: &Fields, row: &[&Label], copies: usize) {
     put(out, "CLS\r\n");
     for (c, label) in row.iter().enumerate() {
-        let shift = spec.col_x(c as u32) as i32 + spec.dx;
+        let shift = spec.shift_x(c as u32);
         for e in layout_label(spec, f, label) {
-            emit_el(out, &e, shift, spec.dy);
+            emit_el(out, &e, shift, spec.shift_y());
         }
     }
     put(out, &format!("PRINT 1,{}\r\n", copies));
@@ -917,9 +988,9 @@ pub fn render_test_job(spec: &Spec) -> Vec<u8> {
     let mut out = header(spec);
     put(&mut out, "CLS\r\n");
     for c in 0..spec.columns.max(1) {
-        let shift = spec.col_x(c) as i32 + spec.dx;
+        let shift = spec.shift_x(c);
         for e in test_label(spec) {
-            emit_el(&mut out, &e, shift, spec.dy);
+            emit_el(&mut out, &e, shift, spec.shift_y());
         }
     }
     put(&mut out, "PRINT 1,1\r\n");
@@ -929,4 +1000,124 @@ pub fn render_test_job(spec: &Spec) -> Vec<u8> {
 /// How many printed stickers `labels` will use (a short last row still wastes the empty cells).
 pub fn rows_needed(columns: u32, labels: usize) -> usize {
     labels.div_ceil(columns.max(1) as usize)
+}
+
+/// How far (4 mm = 32 dots) the measuring row backs the media up on top of the pull-back, and draws everything lower, so the rulers can
+/// show the -4 mm side of the top edge: the printer cannot print above its first line, but backing the media up moves that line
+/// 4 mm above the sticker. The drawing is moved down by the same amount, so the intended top edge is still drawn at the true place.
+pub const CAL_BACK_DOTS: u32 = 32;
+
+/// Pushes a bar clipped to the printable area (nothing at negative dots).
+fn cal_bar(els: &mut Vec<El>, xo: i32, yo: i32, x: i32, y: i32, w: u32, h: u32) {
+    let (mut x, mut y, mut w, mut h) = (x + xo, y + yo, w as i32, h as i32);
+    if x < 0 {
+        w += x;
+        x = 0;
+    }
+    if y < 0 {
+        h += y;
+        y = 0;
+    }
+    if w > 0 && h > 0 {
+        els.push(El::Bar { x: x as u32, y: y as u32, w: w as u32, h: h as u32 });
+    }
+}
+
+/// One sticker of the alignment row, as (shift right, shift down, elements) ready for `emit_el`.
+///
+/// `verify` false (the measuring print, nothing corrected): the intended sticker edge is the L of the top and left lines (and a second
+/// L at the 2 mm safe margin); a ruler for the TOP edge (ticks across a vertical line) and one for the LEFT edge (ticks across a
+/// horizontal line), numbered every millimetre from -4 to +4 around the intended edge, and a centre cross. Where the real sticker
+/// edge crosses a ruler is that edge's reading; the sticker 1 left ruler starts at 0 because the printer cannot print left of its
+/// first dot. `verify` true (the saved correction applied): whole boxes at the true place, rulers from 0.
+pub fn calibration_cell(spec: &Spec, col: u32, verify: bool) -> (i32, i32, Vec<El>) {
+    let (cw, ch) = (spec.cell_w() as i32, spec.cell_h() as i32);
+    let (xo, yo) = if verify { (0, 0) } else { (if col > 0 { 32 } else { 0 }, CAL_BACK_DOTS as i32) };
+    let mut els: Vec<El> = Vec::new();
+    let bar = |els: &mut Vec<El>, x: i32, y: i32, w: u32, h: u32| cal_bar(els, xo, yo, x, y, w, h);
+    let sf = SAFE_DOTS as i32;
+    if verify {
+        els.push(El::Frame { x: 0, y: 0, w: cw as u32 - 1, h: ch as u32 - 1, t: 2 });
+        els.push(El::Frame { x: SAFE_DOTS, y: SAFE_DOTS, w: (cw - 1 - 2 * sf) as u32, h: (ch - 1 - 2 * sf) as u32, t: 1 });
+    } else {
+        let h = (ch - yo) as u32;
+        bar(&mut els, 0, 0, cw as u32, 2);
+        bar(&mut els, 0, 0, 2, h);
+        bar(&mut els, sf, sf, (cw - sf) as u32, 1);
+        bar(&mut els, sf, sf, 1, h - SAFE_DOTS);
+    }
+    let from = if verify { 0i32 } else { -4 };
+    let text = |els: &mut Vec<El>, x: i32, y: i32, font: u8, t: String| {
+        let (x, y) = ((x + xo).max(0) as u32, (y + yo).max(0) as u32);
+        els.push(El::Text { x, y, font, xm: 1, ym: 1, text: t });
+    };
+    // top ruler: a vertical line at 6 mm in; ticks across it; the digit sits left (even) or right (odd) so neighbours never touch
+    let rx = 48;
+    bar(&mut els, rx, from * 8, 1, ((4 - from) * 8 + 1) as u32);
+    for k in from..=4 {
+        let ty = k * 8;
+        let long = if k == 0 { 8 } else { 4 };
+        bar(&mut els, rx - long, ty, (2 * long + 1) as u32, 1);
+        let dx = if k % 2 == 0 { rx - 22 } else { rx + 14 };
+        text(&mut els, dx, ty - 6, 1, k.abs().to_string());
+        if k < 0 {
+            bar(&mut els, dx + 1, ty - 9, 6, 2); // minus sign as a bar above the digit, so "-2" never reads as "4-2"
+        }
+    }
+    // left ruler: a horizontal line 12 mm down; ticks across it; the digit sits above (even) or below (odd)
+    let ry = 96;
+    let lx = if xo == 0 && !verify { 0 } else { from * 8 };
+    bar(&mut els, lx, ry, ((4 * 8 - lx) + 1) as u32, 1);
+    for k in from..=4 {
+        let tx = k * 8;
+        if tx < 0 && xo == 0 {
+            continue; // sticker 1: nothing can be printed left of the first dot
+        }
+        let long = if k == 0 { 8 } else { 4 };
+        bar(&mut els, tx, ry - long, 1, (2 * long + 1) as u32);
+        let ly = if k % 2 == 0 { ry - 22 } else { ry + 11 };
+        text(&mut els, tx - 4, ly, 1, k.abs().to_string());
+        if k < 0 {
+            bar(&mut els, tx - 3, ly - 4, 6, 2);
+        }
+    }
+    text(&mut els, rx + 30, 4, 1, "Y: TOP EDGE".into());
+    text(&mut els, 88, ry - 6, 1, "X: LEFT EDGE".into());
+    text(&mut els, 88, 48, 2, format!("COL {}", col + 1));
+    text(&mut els, 88, 124, 1, if verify { "VERIFY".into() } else { "MEASURE (mm)".into() });
+    let (cx, cy) = (cw / 2, ch / 2 + 20);
+    bar(&mut els, cx - 12, cy, 25, 1);
+    bar(&mut els, cx, cy - 12, 1, 25);
+    let (sx, sy) = if verify { (spec.shift_x(col), spec.shift_y()) } else { (spec.col_x(col) as i32 - xo, 0) };
+    (sx, sy, els)
+}
+
+/// The alignment row: one row of `spec.columns` calibration stickers. `verify` false is the first print with NO correction, so the
+/// readings are absolute (it backs the media up 4 mm more than a normal job, see `CAL_BACK_DOTS`); true applies the saved correction
+/// and draws whole boxes to check it. It starts with the same pull-back as every job and has exactly one PRINT.
+pub fn render_calibration_job(spec: &Spec, verify: bool) -> Vec<u8> {
+    let mut out = header_ex(spec, if verify { 0 } else { CAL_BACK_DOTS });
+    put(&mut out, "CLS\r\n");
+    for c in 0..spec.columns.max(1) {
+        let (sx, sy, els) = calibration_cell(spec, c, verify);
+        for e in els {
+            emit_el(&mut out, &e, sx, sy);
+        }
+    }
+    put(&mut out, "PRINT 1,1\r\n");
+    out
+}
+
+/// Turn the two edge numbers read from the calibration row into the values the settings keep: 0.5 mm steps, within +-4 mm.
+pub fn round_align_mm(v: f64) -> f64 {
+    ((v * 2.0).round() / 2.0).clamp(-4.0, 4.0)
+}
+
+/// Per-column pitch correction from the left-edge readings of the first and last sticker of the calibration row: the drift
+/// between them spread over the steps, in 0.1 mm steps within +-1 mm.
+pub fn pitch_from_readings(first: f64, last: f64, columns: u32) -> f64 {
+    if columns < 2 {
+        return 0.0;
+    }
+    (((last - first) / (columns - 1) as f64) * 10.0).round().clamp(-10.0, 10.0) / 10.0
 }

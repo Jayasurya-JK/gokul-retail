@@ -700,6 +700,7 @@ fn fill_printer_defaults(p: &mut Value) {
         ("compat", json!(false)), ("labelPreset", json!("32x25-3up")), ("labelWidth", json!(33)), ("labelHeight", json!(25)), ("labelGap", json!(3)), ("labelPricePrefix", json!("Rs.")),
         ("labelColumns", json!(3)), ("labelColGap", json!(2)), ("labelDarkness", json!(8)), ("labelSpeed", json!(4)), ("labelRibbon", json!(true)), ("labelRupee", json!("both")),
         ("labelOffsetX", json!(0)), ("labelOffsetY", json!(0)), ("labelFlip", json!(false)), ("labelStartMm", json!(0)),
+        ("labelAlignX", json!(0)), ("labelAlignY", json!(0)), ("labelPitchAdjust", json!(0)), ("labelPullBack", json!(true)), ("labelPullBackMm", json!(12)),
     ];
     for (k, v) in defaults {
         if p[k].is_null() {

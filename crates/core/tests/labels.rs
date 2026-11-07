@@ -252,3 +252,94 @@ fn gokul_3up_dates_are_blank_unless_a_pack_date_is_typed() {
     let job = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
     assert!(job.contains("\"Pkd:07/11/26\"") && job.contains("\"Exp:07/05/27\""), "{job}");
 }
+
+// ---------- round 5: Pkd / Exp from the dialog and the item's shelf life, alignment and calibration jobs ----------
+
+fn ribbon_opts(extra: Value) -> Value {
+    let mut o = json!({ "preset": "32x25-3up", "fields": { "shop": true, "name": true, "price": true, "barcode": true, "dates": true, "qr": true } });
+    for (k, v) in extra.as_object().unwrap() {
+        o[k] = v.clone();
+    }
+    o
+}
+
+fn job_for(db: &gokul_core::Db, d: &tempfile::TempDir, file: &str, opts: &Value) -> String {
+    let out = d.path().join(file);
+    set_label_printer(db, &format!("FILE:{}", out.display()));
+    let r = labels::print_labels(db, &json!([{ "itemId": "i1", "copies": 3 }]), opts);
+    assert_eq!(r["ok"], true, "{r}");
+    String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned()
+}
+
+#[test]
+fn pkd_defaults_come_from_the_dialog_and_exp_from_shelf_life_only() {
+    let (d, db) = mini_db();
+    // no shelf life on the item: Exp stays blank, Pkd is exactly what the dialog sent
+    let j = job_for(&db, &d, "a.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07" })));
+    assert!(j.contains("\"Pkd:07/11/26\"") && j.contains("\"Exp:\""), "{j}");
+    // the dialog sent no Pkd (cleared): nothing is invented, both blank
+    let j = job_for(&db, &d, "b.tspl", &ribbon_opts(json!({})));
+    assert!(j.contains("\"Pkd:\"") && j.contains("\"Exp:\"") && !j.contains("/26"), "{j}");
+    // shelf life of 6 months on the item: Exp = Pkd + 6 months; 45 days works too
+    db.with(|c| Ok(c.execute("UPDATE items SET shelf_life=6, shelf_life_unit='months' WHERE id='i1'", [])?)).unwrap();
+    let j = job_for(&db, &d, "c.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07" })));
+    assert!(j.contains("\"Exp:07/05/27\""), "{j}");
+    db.with(|c| Ok(c.execute("UPDATE items SET shelf_life=45, shelf_life_unit='days' WHERE id='i1'", [])?)).unwrap();
+    let j = job_for(&db, &d, "d.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07" })));
+    assert!(j.contains("\"Exp:22/12/26\""), "{j}");
+    // a typed Exp beats the shelf life
+    let j = job_for(&db, &d, "e.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07", "expDate": "2027-01-31" })));
+    assert!(j.contains("\"Exp:31/01/27\""), "{j}");
+}
+
+#[test]
+fn saving_an_item_keeps_its_shelf_life_and_the_migration_is_additive() {
+    let (_d, db) = mini_db();
+    db.with(|c| {
+        let it = gokul_core::catalog::get_item(c, "i1")?.unwrap();
+        assert_eq!((it.shelf_life, it.shelf_life_unit.clone()), (None, None));
+        let mut input: Value = serde_json::to_value(&it).unwrap();
+        input["barcodes"] = json!([it.barcode]);
+        input["packSize"] = json!("1 L");
+        input["shelfLife"] = json!(6);
+        input["shelfLifeUnit"] = json!("months");
+        let r = gokul_core::catalog::save_item(c, &serde_json::from_value(input).unwrap())?;
+        assert_eq!(r["ok"], true, "{r}");
+        assert_eq!((r["item"]["shelfLife"].as_i64(), r["item"]["shelfLifeUnit"].as_str()), (Some(6), Some("months")));
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 7);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn alignment_settings_move_the_job_and_show_in_the_preview() {
+    let (d, db) = mini_db();
+    let base = job_for(&db, &d, "f.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07" })));
+    let moved = job_for(&db, &d, "g.tspl", &ribbon_opts(json!({ "packDate": "2026-11-07", "alignX": 1.5, "alignY": -1.0, "pitchAdjust": 0.5, "pullBackMm": 13 })));
+    assert!(base.contains("BACKFEED 96\r\n") && moved.contains("BACKFEED 104\r\n"), "{base}");
+    assert!(base.contains("TEXT 16,30,\"2\"") && moved.contains("TEXT 28,22,\"2\""), "{moved}");
+    let pv = labels::label_preview(&db, &["i1".to_string()], &ribbon_opts(json!({ "alignX": 1.5, "alignY": -1.0, "pitchAdjust": 0.5 })));
+    assert_eq!((pv["spec"]["alignXMm"].as_f64(), pv["spec"]["alignYMm"].as_f64(), pv["spec"]["shiftXDots"].as_i64(), pv["spec"]["shiftYDots"].as_i64()), (Some(1.5), Some(-1.0), Some(12), Some(-8)));
+    // half millimetre steps and the +-4 mm limit are enforced
+    let odd = labels::spec_from(&json!({}), &json!({ "preset": "32x25-3up", "alignX": 1.3, "alignY": 9.0 })).unwrap();
+    assert_eq!((odd.align_x_mm, odd.align_y_mm), (1.5, 4.0));
+    // pull back can be switched off
+    let off = job_for(&db, &d, "h.tspl", &ribbon_opts(json!({ "pullBack": false })));
+    assert!(!off.contains("BACKFEED") && !off.contains("SET TEAR"), "{off}");
+}
+
+#[test]
+fn the_alignment_row_goes_to_the_printer_as_one_print() {
+    let (d, db) = mini_db();
+    let out = d.path().join("cal.tspl");
+    set_label_printer(&db, &format!("FILE:{}", out.display()));
+    let r = printing::test_print(&db, "labelAlign", "", &ribbon_opts(json!({ "verify": false })));
+    assert_eq!(r["ok"], true, "{r}");
+    let job = String::from_utf8(std::fs::read(&out).unwrap()).unwrap();
+    assert_eq!(job.matches("\nPRINT ").count(), 1);
+    assert!(job.contains("PRINT 1,1\r\n") && job.contains("BACKFEED 128\r\n"), "{job}");
+    for bad in ["GAPDETECT", "AUTODETECT", "SELFTEST", "FORMFEED"] {
+        assert!(!job.contains(bad));
+    }
+}

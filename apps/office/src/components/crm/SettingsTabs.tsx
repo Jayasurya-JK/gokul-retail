@@ -241,6 +241,7 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
   const labelOpts = () => ({
     preset: v.labelPreset, width: v.labelWidth, height: v.labelHeight, gap: v.labelGap, columns: v.labelColumns, colGap: v.labelColGap,
     darkness: v.labelDarkness, speed: v.labelSpeed, offsetX: v.labelOffsetX, offsetY: v.labelOffsetY, flip: v.labelFlip, startMm: v.labelStartMm, ribbon: v.labelRibbon, rupee: v.labelRupee,
+    alignX: v.labelAlignX, alignY: v.labelAlignY, pitchAdjust: v.labelPitchAdjust, pullBack: v.labelPullBack, pullBackMm: v.labelPullBackMm,
   });
   const labelOptions = v.detected.filter((d) => d.kind === 'label' || d.kind === 'other').map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (${d.note || 'not ready'})` }));
   const num = (k: 'labelWidth' | 'labelHeight' | 'labelGap' | 'labelColumns' | 'labelColGap', label: string) => (
@@ -252,6 +253,23 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
       onChange={(e) => up(k, Math.max(-80, Math.min(80, Math.round(Number(e.target.value) || 0))))}
     />
   );
+  const stepMm = (k: 'labelAlignX' | 'labelAlignY' | 'labelPitchAdjust', label: string, step: number, lim: number, hint?: string) => (
+    <Input
+      label={label} type="number" size="sm" step={step} min={-lim} max={lim} value={v[k]} className="text-right num" hint={hint}
+      onChange={(e) => up(k, Math.max(-lim, Math.min(lim, Math.round((Number(e.target.value) || 0) / step) * step)))}
+    />
+  );
+  const [alignRes, setAlignRes] = useState<{ ok: boolean; message: string } | null>(null);
+  const [read, setRead] = useState({ x1: '', x3: '', y: '' });
+  const readNum = (s: string) => Math.max(-4, Math.min(4, Number(s.replace(',', '.')) || 0));
+  const useReadings = () => {
+    const x1 = readNum(read.x1), x3 = read.x3.trim() === '' ? x1 : readNum(read.x3);
+    const cols = Math.max(1, v.labelColumns);
+    set({
+      ...v, labelAlignX: Math.round(x1 * 2) / 2, labelAlignY: Math.round(readNum(read.y) * 2) / 2,
+      labelPitchAdjust: cols > 1 ? Math.max(-1, Math.min(1, Math.round(((x3 - x1) / (cols - 1)) * 10) / 10)) : 0,
+    });
+  };
   return (
     <div className="grid grid-cols-2 gap-4">
       <Card title="Bill printer" actions={<Badge tone={cur ? (cur.ready ? 'success' : 'danger') : 'warning'}>{cur ? (cur.ready ? 'Ready' : cur.note || 'Not ready') : v.billPrinter ? 'Not installed' : 'Not chosen'}</Badge>}>
@@ -300,7 +318,40 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
           <NumberInput label="Start from left edge (mm, 0 to 5)" value={String(v.labelStartMm)} decimals={1} size="sm" onValueChange={(x) => up('labelStartMm', Math.min(5, Math.max(0, Number(x || 0))))} hint="Adds to the 2 mm safe margin. 0 is normal." />
         </div>
         <Row title="Labels come out upside down" hint="Turns the print 180 degrees."><Switch checked={v.labelFlip} onCheckedChange={(x) => up('labelFlip', x)} /></Row>
-        <p className="mt-1 text-xs text-muted">Print the test label, look at the frame against the sticker edge, then use the shifts until it sits square. Barcode labels are made on the Barcode labels screen.</p>
+        <Row title="Pull back to print head before printing" hint="After a job the TE244 pushes the last row out to the tear bar. This backs the roll up by the distance below before the next job, so no blank row is wasted. Turn off if the first sticker prints too high.">
+          <Switch checked={v.labelPullBack} onCheckedChange={(x) => up('labelPullBack', x)} />
+        </Row>
+        {v.labelPullBack && (
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <NumberInput label="Tear bar distance (mm)" value={String(v.labelPullBackMm)} decimals={1} size="sm" onValueChange={(x) => up('labelPullBackMm', Math.min(30, Math.max(0, Number(x || 0))))} hint="TE244 about 12 mm. Too high a number: the first sticker prints too high." />
+          </div>
+        )}
+        <p className="mt-1 text-xs text-muted">Barcode labels are made on the Barcode labels screen.</p>
+        <div className="mt-3 rounded-card border border-line bg-surface-2 p-3">
+          <div className="text-sm font-semibold text-ink">Label alignment</div>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs text-muted">
+            <li>Press <b>Print alignment row</b>. One row of 3 stickers comes out with rulers (numbers are millimetres) along the top and the left side.</li>
+            <li>On each sticker, find where the real edge of the sticker crosses the ruler, for example left edge at +1.5, top edge at -1.</li>
+            <li>Type the numbers below (sticker 1 left edge, sticker 3 left edge, top edge) and press <b>Use these numbers</b>, then <b>Save changes</b>.</li>
+            <li>Press <b>Check with my correction</b>: the thick box must sit on the sticker edge on all three.</li>
+          </ol>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button icon={<Printer size={14} />} onClick={async () => setAlignRes(await api.testPrint('labelAlign', v.labelPrinter, { ...labelOpts(), verify: false }))}>Print alignment row</Button>
+            <Button icon={<Printer size={14} />} onClick={async () => setAlignRes(await api.testPrint('labelAlign', v.labelPrinter, { ...labelOpts(), verify: true }))}>Check with my correction</Button>
+          </div>
+          <TestResult r={alignRes} />
+          <div className="mt-3 grid grid-cols-4 items-end gap-2">
+            <Input label="Sticker 1 left edge (mm)" size="sm" value={read.x1} placeholder="e.g. 1.5" className="text-right num" onChange={(e) => setRead({ ...read, x1: e.target.value })} />
+            <Input label="Sticker 3 left edge (mm)" size="sm" value={read.x3} placeholder="same as 1" className="text-right num" onChange={(e) => setRead({ ...read, x3: e.target.value })} />
+            <Input label="Top edge (mm)" size="sm" value={read.y} placeholder="e.g. -1" className="text-right num" onChange={(e) => setRead({ ...read, y: e.target.value })} />
+            <Button onClick={useReadings}>Use these numbers</Button>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            {stepMm('labelAlignX', 'Move right (mm)', 0.5, 4, 'Steps of 0.5')}
+            {stepMm('labelAlignY', 'Move down (mm)', 0.5, 4, 'Steps of 0.5')}
+            {stepMm('labelPitchAdjust', 'Column drift (mm per column)', 0.1, 1, 'Steps of 0.1, if sticker 3 is off')}
+          </div>
+        </div>
         <Button className="mt-3" icon={<Printer size={14} />} onClick={async () => setLabelRes(await api.testPrint('label', v.labelPrinter, labelOpts()))}>Print test label</Button>
         <TestResult r={labelRes} />
       </Card>

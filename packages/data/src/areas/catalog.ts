@@ -18,6 +18,9 @@ export interface ItemInput {
   loose: boolean;
   /** Packed items only, e.g. "1 L". */
   packSize: string;
+  /** Optional: how long it keeps, for the default Exp date on stickers. */
+  shelfLife?: number;
+  shelfLifeUnit?: 'days' | 'months';
   /** Packed items only: the loose item this pack is filled from. */
   parentId: string;
   /** Loose items only: product code on the weighing scale. */
@@ -260,6 +263,7 @@ export function createCatalogMock(store: MockStore): CatalogApi {
         code: input.code.trim(), barcode: input.barcodes[0], name: norm(input.name), nameTa: input.nameTa.trim() || undefined,
         categoryId: input.categoryId, category: catName(input.categoryId), brand: input.brand.trim() || 'Loose',
         unit: input.unit, loose: input.loose, packSize: input.loose ? undefined : input.packSize.trim(),
+        shelfLife: input.shelfLife && input.shelfLife > 0 ? input.shelfLife : undefined, shelfLifeUnit: input.shelfLife && input.shelfLife > 0 ? (input.shelfLifeUnit ?? 'months') : undefined,
         hsn: input.hsn.trim(), gstRate: input.gstRate, mrp: input.mrp, price: input.price, cost: input.cost,
         reorderLevel: input.reorderLevel, active: input.active,
       };

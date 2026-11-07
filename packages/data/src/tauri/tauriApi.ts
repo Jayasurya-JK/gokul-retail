@@ -186,7 +186,7 @@ export function createTauriApi(): Api {
     resetUserPin: (userId: string) => call<{ pin: string }>('resetUserPin', userId),
     getSettingsBundle: () => call<SettingsBundle>('getSettingsBundle'),
     saveSettingsBundle: (next: SettingsBundle) => call<SettingsBundle>('saveSettingsBundle', next),
-    testPrint: (kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions) => call<{ ok: boolean; message: string }>('testPrint', kind, printer, opts ?? {}),
+    testPrint: (kind: 'bill' | 'label' | 'labelAlign', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions) => call<{ ok: boolean; message: string }>('testPrint', kind, printer, opts ?? {}),
     getHardware: () => call<HardwareSettings>('getHardware'),
     labelPreview: (itemIds: string[], opts?: LabelOptions) => call<LabelPreview>('labelPreview', itemIds, opts ?? {}),
     printLabels: (entries: { itemId: string; copies: number }[], opts?: LabelOptions) => call<{ ok: boolean; message: string }>('printLabels', entries, opts ?? {}),

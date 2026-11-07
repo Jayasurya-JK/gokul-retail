@@ -27,6 +27,12 @@ pub struct Item {
     pub loose: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pack_size: Option<String>,
+    /// How long the item keeps (number of `shelf_life_unit`); the default Exp date on its sticker. None = not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shelf_life: Option<i64>,
+    /// "days" or "months"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shelf_life_unit: Option<String>,
     pub hsn: String,
     pub gst_rate: i64,
     pub mrp: i64,

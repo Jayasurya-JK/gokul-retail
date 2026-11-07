@@ -56,6 +56,11 @@ pub fn spec_from(set: &Value, opts: &Value) -> std::result::Result<Spec, String>
     spec.dx = num("offsetX", 0.0).clamp(-80.0, 80.0) as i32;
     spec.dy = num("offsetY", 0.0).clamp(-80.0, 80.0) as i32;
     spec.start_mm = num("startMm", 0.0).clamp(0.0, 5.0);
+    spec.align_x_mm = tspl::round_align_mm(num("alignX", 0.0));
+    spec.align_y_mm = tspl::round_align_mm(num("alignY", 0.0));
+    spec.pitch_adjust_mm = (num("pitchAdjust", 0.0).clamp(-1.0, 1.0) * 10.0).round() / 10.0;
+    spec.pull_back = pick(opts, set, "pullBack").as_bool().unwrap_or(true);
+    spec.pull_back_mm = num("pullBackMm", tspl::DEFAULT_PULL_BACK_MM).clamp(0.0, 30.0);
     spec.flip = pick(opts, set, "flip").as_bool().unwrap_or(false);
     spec.ribbon = pick(opts, set, "ribbon").as_bool().unwrap_or(true);
     spec.rupee = match pick(opts, set, "rupee").as_str() {
@@ -111,14 +116,40 @@ fn legal_line(c: &Config) -> String {
     s
 }
 
+/// How long the item keeps, from its own record: None when no shelf life is set.
+fn shelf_end(item: &Item, packed: NaiveDate) -> Option<NaiveDate> {
+    let n = item.shelf_life.filter(|n| *n > 0)?;
+    match item.shelf_life_unit.as_deref() {
+        Some("days") => packed.checked_add_days(chrono::Days::new(n as u64)),
+        _ => packed.checked_add_months(Months::new(n as u32)),
+    }
+}
+
 /// The values printed on one item's sticker.
+///
+/// Dates (`blank_dates` is true for the Gokul stickers): the Pkd the dialog shows (`packDate`, YYYY-MM-DD) and the Exp (`expDate` typed
+/// for every item, else `bestBeforeMonths` typed, else the item's own shelf life). Nothing is invented: without a confirmed
+/// `packDate` the Gokul sticker leaves Pkd and Exp blank, and an item without a shelf life has a blank Exp.
 pub fn label_for(item: &Item, c: &Config, opts: &Value, today: NaiveDate, price_prefix: &str, blank_dates: bool) -> Label {
-    // the Gokul sticker leaves Pkd and Exp blank (written by hand) unless a pack date was typed in: no date is ever invented
-    let typed = opts["packDate"].as_str().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    let parse = |k: &str| opts[k].as_str().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    let typed = parse("packDate");
+    let exp_typed = parse("expDate");
     let dates_off = blank_dates && typed.is_none();
     let packed = typed.unwrap_or(today);
-    let months = opts["bestBeforeMonths"].as_u64().map(|m| m as u32).unwrap_or_else(|| default_months(item));
-    let bb = if months == 0 { None } else { packed.checked_add_months(Months::new(months)) };
+    let months = opts["bestBeforeMonths"].as_u64().map(|m| m as u32);
+    let bb = if let Some(d) = exp_typed {
+        Some(d)
+    } else if dates_off {
+        None
+    } else if let Some(m) = months {
+        if m == 0 { None } else { packed.checked_add_months(Months::new(m)) }
+    } else if let Some(d) = shelf_end(item, packed) {
+        Some(d)
+    } else if blank_dates {
+        None
+    } else {
+        packed.checked_add_months(Months::new(default_months(item)))
+    };
     let batch = {
         let given = text(&opts["batch"]);
         if given.is_empty() {
@@ -146,7 +177,7 @@ pub fn label_for(item: &Item, c: &Config, opts: &Value, today: NaiveDate, price_
         barcode: item.barcode.clone(),
         code: item.code.clone(),
         pack_date: if dates_off { String::new() } else { packed.format("%d/%m/%y").to_string() },
-        best_before: if dates_off { String::new() } else { bb.map(|d| d.format("%d/%m/%y").to_string()).unwrap_or_default() },
+        best_before: bb.map(|d| d.format("%d/%m/%y").to_string()).unwrap_or_default(),
         batch,
         net_qty: if item.loose { String::new() } else { item.pack_size.clone().unwrap_or_default() },
         legal: legal_line(c),
@@ -202,7 +233,9 @@ fn entries_from(v: &Value) -> Vec<(String, usize)> {
 
 fn spec_json(spec: &Spec) -> Value {
     json!({ "widthMm": spec.width, "heightMm": spec.height, "gapMm": spec.gap, "columns": spec.columns, "colGapMm": spec.col_gap,
-            "cellW": spec.cell_w(), "cellH": spec.cell_h(), "colGapDots": tspl::dots(spec.col_gap) })
+            "cellW": spec.cell_w(), "cellH": spec.cell_h(), "colGapDots": tspl::dots(spec.col_gap),
+            "alignXMm": spec.align_x_mm, "alignYMm": spec.align_y_mm, "pitchAdjustMm": spec.pitch_adjust_mm,
+            "shiftXDots": spec.shift_x(0) - spec.col_x(0) as i32, "shiftYDots": spec.shift_y(), "pullBack": spec.pull_back, "pullBackMm": spec.pull_back_mm })
 }
 
 /// `labelPreview(itemIds, opts)`: the exact elements the printer will draw for each item (dots, 203 dpi).
@@ -279,6 +312,29 @@ pub fn test_label(db: &Db, printer: &str, opts: &Value) -> Value {
     match send(&name, "Label test", &tspl::render_test_job(&spec)) {
         Ok(n) => result(true, format!("Test label sent to {n}. If it came out, check the frame sits on the sticker edge and scan the code. If it is shifted, use the offsets.")),
         Err(e) => result(false, format!("Test print failed: {e}.")),
+    }
+}
+
+/// `testPrint('labelAlign', printer, opts)`: ONE calibration row (see `tspl::render_calibration_job`). `opts.verify` true prints it with the
+/// saved correction applied, so the numbers read from it should all be about 0. Only ever sent when the owner presses the button.
+pub fn alignment_print(db: &Db, printer: &str, opts: &Value) -> Value {
+    let loaded = db.with(|conn| {
+        let b = crate::crm::get_settings_bundle(conn)?;
+        Ok(b["printers"].clone())
+    });
+    let set = match loaded {
+        Ok(s) => s,
+        Err(e) => return result(false, e.to_string()),
+    };
+    let spec = match spec_from(&set, opts) {
+        Ok(s) => s,
+        Err(e) => return result(false, format!("Alignment print failed: {e}.")),
+    };
+    let verify = opts["verify"].as_bool().unwrap_or(false);
+    let name = if printer.trim().is_empty() { text(&set["labelPrinter"]) } else { printer.trim().to_string() };
+    match send(&name, "Label alignment", &tspl::render_calibration_job(&spec, verify)) {
+        Ok(n) => result(true, format!("Alignment row sent to {n}.")),
+        Err(e) => result(false, format!("Alignment print failed: {e}.")),
     }
 }
 

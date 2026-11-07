@@ -271,7 +271,7 @@ fn migration_to_v5_keeps_existing_data() {
     }
     let db = Db::open(&path).unwrap();
     db.with(|c| {
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 6);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 7);
         assert_eq!(count(c, "customers"), 1);
         assert_eq!(loyalty::balance(c, "c9")?, 5000, "the 50 points the customer already had are the opening balance (in hundredths)");
         assert_eq!(c.query_row::<i64, _, _>("SELECT loyalty_points FROM customers WHERE id='c9'", [], |r| r.get(0))?, 5000);
@@ -293,7 +293,7 @@ fn real_copy_upgrades_in_place() {
     db.with(|c| {
         let after = ["items", "bills", "customers", "stock_movements"].map(|t| count(c, t));
         assert_eq!(before, after, "no rows lost");
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 6);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 7);
         assert_eq!(c.query_row::<String, _, _>("PRAGMA integrity_check", [], |r| r.get(0))?, "ok");
         println!("upgraded copy: items/bills/customers/stock_movements before {before:?} after {after:?}");
         Ok(())

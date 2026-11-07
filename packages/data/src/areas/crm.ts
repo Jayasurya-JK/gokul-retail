@@ -274,6 +274,15 @@ export interface PrinterSettings {
   labelFlip: boolean;
   /** Extra left start in mm (0 to 5) for the Gokul 3-up content: 0 by default */
   labelStartMm: number;
+  /** Label alignment read from the calibration row, mm, 0.5 steps (-4 to +4): moves every label job and the preview (positive = right / down) */
+  labelAlignX: number;
+  labelAlignY: number;
+  /** Extra mm per column step across the roll, 0.1 steps (-1 to +1), when sticker 3 drifts */
+  labelPitchAdjust: number;
+  /** Before a job, pull the row the printer pushed to the tear bar back to the print head (SET TEAR ON + BACKFEED) so no blank row is wasted */
+  labelPullBack: boolean;
+  /** How far the printer feeds a row past the head to the tear bar, mm */
+  labelPullBackMm: number;
   /** Ribbon (thermal transfer) printing: on for the TE244, off for direct thermal paper */
   labelRibbon: boolean;
   /** How the rupee sign prints on the Gokul 3-up: a picture and Rs. (both), the picture only, or Rs. text only */
@@ -314,11 +323,16 @@ export interface LabelOptions {
   width?: number; height?: number; gap?: number; columns?: number; colGap?: number;
   darkness?: number; speed?: number; offsetX?: number; offsetY?: number; flip?: boolean; startMm?: number;
   ribbon?: boolean; rupee?: PrinterSettings['labelRupee'];
+  alignX?: number; alignY?: number; pitchAdjust?: number; pullBack?: boolean; pullBackMm?: number;
+  /** testPrint('labelAlign'): print the row with the saved correction applied, to check it */
+  verify?: boolean;
   /** Label printer name; empty uses the one saved in Settings */
   printer?: string;
   fields?: Partial<LabelFieldChoice>;
   /** YYYY-MM-DD, default today */
   packDate?: string;
+  /** YYYY-MM-DD printed after Exp for every item; empty uses each item's shelf life (an item without one prints a blank Exp) */
+  expDate?: string;
   /** Months until best before; 0 prints no date; default by category */
   bestBeforeMonths?: number;
   batch?: string;
@@ -334,7 +348,7 @@ export type LabelElement =
 export interface LabelPreview {
   ok: boolean;
   message: string;
-  spec: { widthMm: number; heightMm: number; gapMm: number; columns: number; colGapMm: number; cellW: number; cellH: number; colGapDots: number } | null;
+  spec: { widthMm: number; heightMm: number; gapMm: number; columns: number; colGapMm: number; cellW: number; cellH: number; colGapDots: number; alignXMm?: number; alignYMm?: number; pitchAdjustMm?: number; shiftXDots?: number; shiftYDots?: number; pullBack?: boolean; pullBackMm?: number } | null;
   labels: { itemId: string; elements: LabelElement[] }[];
 }
 
@@ -467,7 +481,7 @@ export interface CrmApi {
   getSettingsBundle(): Promise<SettingsBundle>;
   saveSettingsBundle(next: SettingsBundle): Promise<SettingsBundle>;
   /** A real test page: a bill, or a calibration label (frame, ruler, scannable code) with the label settings passed in `opts`. */
-  testPrint(kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions): Promise<{ ok: boolean; message: string }>;
+  testPrint(kind: 'bill' | 'label' | 'labelAlign', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions): Promise<{ ok: boolean; message: string }>;
   /** Scanner settings; any signed-in user (the counter needs them) */
   getHardware(): Promise<HardwareSettings>;
   /** The exact elements the printer will draw for each item (the preview on the Labels page). */
@@ -560,7 +574,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     },
     printers: {
       mode: 'escpos', printLogo: true, billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
-      compat: false, labelPricePrefix: 'Rs.', labelPreset: '32x25-3up', labelWidth: 33, labelHeight: 25, labelGap: 3, labelColumns: 3, labelColGap: 2, labelDarkness: 8, labelRibbon: true, labelRupee: 'both', labelStartMm: 0,
+      compat: false, labelPricePrefix: 'Rs.', labelPreset: '32x25-3up', labelWidth: 33, labelHeight: 25, labelGap: 3, labelColumns: 3, labelColGap: 2, labelDarkness: 8, labelRibbon: true, labelRupee: 'both', labelStartMm: 0, labelAlignX: 0, labelAlignY: 0, labelPitchAdjust: 0, labelPullBack: true, labelPullBackMm: 12,
       labelSpeed: 4, labelOffsetX: 0, labelOffsetY: 0, labelFlip: false,
       detected: [
         { name: s.printer, kind: 'thermal', ready: true },

@@ -12,6 +12,7 @@ import { Section, Segmented, unitText } from './shared';
 interface FormState {
   name: string; nameTa: string; code: string; barcodes: string[]; barcodeDraft: string;
   categoryId: string; brand: string; unit: UnitCode; loose: boolean; packSize: string; parentId: string; scaleCode: string;
+  shelfLife: string; shelfLifeUnit: 'days' | 'months';
   hsn: string; gstRate: string; mrp: string; price: string; cost: string; reorder: string; active: boolean;
 }
 
@@ -22,13 +23,14 @@ const rupees = (p: number) => (p ? (p / 100).toFixed(2).replace(/\.00$/, '') : '
 
 const blank = (): FormState => ({
   name: '', nameTa: '', code: '', barcodes: [], barcodeDraft: '', categoryId: '', brand: 'Gokul', unit: 'btl', loose: false,
-  packSize: '', parentId: '', scaleCode: '', hsn: '', gstRate: '5', mrp: '', price: '', cost: '', reorder: '', active: true,
+  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', cost: '', reorder: '', active: true,
 });
 
 function toInput(f: FormState, id?: string): ItemInput {
   return {
     id, name: f.name, nameTa: f.nameTa, code: f.code, barcodes: f.barcodes, categoryId: f.categoryId, brand: f.brand,
     unit: f.unit, loose: f.loose, packSize: f.packSize, parentId: f.parentId, scaleCode: f.scaleCode, hsn: f.hsn,
+    shelfLife: Number(f.shelfLife) > 0 ? Number(f.shelfLife) : undefined, shelfLifeUnit: f.shelfLifeUnit,
     gstRate: Number(f.gstRate) as Item['gstRate'],
     mrp: parsePaise(f.mrp) ?? 0, price: parsePaise(f.price) ?? 0, cost: parsePaise(f.cost) ?? 0,
     reorderLevel: parseQty(f.reorder) ?? 0, active: f.active,
@@ -65,7 +67,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
         const i = d.item;
         setF({
           name: i.name, nameTa: i.nameTa ?? '', code: i.code, barcodes: d.barcodes, barcodeDraft: '', categoryId: i.categoryId, brand: i.brand,
-          unit: i.unit, loose: i.loose, packSize: i.packSize ?? '', parentId: d.parentId, scaleCode: d.scaleCode, hsn: i.hsn,
+          unit: i.unit, loose: i.loose, packSize: i.packSize ?? '', parentId: d.parentId, scaleCode: d.scaleCode, shelfLife: i.shelfLife ? String(i.shelfLife) : '', shelfLifeUnit: i.shelfLifeUnit ?? 'months', hsn: i.hsn,
           gstRate: String(i.gstRate), mrp: rupees(i.mrp), price: rupees(i.price), cost: rupees(i.cost),
           reorder: i.reorderLevel ? String(i.reorderLevel / 1000) : '', active: i.active,
         });
@@ -179,6 +181,14 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
                   </Field>
                 </div>
               )}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Field label="Shelf life (optional)" hint="Used for the Exp date on barcode stickers. Leave empty to print Exp blank.">
+                  <div className="flex gap-2">
+                    <Input value={f.shelfLife} inputMode="numeric" className="num" placeholder="e.g. 6" onChange={(e) => set('shelfLife', e.target.value.replace(/\D/g, '').slice(0, 4))} />
+                    <Select value={f.shelfLifeUnit} onChange={(e) => set('shelfLifeUnit', e.target.value as 'days' | 'months')} options={[{ value: 'months', label: 'months' }, { value: 'days', label: 'days' }]} />
+                  </div>
+                </Field>
+              </div>
             </Section>
 
             {layout === 'sheet' && stockSection}

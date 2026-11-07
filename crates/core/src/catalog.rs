@@ -37,6 +37,12 @@ pub struct ItemInput {
     pub loose: bool,
     #[serde(default)]
     pub pack_size: String,
+    /// Shelf life for the default Exp date on stickers: a number of `shelf_life_unit`, None or 0 = not set.
+    #[serde(default)]
+    pub shelf_life: Option<i64>,
+    /// "days" or "months"
+    #[serde(default)]
+    pub shelf_life_unit: Option<String>,
     #[serde(default)]
     pub parent_id: String,
     #[serde(default)]
@@ -189,16 +195,21 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
     let brand = if input.brand.trim().is_empty() { "Loose".to_string() } else { norm(&input.brand) };
     let name_ta = Some(input.name_ta.trim().to_string()).filter(|s| !s.is_empty());
     let pack = if input.loose { None } else { Some(input.pack_size.trim().to_string()) };
+    let (life, life_unit) = match (input.shelf_life.filter(|n| *n > 0), input.shelf_life_unit.as_deref()) {
+        (Some(n), Some("days")) => (Some(n.min(3650)), Some("days")),
+        (Some(n), _) => (Some(n.min(120)), Some("months")),
+        _ => (None, None),
+    };
     let parent = if !input.loose && !input.parent_id.is_empty() { Some(input.parent_id.clone()) } else { None };
     let scale = if input.loose { input.scale_code.clone() } else { String::new() };
     let id = match &input.id {
         Some(id) if tx.query_row("SELECT COUNT(*) FROM items WHERE id=?1", [id], |r| r.get::<_, i64>(0))? > 0 => {
             tx.execute(
                 "UPDATE items SET code=?1,name=?2,name_ta=?3,category_id=?4,brand=?5,unit=?6,loose=?7,pack_size=?8,parent_id=?9,scale_code=?10,
-                 hsn=?11,gst_rate=?12,mrp=?13,price=?14,cost=?15,reorder_level=?16,active=?17 WHERE id=?18",
+                 hsn=?11,gst_rate=?12,mrp=?13,price=?14,cost=?15,reorder_level=?16,active=?17,shelf_life=?19,shelf_life_unit=?20 WHERE id=?18",
                 params![
                     input.code.trim(), name, name_ta, input.category_id, brand, input.unit, input.loose, pack, parent, scale,
-                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, id
+                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, id, life, life_unit
                 ],
             )?;
             audit(&tx, now, OFFICE, "update", "item", id, &name)?;
@@ -207,11 +218,11 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
         _ => {
             let id = fresh_id(&tx, "items", "i", "ITEM")?;
             tx.execute(
-                "INSERT INTO items(id,code,name,name_ta,category_id,brand,unit,loose,pack_size,parent_id,scale_code,hsn,gst_rate,mrp,price,cost,stock,reorder_level,active,created_at)
-                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17,?18,?19)",
+                "INSERT INTO items(id,code,name,name_ta,category_id,brand,unit,loose,pack_size,parent_id,scale_code,hsn,gst_rate,mrp,price,cost,stock,reorder_level,active,created_at,shelf_life,shelf_life_unit)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17,?18,?19,?20,?21)",
                 params![
                     id, input.code.trim(), name, name_ta, input.category_id, brand, input.unit, input.loose, pack, parent, scale,
-                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, iso(now)
+                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, iso(now), life, life_unit
                 ],
             )?;
             audit(&tx, now, OFFICE, "create", "item", &id, &name)?;

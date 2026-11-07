@@ -22,6 +22,9 @@ export interface Item {
   /** Sold by weight/volume at the counter (quantity is decimal). */
   loose: boolean;
   packSize?: string;
+  /** How long it keeps: the default Exp date on its sticker (a number of shelfLifeUnit); unset = blank Exp */
+  shelfLife?: number;
+  shelfLifeUnit?: 'days' | 'months';
   hsn: string;
   gstRate: 0 | 5 | 12 | 18;
   /** MRP per unit, GST inclusive */

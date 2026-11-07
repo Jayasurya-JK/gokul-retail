@@ -30,7 +30,7 @@ fn job(spec: &Spec, f: &Fields, labels: &[Label]) -> String {
 fn golden_50x25_one_up_four_copies_is_one_print_command() {
     let spec = Spec::from_preset(preset("50x25").unwrap());
     let got = job(&spec, &all_fields(), &[lab(), lab(), lab(), lab()]);
-    let want = "SIZE 50 mm,25 mm\r\nGAP 3 mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY 8\r\nSPEED 4\r\nSET RIBBON ON\r\nCODEPAGE 437\r\nCLS\r\n\
+    let want = "SIZE 50 mm,25 mm\r\nGAP 3 mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY 8\r\nSPEED 4\r\nSET RIBBON ON\r\nSET TEAR ON\r\nSET REPRINT OFF\r\nBACKFEED 96\r\nCODEPAGE 437\r\nCLS\r\n\
 TEXT 160,8,\"1\",0,1,1,\"GOKUL OILS\"\r\n\
 TEXT 12,24,\"2\",0,1,1,\"G7 Wood Pressed Sesame Oil 1L\"\r\n\
 BARCODE 77,47,\"128\",41,0,0,2,2,\"8904000000011\"\r\n\
@@ -274,11 +274,11 @@ fn gokul_3up_is_three_across_on_a_103_mm_ribbon_roll() {
     // three copies of one item fill one row: one CLS, one PRINT 1,1 with three stickers side by side
     let got = job(&spec, &f, &[b.clone(), b.clone(), b.clone()]);
     assert!(got.starts_with("SIZE 103 mm,25 mm\r\nGAP 3 mm,0 mm\r\n"), "{got}");
-    assert!(got.contains("SET RIBBON ON\r\n"), "{got}");
+    assert!(got.contains("SET RIBBON ON\r\nSET TEAR ON\r\nSET REPRINT OFF\r\nBACKFEED 96\r\nCODEPAGE 437\r\n"), "{got}");
     assert_eq!(got.matches("CLS\r\n").count(), 1);
     assert!(got.ends_with("PRINT 1,1\r\n"), "{got}");
     // GOKUL starts 16 dots in from each sticker's left edge: sticker 2 at 280 + 16 and sticker 3 at 560 + 16
-    assert!(got.contains("TEXT 16,16,\"4\",0,1,1,\"GOKUL\"") && got.contains("TEXT 296,16,\"4\"") && got.contains("TEXT 576,16,\"4\""), "{got}");
+    assert!(got.contains("TEXT 16,29,\"4\",0,1,1,\"GOKUL\"") && got.contains("TEXT 296,29,\"4\"") && got.contains("TEXT 576,29,\"4\""), "{got}");
     // the words of the sticker, the item code in the QR and under the price, and the rupee picture
     assert!(got.contains("\"GOKUL\"") && got.contains("\"TEA THOOL 100G\"") && got.contains("\"Rs.35.00\""), "{got}");
     assert!(got.contains("\"Pkd:07/11/26\"") && got.contains("\"Exp:07/05/27\""), "{got}");
@@ -431,7 +431,7 @@ fn gokul_3up_bitmap_bytes_match_the_rupee_picture() {
     assert!(head.ends_with(",2,20,0,"), "{head}");
     let data = &bytes[i..i + 40];
     // row 0 is ".#########.." : dots 1 to 9 are ink. TSPL 0 = printed, 1 = blank, so byte 0 = 0x80 and byte 1 = 0x3F
-    assert_eq!(&data[..2], &[0x00, 0x03]);
+    assert_eq!(&data[..2], &[0x80, 0x01]);
     // every row of the picture is two bytes (12 dots plus padding), and the shape is the same at both ends of the rupee
     assert_eq!(data.len(), 20 * 2);
     // the preview gets the same dots: '1' is ink
@@ -440,7 +440,7 @@ fn gokul_3up_bitmap_bytes_match_the_rupee_picture() {
     assert_eq!(w, 16);
     assert_eq!(rows.len(), 20);
     assert!(rows.iter().all(|r| r.len() == 16));
-    assert_eq!(&rows[0], "1111111111111100");
+    assert_eq!(&rows[0], "0111111111111110");
 }
 
 fn lab_price(p: i64) -> Label {
@@ -486,4 +486,173 @@ fn gokul_3up_every_element_stays_inside_the_sticker() {
     }
     f.qr = false;
     assert!(layout_label(&spec, &f, &lab()).iter().all(|e| !matches!(e, El::Qr { .. })));
+}
+
+// ---------- round 5: alignment, pull-back, calibration row, dates, safe box ----------
+
+fn tea() -> Label {
+    let mut b = lab();
+    b.shop = "GOKUL".into();
+    b.name = "Tea Thool 100g".into();
+    b.barcode = "8906005666918".into();
+    b.code = String::new();
+    b.price = 3500;
+    b.mrp = 3500;
+    b.price_prefix = "Rs.".into();
+    b.pack_date = "07/11/26".into();
+    b.best_before = String::new();
+    b
+}
+fn ribbon_fields() -> Fields {
+    Fields { shop: true, name: true, mrp: false, price: true, barcode: true, dates: true, qr: true, ..Default::default() }
+}
+
+#[test]
+fn golden_tea_3up_v4_job() {
+    let spec = ribbon_spec();
+    let t = tea();
+    let got = job(&spec, &ribbon_fields(), &[t.clone(), t.clone(), t]);
+    let head = "SIZE 103 mm,25 mm\r\nGAP 3 mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY 8\r\nSPEED 4\r\nSET RIBBON ON\r\nSET TEAR ON\r\nSET REPRINT OFF\r\nBACKFEED 96\r\nCODEPAGE 437\r\nCLS\r\n";
+    assert!(got.starts_with(head), "{got}");
+    // sticker 1: dates right aligned (Pkd with the date, Exp blank), GOKUL bold on the left, name centred
+    assert!(got.contains("TEXT 152,32,\"1\",0,1,1,\"Pkd:07/11/26\"\r\nTEXT 216,46,\"1\",0,1,1,\"Exp:\"\r\n"), "{got}");
+    assert!(got.contains("TEXT 16,29,\"4\",0,1,1,\"GOKUL\"\r\nTEXT 18,29,\"4\",0,1,1,\"GOKUL\"\r\n"), "{got}");
+    assert!(got.contains("TEXT 48,74,\"2\",0,1,1,\"TEA THOOL 100G\"\r\n"), "{got}");
+    assert!(got.contains("QRCODE 20,107,M,3,A,0,\"8906005666918\"\r\n"), "{got}");
+    assert!(got.contains("\"Rs.35.00\"") && got.contains("BITMAP 93,120,2,20,0,"), "{got}");
+    assert_eq!(got.matches("PRINT 1,1\r\n").count(), 1);
+}
+
+#[test]
+fn dates_never_meet_gokul_and_never_leave_the_safe_box() {
+    let spec = ribbon_spec();
+    for (pkd, exp) in [("", ""), ("07/11/26", ""), ("07/11/26", "07/05/27"), ("31/12/26", "31/12/27")] {
+        let mut l = tea();
+        l.pack_date = pkd.into();
+        l.best_before = exp.into();
+        let els = layout_label(&spec, &ribbon_fields(), &l);
+        let mut shop_right = 0;
+        let mut dates_left = u32::MAX;
+        for e in &els {
+            let (x0, y0, x1, y1) = extent(e);
+            assert!(x0 >= SAFE_DOTS && y0 >= SAFE_DOTS && x1 <= spec.cell_w() - SAFE_DOTS && y1 <= spec.cell_h() - SAFE_DOTS, "{e:?} leaves the safe box");
+            if let El::Text { text, font, .. } = e {
+                if text == "GOKUL" {
+                    shop_right = shop_right.max(x1);
+                }
+                if text.starts_with("Pkd:") || text.starts_with("Exp:") {
+                    assert_eq!(*font, 1);
+                    dates_left = dates_left.min(x0);
+                }
+            }
+        }
+        assert!(shop_right + 8 <= dates_left, "GOKUL ends at {shop_right}, dates start at {dates_left}");
+    }
+}
+
+#[test]
+fn content_is_spread_evenly_down_the_safe_box() {
+    let spec = ribbon_spec();
+    let els = layout_label(&spec, &ribbon_fields(), &tea());
+    let (mut top, mut bottom) = (u32::MAX, 0);
+    for e in &els {
+        let (_, y0, _, y1) = extent(e);
+        top = top.min(y0);
+        bottom = bottom.max(y1);
+    }
+    let above = top - SAFE_DOTS;
+    let below = spec.cell_h() - SAFE_DOTS - bottom;
+    assert!(above.abs_diff(below) <= 2, "above {above}, below {below}");
+}
+
+#[test]
+fn alignment_moves_every_element_and_pitch_moves_later_columns() {
+    let mut spec = ribbon_spec();
+    let t = tea();
+    let plain = job(&spec, &ribbon_fields(), &[t.clone(), t.clone(), t.clone()]);
+    spec.align_x_mm = 1.5;
+    spec.align_y_mm = -1.0;
+    spec.pitch_adjust_mm = 0.5;
+    let moved = job(&spec, &ribbon_fields(), &[t.clone(), t.clone(), t]);
+    // +1.5 mm = +12 dots right, -1 mm = -8 dots up; column 2 also +0.5 mm = 4 dots, column 3 8 dots
+    assert!(moved.contains("TEXT 28,21,\"4\",0,1,1,\"GOKUL\""), "{moved}");
+    assert!(moved.contains("TEXT 312,21,\"4\""), "{moved}");
+    assert!(moved.contains("TEXT 596,21,\"4\""), "{moved}");
+    assert!(plain.contains("TEXT 16,29,\"4\"") && !plain.contains("TEXT 28,21"));
+    assert_eq!((spec.shift_x(0), spec.shift_x(1), spec.shift_x(2), spec.shift_y()), (12, 296, 580, -8));
+    assert_eq!(mm_dots(0.5), 4);
+    assert_eq!(round_align_mm(1.3), 1.5);
+    assert_eq!(round_align_mm(9.0), 4.0);
+    assert!((pitch_from_readings(0.0, 1.0, 3) - 0.5).abs() < 1e-9);
+    assert_eq!(pitch_from_readings(1.0, 1.0, 3), 0.0);
+}
+
+#[test]
+fn pull_back_setting_controls_the_job_start() {
+    let mut spec = ribbon_spec();
+    spec.pull_back_mm = 13.0;
+    let on = job(&spec, &ribbon_fields(), &[tea()]);
+    assert!(on.contains("SET TEAR ON\r\nSET REPRINT OFF\r\nBACKFEED 104\r\nCODEPAGE 437\r\n"), "{on}");
+    // the pull-back is before the first CLS, so before anything is drawn
+    assert!(on.find("BACKFEED").unwrap() < on.find("CLS").unwrap());
+    spec.pull_back = false;
+    let off = job(&spec, &ribbon_fields(), &[tea()]);
+    assert!(!off.contains("BACKFEED") && !off.contains("SET TEAR") && !off.contains("REPRINT"), "{off}");
+}
+
+fn forbidden_free(job: &str) {
+    for bad in ["GAPDETECT", "AUTODETECT", "SELFTEST", "FORMFEED", "HOME"] {
+        assert!(!job.contains(bad), "{bad} must never be sent: {job}");
+    }
+    assert_eq!(job.matches("PRINT 1,1\r\n").count(), 1, "exactly one PRINT 1,1");
+    assert_eq!(job.matches("
+PRINT ").count(), 1);
+}
+
+#[test]
+fn calibration_row_is_one_print_with_pull_back_and_rulers() {
+    let spec = ribbon_spec();
+    let measure = String::from_utf8_lossy(&render_calibration_job(&spec, false)).into_owned();
+    forbidden_free(&measure);
+    // the measuring row backs up 4 mm (32 dots) more than a normal job: 96 + 32
+    assert!(measure.starts_with("SIZE 103 mm,25 mm\r\n") && measure.contains("SET TEAR ON\r\nSET REPRINT OFF\r\nBACKFEED 128\r\nCODEPAGE 437\r\nCLS\r\n"), "{measure}");
+    // the intended top edge of each sticker is a bar 2 dots thick at y = 32 across the cell
+    assert!(measure.contains("BAR 0,32,264,2\r\n") && measure.contains("BAR 280,32,264,2\r\n") && measure.contains("BAR 560,32,264,2\r\n"), "{measure}");
+    for c in 0..3 {
+        let (_, _, els) = calibration_cell(&spec, c, false);
+        let digits: Vec<String> = els.iter().filter_map(|e| if let El::Text { text, font: 1, .. } = e { Some(text.clone()) } else { None }).filter(|t| t.len() == 1).collect();
+        for d in ["0", "1", "2", "3", "4"] {
+            assert!(digits.iter().any(|x| x == d), "ruler digit {d} missing on column {c}");
+        }
+    }
+    let verify = String::from_utf8_lossy(&render_calibration_job(&spec, true)).into_owned();
+    forbidden_free(&verify);
+    assert!(verify.contains("BACKFEED 96\r\n") && verify.contains("BOX 0,0,263,199,2\r\n") && verify.contains("BOX 16,16,247,183,1\r\n"), "{verify}");
+    // a saved correction moves the verify row, not the measuring row
+    let mut moved = spec.clone();
+    moved.align_x_mm = 2.0;
+    assert_eq!(render_calibration_job(&moved, false), render_calibration_job(&spec, false));
+    assert_ne!(render_calibration_job(&moved, true), render_calibration_job(&spec, true));
+}
+
+#[test]
+fn every_ribbon_job_is_free_of_forbidden_commands() {
+    let spec = ribbon_spec();
+    let t = tea();
+    forbidden_free(&job(&spec, &ribbon_fields(), &[t.clone(), t.clone(), t]));
+}
+
+#[test]
+fn rupee_picture_is_a_clean_rupee_shape() {
+    let mut spec = ribbon_spec();
+    spec.rupee = Rupee::Symbol;
+    let f = Fields { price: true, ..Default::default() };
+    let els = layout_label(&spec, &f, &lab_price(100));
+    let Some(El::Bitmap { rows, .. }) = els.iter().find(|e| matches!(e, El::Bitmap { .. })).cloned() else { panic!("no rupee") };
+    // two bars across the top (rows 0-1 and 5-6 inked from dot 1 to 14), then a leg that reaches the bottom row on the right
+    for r in [0usize, 1, 5, 6] {
+        assert_eq!(&rows[r], "0111111111111110", "row {r}");
+    }
+    assert!(rows[19][10..].contains('1'));
+    assert!(rows[19][..3].chars().all(|c| c == '0'), "the leg leaves the left side clear at the bottom");
 }

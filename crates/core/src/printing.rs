@@ -889,6 +889,9 @@ pub fn test_print(db: &Db, kind: &str, printer: &str, opts: &Value) -> Value {
     if kind == "label" {
         return crate::labels::test_label(db, printer, opts);
     }
+    if kind == "labelAlign" {
+        return crate::labels::alignment_print(db, printer, opts);
+    }
     if kind != "bill" {
         return result(false, "Unknown printer kind.");
     }
