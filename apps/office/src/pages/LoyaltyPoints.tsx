@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Gift, Settings2, Star, Users, UserCog } from 'lucide-react';
+import { Download, Settings2, Star, Users } from 'lucide-react';
 import { formatPoints, formatRupees, type PointsCustomerRow, type PointsOverview, type PointsReport } from '@gokul/data';
 import {
   Button, Card, DataTable, DateRangePicker, Dialog, EmptyState, FilterBar, PageHeader, SearchInput, Tabs, TabPanel, dateRangePresets, useToast,
   type ColumnDef, type DateRange,
 } from '@gokul/ui';
 import { api } from '../store';
-import { AdjustPointsDialog, BulkAdjustDialog, PointsLedgerList } from '../components/crm/PointsParts';
+import { PointsLedgerList } from '../components/crm/PointsParts';
 import { Avatar, DetailPane, csvCell, downloadText, fmtShort, initialsOf, nameColor, Segmented } from '../components/crm/common';
 
 const PAGE = 200;
@@ -36,15 +36,10 @@ const columns: ColumnDef<PointsCustomerRow>[] = [
   { id: 'lastRedeemed', header: 'Last redeemed', meta: { w: '124px', align: 'right' }, accessorFn: (r) => r.lastRedeemed ?? '', cell: (c) => when(c.row.original.lastRedeemed) },
 ];
 
-const scopeText = (q: string, filter: Filter) => {
-  const f = filter === 'withPoints' ? 'with points' : filter === 'zero' ? 'with no points' : 'all customers';
-  return q.trim() ? `search "${q.trim()}", ${f}` : f;
-};
-
 /* ------------------------------------------------------------------ */
 /* Customers tab: server-paged table + ledger side panel               */
 /* ------------------------------------------------------------------ */
-function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null; onChanged: () => void }) {
+function CustomersTab({ overview }: { overview: PointsOverview | null }) {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -55,9 +50,6 @@ function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null
   const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [sel, setSel] = useState<PointsCustomerRow | null>(null);
-  const [version, setVersion] = useState(0);
-  const [adjust, setAdjust] = useState(false);
-  const [bulk, setBulk] = useState(false);
   const seq = useRef(0);
   const busy = useRef(false);
   const rowsRef = useRef<PointsCustomerRow[]>([]);
@@ -73,7 +65,7 @@ function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null
       setRows(r.rows); setMatched(r.matched); setTotal(r.total); setLoaded(true);
       setSelId((cur) => (cur && r.rows.some((x) => x.id === cur) ? cur : r.rows[0]?.id ?? cur));
     }).catch((e) => toast.show({ tone: 'error', title: 'Could not load customers', detail: e instanceof Error ? e.message : undefined }));
-  }, [query, version, toast]);
+  }, [query, toast]);
 
   useEffect(() => { setSel((cur) => rows.find((r) => r.id === selId) ?? (cur?.id === selId ? cur : null)); }, [rows, selId]);
 
@@ -85,8 +77,6 @@ function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null
       if (my === seq.current) setRows((prev) => [...prev, ...r.rows.filter((x) => !prev.some((p) => p.id === x.id))]);
     }).finally(() => { busy.current = false; });
   }, [query]);
-
-  const reload = () => { setVersion((v) => v + 1); onChanged(); };
 
   const exportCsv = async () => {
     const all: PointsCustomerRow[] = [];
@@ -112,14 +102,12 @@ function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null
         <Segmented<Filter> value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'withPoints', label: 'With points' }, { value: 'zero', label: 'No points' }]} />
         <span className="mx-1 h-5 w-px bg-line" />
         <Button icon={<Download size={14} />} onClick={() => void exportCsv()} disabled={matched === 0}>Export Excel (CSV)</Button>
-        <Button icon={<Gift size={14} />} onClick={() => setBulk(true)} disabled={matched === 0}>Adjust all {matched > 0 && matched !== total ? matched.toLocaleString('en-IN') : 'shown'}</Button>
       </FilterBar>
       <div className="flex min-h-0 flex-1">
         <DataTable
           data={rows} columns={columns} getRowId={(r) => r.id} selectedId={selId} onSelect={(r) => setSelId(r.id)} sort={sort} onSortChange={(s) => setSort(s)} onEndReached={more}
-          onActivate={() => setAdjust(true)}
           empty={loaded ? <EmptyState icon={<Users size={20} />} title="No customers match" hint="Check the spelling. You can search by name, mobile, code (like C02607) or area." /> : <div className="p-6 text-center text-sm text-muted">Loading customers</div>}
-          footer={<><span>{rows.length.toLocaleString('en-IN')} loaded of {matched.toLocaleString('en-IN')} matching. More load as you scroll.</span><span>Enter adjusts the selected customer</span></>}
+          footer={<><span>{rows.length.toLocaleString('en-IN')} loaded of {matched.toLocaleString('en-IN')} matching. More load as you scroll.</span></>}
         />
         {sel && (
           <DetailPane width={400}>
@@ -131,25 +119,16 @@ function CustomersTab({ overview, onChanged }: { overview: PointsOverview | null
                   <div className="num mt-0.5 text-sm text-muted">{sel.id} · {sel.phone || 'no mobile'}</div>
                   <div className="text-xs text-subtle">{sel.area || 'No area'}</div>
                 </div>
-                <Button size="sm" icon={<UserCog size={13} />} onClick={() => setAdjust(true)}>Adjust</Button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="rounded-control border border-line bg-surface-2 px-3 py-2"><div className="text-xs text-muted">Points balance</div><div className="num mt-0.5 text-lg font-semibold text-ink">{formatPoints(sel.points)}</div></div>
                 <div className="rounded-control border border-line bg-surface-2 px-3 py-2"><div className="text-xs text-muted">Worth</div><div className="num mt-0.5 text-lg font-semibold text-ink">{formatRupees(Math.round(sel.points * (overview?.pointValue ?? 100)))}</div></div>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto"><PointsLedgerList customerId={sel.id} version={version} /></div>
+            <div className="min-h-0 flex-1 overflow-auto"><PointsLedgerList customerId={sel.id} /></div>
           </DetailPane>
         )}
       </div>
-      <AdjustPointsDialog
-        open={adjust} customer={sel} onClose={() => setAdjust(false)}
-        onDone={(b) => { setAdjust(false); reload(); toast.show({ tone: 'success', title: 'Points changed', detail: `${sel?.name} now has ${formatPoints(b)} points.` }); }}
-      />
-      <BulkAdjustDialog
-        open={bulk} q={q} filter={filter} matched={matched} scope={scopeText(q, filter)} onClose={() => setBulk(false)}
-        onDone={(r) => { setBulk(false); reload(); toast.show({ tone: 'success', title: 'Points changed', detail: `${r.customers.toLocaleString('en-IN')} customers, ${formatPoints(r.points)} points in all.` }); }}
-      />
     </div>
   );
 }
@@ -286,7 +265,7 @@ export function LoyaltyPoints() {
           action={ov && ov.expiryMonths > 0 ? <button type="button" onClick={() => void previewExpiry()} className="text-xs font-medium text-primary hover:underline">Run expiry...</button> : undefined} />
       </div>
       <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1" tabs={[{ value: 'customers', label: 'Customers' }, { value: 'reports', label: 'Reports' }]}>
-        <TabPanel value="customers" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><CustomersTab overview={ov} onChanged={load} /></TabPanel>
+        <TabPanel value="customers" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><CustomersTab overview={ov} /></TabPanel>
         <TabPanel value="reports" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden"><ReportsTab /></TabPanel>
       </Tabs>
       <Dialog

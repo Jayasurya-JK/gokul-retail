@@ -570,9 +570,9 @@ export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySet
         )}
       </Card>
       <Card title="Customer points">
-        <p className="text-sm text-muted">See who holds points, the full ledger, manual adjustments, expiry and reports.</p>
+        <p className="text-sm text-muted">See who holds points, the full ledger, expiry and reports.</p>
         <Button className="mt-3" icon={<Star size={14} />} onClick={() => nav('/loyalty-points')}>Open Loyalty points</Button>
-        <p className="mt-2 text-xs text-subtle">Only the owner can change these settings; adjusting a customer&apos;s points needs an owner or manager PIN.</p>
+        <p className="mt-2 text-xs text-subtle">Only the owner can change these settings. Points change only through bills; expiry is the one manual step.</p>
       </Card>
     </div>
   );

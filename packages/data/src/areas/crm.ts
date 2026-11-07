@@ -478,9 +478,6 @@ export interface PointsQuery {
 export interface PointsCustomerRow { id: string; name: string; phone: string; area: string; points: number; lastEarned: string | null; lastRedeemed: string | null }
 export interface PointsPage { rows: PointsCustomerRow[]; /** customers the search matched */ matched: number; /** all customers */ total: number }
 export interface PointsLedgerRow { id: number; at: string; kind: PointsKind; points: number; balanceAfter: number; bill: string | null; note: string; by: string }
-export interface PointsAdjustInput { customerId: string; /** + adds, - removes (two decimals) */ points: number; reason: string; /** owner or manager PIN (always needed) */ managerPin?: string }
-export interface PointsBulkInput { q?: string; filter?: 'all' | 'withPoints' | 'zero'; points: number; reason: string; /** the count the confirmation showed */ expectedCount?: number; managerPin?: string }
-export interface PointsBulkResult { customers: number; matched: number; points: number }
 export interface PointsExpiryResult { customers: number; points: number; months: number; done: boolean }
 export interface PointsReport {
   from: string; to: string;
@@ -541,10 +538,6 @@ export interface CrmApi {
   listPointsCustomers(query?: PointsQuery): Promise<PointsPage>;
   /** Every earn, redeem, adjust, reverse, expire and import row of one customer, newest first, with the balance after each. */
   getPointsLedger(customerId: string, limit?: number): Promise<PointsLedgerRow[]>;
-  /** Owner or manager, with a manager PIN: add or remove points for one customer. Audited. */
-  adjustPoints(input: PointsAdjustInput): Promise<{ customerId: string; balance: number }>;
-  /** The same for every customer a search and filter match. Never takes a balance below zero. */
-  bulkAdjustPoints(input: PointsBulkInput): Promise<PointsBulkResult>;
   /** Takes off points not earned again within the expiry months. `dryRun` (default) only counts. */
   runPointsExpiry(dryRun?: boolean): Promise<PointsExpiryResult>;
   pointsReport(query?: { from?: string; to?: string }): Promise<PointsReport>;
@@ -911,33 +904,6 @@ export function createCrmMock(store: MockStore): CrmApi {
       const off = q.offset ?? 0;
       const rows = sorted.slice(off, off + (q.limit && q.limit > 0 ? q.limit : 100)).map((c) => ({ id: c.id, name: c.name, phone: c.phone, area: c.area, points: c.loyaltyPoints, lastEarned: lastOf(c.id, 'earn'), lastRedeemed: lastOf(c.id, 'redeem') }));
       return delay({ rows, matched: filtered.length, total: store.customers.length });
-    },
-    adjustPoints: (input) => {
-      const c = store.customers.find((x) => x.id === input.customerId);
-      const h = Math.round(input.points * 100);
-      if (!c) return Promise.reject(new Error('Customer not found.'));
-      if (!input.managerPin) return Promise.reject(new Error('A manager PIN is needed to change customer points'));
-      if (input.managerPin === '0000') return Promise.reject(new Error('Manager PIN is not correct'));
-      if (!h) return Promise.reject(new Error('Enter the points to add or remove.'));
-      if (input.reason.trim().length < 3) return Promise.reject(new Error('Write the reason for the change (at least 3 letters).'));
-      if (h < 0 && -h > Math.round(c.loyaltyPoints * 100)) return Promise.reject(new Error(`${c.name} has only ${c.loyaltyPoints.toFixed(2)} points, so ${(-h / 100).toFixed(2)} cannot be taken off.`));
-      postPoints(c, 'adjust', h, input.reason.trim());
-      return delay({ customerId: c.id, balance: c.loyaltyPoints });
-    },
-    bulkAdjustPoints: (input) => {
-      const h = Math.round(input.points * 100);
-      const set = pointsMatch({ q: input.q, filter: input.filter });
-      if (!input.managerPin) return Promise.reject(new Error('A manager PIN is needed to change customer points'));
-      if (input.managerPin === '0000') return Promise.reject(new Error('Manager PIN is not correct'));
-      if (!h || input.reason.trim().length < 3) return Promise.reject(new Error('Enter the points and the reason.'));
-      if (input.expectedCount !== undefined && input.expectedCount !== set.length) return Promise.reject(new Error(`The list changed: it now has ${set.length} customers, not ${input.expectedCount}. Check it and try again.`));
-      let n = 0, tot = 0;
-      for (const c of set) {
-        const amt = h < 0 ? -Math.min(-h, Math.max(0, Math.round(c.loyaltyPoints * 100))) : h;
-        if (!amt) continue;
-        postPoints(c, 'adjust', amt, `${input.reason.trim()} (bulk)`); n += 1; tot += amt;
-      }
-      return delay({ customers: n, matched: set.length, points: tot / 100 });
     },
     runPointsExpiry: (dryRun = true) => {
       const months = bundle.loyalty.expiryMonths;

@@ -27,7 +27,6 @@ export function ManagedList({ title, noun, icon, rows, selectedId, onSelect, onA
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
-  const maxItems = Math.max(1, ...rows.map((r) => r.items));
   const cur = rows.find((r) => r.id === curId);
   const confirm = rows.find((r) => r.id === confirmId);
 
@@ -74,42 +73,46 @@ export function ManagedList({ title, noun, icon, rows, selectedId, onSelect, onA
   };
 
   return (
-    <section className="flex min-h-0 flex-1 basis-0 flex-col border-b border-line last:border-b-0">
-      <header className="flex shrink-0 items-start gap-2 px-3 pb-2 pt-2">
-        <div className="flex h-7 shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-          <span className="text-primary">{icon}</span>
-          {title}
-          <span className="rounded-full bg-surface-3 px-1.5 text-[11px] font-medium normal-case tracking-normal text-muted num">{rows.length}</span>
+    <section className="flex min-h-0 flex-1 basis-0 flex-col border-b border-line-strong last:border-b-0">
+      <header className="shrink-0 border-b border-forest-200 bg-forest-100/70 px-3 pb-2.5 pt-2.5">
+        <div className="flex h-7 items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-control bg-primary text-primary-fg">{icon}</span>
+          <div className="text-base font-semibold text-ink">{title}</div>
+          <span className="rounded-full bg-surface px-2 py-px text-xs font-semibold text-primary ring-1 ring-forest-200 num">{rows.length}</span>
         </div>
-        <div className="min-w-0 flex-1">
-          <Input
-            size="sm" placeholder={`Add ${noun}`} value={draft} error={addError || undefined}
-            onChange={(e) => { setDraft(e.target.value); setAddError(''); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void add(); } }}
-          />
+        <div className="mt-2 flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <Input
+              size="sm" placeholder={`Add ${noun}`} value={draft} error={addError || undefined}
+              onChange={(e) => { setDraft(e.target.value); setAddError(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void add(); } }}
+            />
+          </div>
+          <IconButton label={`Add ${noun}`} size="sm" disabled={!draft.trim()} onClick={() => void add()} className="border border-line-strong bg-surface"><Plus size={14} /></IconButton>
         </div>
-        <IconButton label={`Add ${noun}`} size="sm" disabled={!draft.trim()} onClick={() => void add()} className="mt-0 border border-line-strong"><Plus size={14} /></IconButton>
       </header>
 
       <div
         ref={listRef} tabIndex={0} onKeyDown={onKey} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} role="listbox" aria-label={title}
-        className="min-h-0 flex-1 overflow-auto border-t border-line/70 outline-none"
+        className="min-h-0 flex-1 overflow-auto bg-forest-50 py-1 outline-none"
       >
         {rows.length === 0 && <EmptyState title={`No ${noun} yet`} hint={`Add your first ${noun} above.`} />}
         {rows.map((r) => {
           const active = r.id === selectedId;
           const editing = r.id === editId;
           const isCur = focused && (r.id === curId || (!curId && active));
+          // On the solid green selected row the action icons turn white (the `!` forces the token colour over IconButton's default).
+          const onSel = active ? '!text-primary-fg hover:!bg-primary-fg/20 hover:!text-primary-fg' : undefined;
           return (
             <div
               key={r.id} data-row={r.id} role="option" aria-selected={active}
               onClick={() => { setCurId(r.id); onSelect(active ? null : r.id); }} onDoubleClick={() => startEdit(r)}
               className={cn(
-                'group relative flex h-8 cursor-default items-center gap-2 border-b border-line/60 pl-3 pr-3 text-sm',
-                active ? 'bg-primary-soft' : 'hover:bg-surface-2', isCur && 'ring-1 ring-inset ring-primary/60',
+                'group relative mx-1 flex h-9 cursor-default items-center gap-2 rounded-control pl-3 pr-2 text-base',
+                active ? 'bg-primary font-semibold text-primary-fg' : 'text-ink hover:bg-forest-100',
+                isCur && (active ? 'ring-2 ring-inset ring-primary-fg' : 'ring-2 ring-inset ring-primary/70'),
               )}
             >
-              {active && <span className="absolute inset-y-1 left-0 w-[3px] rounded-r bg-primary" />}
               {editing ? (
                 <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                   <Input
@@ -126,18 +129,23 @@ export function ManagedList({ title, noun, icon, rows, selectedId, onSelect, onA
                 </div>
               ) : (
                 <>
-                  <span className={cn('min-w-0 flex-1 truncate', active ? 'font-semibold text-primary' : 'font-medium text-ink')}>{r.name}</span>
-                  <span className="relative flex shrink-0 items-center justify-end">
-                    <span className={cn('flex w-[52px] flex-col items-end gap-0.5', (active || isCur) ? '' : 'group-hover:invisible')}>
-                      <span className={cn('text-xs font-medium num', active ? 'text-primary' : 'text-muted')}>{r.items}</span>
-                      <span className="h-[3px] w-full overflow-hidden rounded-full bg-line"><span className="block h-full rounded-full bg-primary/60" style={{ width: `${(r.items / maxItems) * 100}%` }} /></span>
-                    </span>
+                  <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                  <span className="flex shrink-0 items-center justify-end">
+                    <span className={cn(
+                      'min-w-[32px] rounded-full px-2 py-0.5 text-center text-xs font-semibold num',
+                      active ? 'bg-primary-fg/20 text-primary-fg' : 'bg-surface-3 text-muted',
+                      isCur ? 'invisible' : 'group-hover:invisible',
+                    )}>{r.items}</span>
                   </span>
-                  <span className={cn('absolute right-2 top-1/2 flex -translate-y-1/2 items-center rounded-control bg-surface shadow-sm ring-1 ring-line', 'invisible group-hover:visible')}>
-                    <IconButton label="Rename" kbd="F2" size="sm" onClick={(e) => { e.stopPropagation(); startEdit(r); }}><Pencil size={13} /></IconButton>
-                    <IconButton label="Move up" kbd="Alt+Up" size="sm" disabled={rows[0]?.id === r.id} onClick={(e) => { e.stopPropagation(); void onMove(r.id, -1); }}><ArrowUp size={13} /></IconButton>
-                    <IconButton label="Move down" kbd="Alt+Down" size="sm" disabled={rows[rows.length - 1]?.id === r.id} onClick={(e) => { e.stopPropagation(); void onMove(r.id, 1); }}><ArrowDown size={13} /></IconButton>
-                    <IconButton label="Delete" kbd="Del" size="sm" onClick={(e) => { e.stopPropagation(); askDelete(r); }}><Trash2 size={13} /></IconButton>
+                  <span className={cn(
+                    'absolute right-2 top-1/2 flex -translate-y-1/2 items-center rounded-control shadow-sm',
+                    active ? 'bg-forest-700 ring-1 ring-primary-fg/30' : 'bg-surface ring-1 ring-line',
+                    isCur ? 'visible' : 'invisible group-hover:visible',
+                  )}>
+                    <IconButton label="Rename" kbd="F2" size="sm" className={onSel} onClick={(e) => { e.stopPropagation(); startEdit(r); }}><Pencil size={13} /></IconButton>
+                    <IconButton label="Move up" kbd="Alt+Up" size="sm" className={onSel} disabled={rows[0]?.id === r.id} onClick={(e) => { e.stopPropagation(); void onMove(r.id, -1); }}><ArrowUp size={13} /></IconButton>
+                    <IconButton label="Move down" kbd="Alt+Down" size="sm" className={onSel} disabled={rows[rows.length - 1]?.id === r.id} onClick={(e) => { e.stopPropagation(); void onMove(r.id, 1); }}><ArrowDown size={13} /></IconButton>
+                    <IconButton label="Delete" kbd="Del" size="sm" className={onSel} onClick={(e) => { e.stopPropagation(); askDelete(r); }}><Trash2 size={13} /></IconButton>
                   </span>
                 </>
               )}

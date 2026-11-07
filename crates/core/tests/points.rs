@@ -1,10 +1,9 @@
-//! Customer Points module: units shown to screens, paged search, ledger balances, adjustments (role + PIN + audit),
+//! Customer Points module: units shown to screens, paged search, ledger balances, manual adjustments (refused: points change only through bills),
 //! expiry, excluded categories, reports, and the ledger rebuild of migration 9.
 mod common;
 use common::*;
 use gokul_core::bills::save_bill;
 use gokul_core::db::set_setting;
-use gokul_core::types::*;
 use gokul_core::{dispatch, dispatch_session, loyalty, Db, Session};
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
@@ -152,100 +151,37 @@ fn overview_ledger_balances_and_excluded_categories() {
 }
 
 #[test]
-fn adjust_needs_owner_or_manager_and_a_pin_and_is_audited() {
+fn points_change_only_through_bills_so_manual_adjust_is_refused_and_changes_nothing() {
     let (_d, db) = mini_db();
     db.with(|c| {
         customer(c, "c2", "Opening Person", "90000 00000", "", 5_000);
+        customer(c, "c3", "Anbu", "90000 00001", "Gandhipuram", 1_000);
         Ok(())
     })
     .unwrap();
-    let cashier = sign_in(&db, "u3", "1234", false);
-    // a cashier can look but not change
-    assert!(call(&db, &cashier, "getPointsLedger", json!(["c2"])).is_ok());
-    assert!(call(&db, &cashier, "listPointsCustomers", json!([{}])).is_ok());
-    let e = call(&db, &cashier, "adjustPoints", json!([{ "customerId": "c2", "points": 5, "reason": "gift", "managerPin": "2222" }])).unwrap_err();
-    assert!(e.contains("permission"), "{e}");
-    assert!(call(&db, &cashier, "pointsOverview", json!([])).is_err(), "liability is for owner and manager");
-    assert!(call(&db, &cashier, "runPointsExpiry", json!([true])).is_err());
-    // the manager must also give a PIN, and the right one
-    let manager = sign_in(&db, "u2", "2222", true);
-    let a = |pts: f64, pin: Option<&str>, reason: &str| {
-        let mut v = json!({ "customerId": "c2", "points": pts, "reason": reason });
-        if let Some(p) = pin {
-            v["managerPin"] = json!(p);
-        }
-        json!([v])
-    };
-    assert!(call(&db, &manager, "adjustPoints", a(5.0, None, "gift")).unwrap_err().contains("manager PIN is needed"));
-    assert!(call(&db, &manager, "adjustPoints", a(5.0, Some("9999"), "gift")).is_err());
-    assert_eq!(db.with(|c| Ok(balance(c, "c2"))).unwrap(), 5_000, "nothing changed yet");
-    let ok = call(&db, &manager, "adjustPoints", a(12.5, Some("2222"), "Festival gift")).unwrap();
-    assert_eq!(ok["balance"], json!(62.5));
-    assert_eq!(db.with(|c| Ok(balance(c, "c2"))).unwrap(), 6_250);
-    // a reason is required, zero is refused, and nobody can go below zero
-    assert!(call(&db, &manager, "adjustPoints", a(5.0, Some("2222"), " ")).is_err());
-    assert!(call(&db, &manager, "adjustPoints", a(0.0, Some("2222"), "nothing")).is_err());
-    let e = call(&db, &manager, "adjustPoints", a(-100.0, Some("2222"), "too much")).unwrap_err();
-    assert!(e.contains("has only 62.50"), "{e}");
-    assert_eq!(call(&db, &manager, "adjustPoints", a(-2.25, Some("2222"), "Wrong credit")).unwrap()["balance"], json!(60.25));
-    // the ledger shows who and why; the audit trail names the approver
-    let l = call(&db, &manager, "getPointsLedger", json!(["c2"])).unwrap();
-    assert_eq!(l[0]["kind"], "adjust");
-    assert_eq!(l[0]["points"], json!(-2.25));
-    assert_eq!(l[0]["balanceAfter"], json!(60.25));
-    assert_eq!(l[0]["by"], "Lakshmi");
-    assert_eq!(l[1]["note"], "Festival gift");
-    db.with(|c| {
-        let n: i64 = c.query_row("SELECT COUNT(*) FROM audit_log WHERE action='points_adjust'", [], |r| r.get(0))?;
-        assert_eq!(n, 2);
-        let o: i64 = c.query_row("SELECT COUNT(*) FROM audit_log WHERE action='override' AND detail LIKE '%change customer points%'", [], |r| r.get(0))?;
-        assert_eq!(o, 2);
-        assert!(c.execute("DELETE FROM points_ledger", []).is_err(), "ledger stays append-only");
-        Ok(())
-    })
-    .unwrap();
-    // the owner too
     let owner = sign_in(&db, "u1", "1111", true);
-    assert!(call(&db, &owner, "adjustPoints", a(1.0, Some("1111"), "owner gift")).is_ok());
-}
-
-#[test]
-fn bulk_adjust_changes_exactly_the_filtered_set_after_confirmation() {
-    let (_d, db) = mini_db();
-    db.with(|c| {
-        customer(c, "c2", "Anbu", "90000 00001", "Gandhipuram", 1_000);
-        customer(c, "c3", "Arul", "90000 00002", "Gandhipuram", 50);
-        customer(c, "c4", "Babu", "90000 00003", "RS Puram", 2_000);
-        Ok(())
-    })
-    .unwrap();
     let manager = sign_in(&db, "u2", "2222", true);
-    let b = |pts: f64, expected: Option<i64>, pin: &str| {
-        let mut v = json!({ "q": "gandhipuram", "filter": "all", "points": pts, "reason": "Deepavali bonus", "managerPin": pin });
-        if let Some(n) = expected {
-            v["expectedCount"] = json!(n);
-        }
-        json!([v])
-    };
-    assert!(call(&db, &manager, "bulkAdjustPoints", b(5.0, Some(2), "0000")).is_err());
-    assert!(call(&db, &manager, "bulkAdjustPoints", b(5.0, Some(3), "2222")).unwrap_err().contains("list changed"));
-    let r = call(&db, &manager, "bulkAdjustPoints", b(5.0, Some(2), "2222")).unwrap();
-    assert_eq!((r["customers"].clone(), r["points"].clone()), (json!(2), json!(10.0)));
-    db.with(|c| {
-        assert_eq!((balance(c, "c2"), balance(c, "c3"), balance(c, "c4")), (1_500, 550, 2_000), "RS Puram untouched");
-        Ok(())
-    })
-    .unwrap();
-    // removing more than someone holds takes only what they hold
-    let r = call(&db, &manager, "bulkAdjustPoints", b(-10.0, None, "2222")).unwrap();
-    assert_eq!(r["customers"], 2);
-    db.with(|c| {
-        assert_eq!((balance(c, "c2"), balance(c, "c3")), (500, 0));
-        Ok(())
-    })
-    .unwrap();
     let cashier = sign_in(&db, "u3", "1234", false);
-    assert!(call(&db, &cashier, "bulkAdjustPoints", b(5.0, None, "2222")).is_err());
+    let one = json!([{ "customerId": "c2", "points": 5, "reason": "gift", "managerPin": "1111" }]);
+    let bulk = json!([{ "q": "gandhipuram", "filter": "all", "points": 5, "reason": "Deepavali bonus", "expectedCount": 1, "managerPin": "1111" }]);
+    // Owner and manager (with a valid PIN) get the refusal itself. A cashier is stopped earlier by the role check.
+    for s in [&owner, &manager] {
+        for (m, args) in [("adjustPoints", one.clone()), ("bulkAdjustPoints", bulk.clone())] {
+            let e = call(&db, s, m, args).unwrap_err();
+            assert!(e.contains("Points change only through bills"), "{m}: {e}");
+        }
+    }
+    assert!(call(&db, &cashier, "adjustPoints", one.clone()).is_err());
+    assert!(call(&db, &cashier, "bulkAdjustPoints", bulk.clone()).is_err());
+    db.with(|c| {
+        assert_eq!((balance(c, "c2"), balance(c, "c3")), (5_000, 1_000), "nothing changed");
+        let rows: i64 = c.query_row("SELECT COUNT(*) FROM points_ledger WHERE kind='adjust'", [], |r| r.get(0))?;
+        assert_eq!(rows, 2, "only the two opening rows exist");
+        let audits: i64 = c.query_row("SELECT COUNT(*) FROM audit_log WHERE action IN ('points_adjust','points_bulk_adjust')", [], |r| r.get(0))?;
+        assert_eq!(audits, 0);
+        Ok(())
+    })
+    .unwrap();
 }
 
 #[test]

@@ -105,6 +105,11 @@ Staff are used to POSBean, so Gokul POS takes **inspiration** from it but **keep
 - **Cost and profit** columns and fields are visible to owner and manager only, enforced server-side.
 - **New features:** parallel bills, home delivery (address and delivery charge), staff per bill, wholesale price mode, cash discount on top of item discounts, and Sodexo/wallet as payment modes.
 
+## Loyalty rule (owner, 7 Nov 2026)
+- Customers earn 1 point per ₹100 spent; when used, 1 point = ₹1. Points are kept to 2 decimals.
+- **Points change only through bills:** they are earned on a sale, used in payment, and reversed when a bill is cancelled or returned. There is no manual add or remove, and the server refuses it. Opening balances were brought from POSBean on 7 Nov 2026.
+- **Expiry:** points expire **1 year after they were earned**. Each earning keeps its own expiry date, and points used are taken from the oldest first (FIFO). The opening balances' earn dates depend on the history check (`data/import/POINTS-HISTORY-CHECK.md`).
+
 ## Notes for later (from the owner, 7 Nov 2026)
 - **Packing pouch sizes (SSS Brand), in inches:** 50 g → 4×5, 100 g → 4×6, ¼ kg → 5×7, ½ kg → 6×8, 1 kg → 7×10. When packing runs are recorded, the matching pouch should be taken from packing-material stock automatically.
 - **TSC TE244 stickers:** 3 across, ribbon on. One blank row comes partly out after each print, which is the printer's tear-off position. Confirm the printer pulls it back on the next print; otherwise adjust the tear/feed settings.

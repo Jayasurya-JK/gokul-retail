@@ -8,11 +8,14 @@ use crate::db::{actor_or, audit, iso};
 use crate::error::{invalid, Result};
 use crate::loyalty::{self, fmt_points, from_hundredths};
 use chrono::{Datelike, Local, Months, NaiveDate, TimeZone};
-use rusqlite::{params_from_iter, types::Value as Sql, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{params_from_iter, types::Value as Sql, Connection, TransactionBehavior};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 /// The opening balance / POSBean import rows are `adjust` rows whose note starts with "Opening"; screens show them as "import".
+/// The refusal every manual points change gets.
+pub const POINTS_ONLY_THROUGH_BILLS: &str = "Points change only through bills. Customers earn on a sale, use points to pay, and get them back on a cancel or return.";
+
 const KIND_EXPR: &str = "CASE WHEN l.kind='adjust' AND l.note LIKE 'Opening%' THEN 'import' ELSE l.kind END";
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -145,27 +148,7 @@ pub fn ledger(conn: &Connection, customer_id: &str, limit: i64) -> Result<Vec<Va
     Ok(rows)
 }
 
-fn hundredths_of(points: f64) -> Result<i64> {
-    if !points.is_finite() {
-        return invalid("Enter the points to add or remove.");
-    }
-    let h = (points * 100.0).round() as i64;
-    if h == 0 {
-        return invalid("Enter the points to add or remove.");
-    }
-    if h.abs() > 100_000_000 {
-        return invalid("That is too many points in one go (most is 10,00,000).");
-    }
-    Ok(h)
-}
 
-fn clean_reason(reason: &str) -> Result<String> {
-    let r = reason.trim();
-    if r.chars().count() < 3 {
-        return invalid("Write the reason for the change (at least 3 letters).");
-    }
-    Ok(r.chars().take(200).collect())
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,22 +159,10 @@ pub struct AdjustInput {
     pub reason: String,
 }
 
-/// Manual add/remove for one customer. The caller (authz) has already checked the role and the manager PIN.
-pub fn adjust(conn: &mut Connection, i: &AdjustInput) -> Result<Value> {
-    let h = hundredths_of(i.points)?;
-    let reason = clean_reason(&i.reason)?;
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let name: Option<String> = tx.query_row("SELECT name FROM customers WHERE id=?1", [&i.customer_id], |r| r.get(0)).optional()?;
-    let Some(name) = name else { return invalid("Customer not found.") };
-    let bal = loyalty::balance(&tx, &i.customer_id)?;
-    if h < 0 && -h > bal {
-        return invalid(format!("{name} has only {} points, so {} cannot be taken off.", fmt_points(bal), fmt_points(-h)));
-    }
-    let by = actor_or(OFFICE);
-    loyalty::post(&tx, &i.customer_id, "adjust", h, None, &reason, &by)?;
-    audit(&tx, Local::now(), &by, "points_adjust", "customer", &i.customer_id, &format!("{}{} points: {reason}", if h > 0 { "+" } else { "" }, fmt_points(h)))?;
-    tx.commit()?;
-    Ok(json!({ "customerId": i.customer_id, "balance": from_hundredths(bal + h) }))
+/// Refused for every caller. Points change only through bills: earned on a sale, used to pay, given back on a cancel or
+/// return. The function stays so an old caller gets this clear answer instead of a missing command.
+pub fn adjust(_conn: &mut Connection, _i: &AdjustInput) -> Result<Value> {
+    invalid(POINTS_ONLY_THROUGH_BILLS)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -208,49 +179,9 @@ pub struct BulkInput {
     pub expected_count: Option<i64>,
 }
 
-/// The same add/remove for every customer a search and filter match, in one transaction. A removal takes at most what each
-/// customer holds (nobody goes below zero); customers with nothing to take are skipped.
-pub fn bulk_adjust(conn: &mut Connection, i: &BulkInput) -> Result<Value> {
-    let h = hundredths_of(i.points)?;
-    let reason = clean_reason(&i.reason)?;
-    let q = PointsQuery { q: i.q.clone(), filter: i.filter.clone(), ..Default::default() };
-    let (w, ps) = where_for(&q);
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let people: Vec<(String, i64)> = {
-        let mut st = tx.prepare(&format!("SELECT c.id, c.loyalty_points FROM customers c WHERE {w} ORDER BY c.id"))?;
-        let rows = st.query_map(params_from_iter(ps.iter()), |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
-        rows
-    };
-    if let Some(n) = i.expected_count {
-        if n != people.len() as i64 {
-            return invalid(format!("The list changed: it now has {} customers, not {n}. Check it and try again.", people.len()));
-        }
-    }
-    if people.is_empty() {
-        return invalid("No customers match, so nothing was changed.");
-    }
-    let by = actor_or(OFFICE);
-    let (mut changed, mut total) = (0i64, 0i64);
-    for (id, bal) in &people {
-        let amt = if h < 0 { -((-h).min((*bal).max(0))) } else { h };
-        if amt == 0 {
-            continue;
-        }
-        loyalty::post(&tx, id, "adjust", amt, None, &format!("{reason} (bulk)"), &by)?;
-        changed += 1;
-        total += amt;
-    }
-    audit(
-        &tx,
-        Local::now(),
-        &by,
-        "points_bulk_adjust",
-        "customers",
-        "points",
-        &format!("{changed} customers, {} points in all ({}{} each asked): {reason}", fmt_points(total), if h > 0 { "+" } else { "" }, fmt_points(h)),
-    )?;
-    tx.commit()?;
-    Ok(json!({ "customers": changed, "matched": people.len(), "points": from_hundredths(total) }))
+/// Refused for every caller, the same as `adjust`.
+pub fn bulk_adjust(_conn: &mut Connection, _i: &BulkInput) -> Result<Value> {
+    invalid(POINTS_ONLY_THROUGH_BILLS)
 }
 
 /// Points that lapse under the expiry rule: what a customer holds beyond the points they were given in the last N months

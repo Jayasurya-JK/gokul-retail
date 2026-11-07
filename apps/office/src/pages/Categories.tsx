@@ -35,23 +35,26 @@ export function Categories() {
     <>
       <PageHeader title="Categories and brands" subtitle="Pick a brand or category to see its products. Order here is the order on the billing screen." icon={<Tags size={17} />} />
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[320px] shrink-0 flex-col border-r border-line bg-surface">
+        <aside className="flex w-[320px] shrink-0 flex-col border-r border-line-strong bg-forest-50">
           <button
             type="button" onClick={() => { setCatId(null); setBrandId(null); }}
-            className={cn('relative flex h-9 shrink-0 items-center gap-2.5 border-b border-line px-3 text-sm', all ? 'bg-primary-soft font-semibold text-primary' : 'font-medium text-ink hover:bg-surface-2')}
+            className={cn(
+              'mx-1 mt-1 flex h-9 shrink-0 items-center gap-2.5 rounded-control px-3 text-base font-semibold',
+              all ? 'bg-primary text-primary-fg' : 'text-ink hover:bg-forest-100',
+            )}
           >
-            {all && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-primary" />}
-            <LayoutGrid size={15} className={all ? 'text-primary' : 'text-subtle'} />
+            <LayoutGrid size={16} className={all ? 'text-primary-fg' : 'text-primary'} />
             <span className="flex-1 text-left">All items</span>
-            <span className={cn('text-xs num', all ? 'text-primary' : 'text-muted')}>{total}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-xs num', all ? 'bg-primary-fg/20 text-primary-fg' : 'bg-surface text-muted ring-1 ring-line')}>{total}</span>
           </button>
+          <div className="mx-3 mb-1 mt-2 h-px shrink-0 bg-line-strong" />
           <ManagedList
-            title="Brands" noun="brand" icon={<Tag size={13} />} rows={brands} selectedId={brandId} onSelect={setBrandId}
+            title="Brands" noun="brand" icon={<Tag size={14} />} rows={brands} selectedId={brandId} onSelect={setBrandId}
             onAdd={then((n: string) => ok(api.addBrand(n)))} onRename={then((id: string, n: string) => ok(api.renameBrand(id, n)))}
             onDelete={then((id: string) => ok(api.deleteBrand(id)))} onMove={then((id: string, d: -1 | 1) => api.moveBrand(id, d))}
           />
           <ManagedList
-            title="Categories" noun="category" icon={<Tags size={13} />} rows={cats} selectedId={catId} onSelect={setCatId}
+            title="Categories" noun="category" icon={<Tags size={14} />} rows={cats} selectedId={catId} onSelect={setCatId}
             onAdd={then((n: string) => ok(api.addCategory(n)))} onRename={then((id: string, n: string) => ok(api.renameCategory(id, n)))}
             onDelete={then((id: string) => ok(api.deleteCategory(id)))} onMove={then((id: string, d: -1 | 1) => api.moveCategory(id, d))}
           />

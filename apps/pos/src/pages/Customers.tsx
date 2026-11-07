@@ -299,7 +299,7 @@ function Fact({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
   );
 }
 
-/** Loyalty points of the selected customer: balance, what it is worth, and the last ledger lines (the counter only looks; Office adjusts). */
+/** Loyalty points of the selected customer: balance, what it is worth, and the last ledger lines (points change only through bills). */
 function PointsCard({ customerId, version }: { customerId: string; version: number }) {
   const [wallet, setWallet] = useState<CustomerWallet | null>(null);
   const [rows, setRows] = useState<PointsLedgerRow[] | null>(null);
@@ -309,7 +309,7 @@ function PointsCard({ customerId, version }: { customerId: string; version: numb
     void Promise.all([api.getCustomerWallet(customerId), api.getPointsLedger(customerId, 8)]).then(([w, r]) => { if (live) { setWallet(w); setRows(r); } }).catch(() => { if (live) setRows([]); });
     return () => { live = false; };
   }, [customerId, version]);
-  const label: Record<PointsLedgerRow['kind'], string> = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Reversed', adjust: 'Adjusted', expire: 'Expired', import: 'Opening balance' };
+  const label: Record<PointsLedgerRow['kind'], string> = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Reversed', adjust: 'Adjusted', expire: 'Expired', import: 'Brought from POSBean' };
   return (
     <div className="mt-4 rounded-card border border-line p-4">
       <div className="flex items-center justify-between">
