@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, BarChart3, ChevronRight, CreditCard, Download, Pack
 import {
   formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type PaymodeReport, type SalesReport, type SalesReportRow, type Staff, type StaffReportRow, type StockReport, type StockRow,
 } from '@gokul/data';
-import { Badge, Button, DateRangePicker, EmptyState, Money, PosLayout, cn, useRefreshOnFocus, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
+import { Badge, Button, ColResizer, DateRangePicker, EmptyState, Money, PosLayout, ROW_COLS, cn, parseTracks, useResizableColumns, useRefreshOnFocus, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -209,13 +209,13 @@ export function SalesReportPage() {
   );
 }
 
-function SalesRow({ r, cols, canCost, on, open, multiDay, onSelect, onToggle }: {
-  r: SalesReportRow; cols: string; canCost: boolean; on: boolean; open: boolean; multiDay: boolean; onSelect: () => void; onToggle: () => void;
+function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
+  r: SalesReportRow; cols?: string; canCost: boolean; on: boolean; open: boolean; multiDay: boolean; onSelect: () => void; onToggle: () => void;
 }) {
   const loose = r.qty % 1000 !== 0;
   return (
     <div className={cn('border-b border-line/70', on && 'bg-primary-soft/60')} onMouseDown={onSelect}>
-      <div className="grid h-10 cursor-default items-center px-3 text-sm" style={{ gridTemplateColumns: cols }} onDoubleClick={onToggle}>
+      <div className="grid h-10 cursor-default items-center px-3 text-sm" style={{ gridTemplateColumns: ROW_COLS }} onDoubleClick={onToggle}>
         <button type="button" tabIndex={-1} onClick={onToggle} aria-label={open ? 'Hide bill lines' : 'Show bill lines'} className="flex h-6 w-6 items-center justify-center rounded text-subtle hover:bg-surface-3 hover:text-ink">
           <ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} />
         </button>
@@ -260,14 +260,21 @@ function SalesRow({ r, cols, canCost, on, open, multiDay, onSelect, onToggle }: 
 
 /** Header plus rows inside one scroll area, so the columns scroll together and the header stays on top. */
 function Grid({ cols, head, right, minWidth = 1000, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; children: ReactNode }) {
+  const specs = useMemo(() => parseTracks(cols, head.map((h, i) => h || `c${i}`)), [cols, head]);
+  const rc = useResizableColumns(`pos-report|${head.join(',')}`, specs);
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      <div style={{ minWidth }}>
-        <div className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: cols }}>
-          {head.map((h, i) => <div key={i} className={cn('truncate px-2', right.includes(i) && 'text-right')}>{h}</div>)}
+    <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
+      <div style={{ minWidth: Math.max(minWidth, rc.customised ? rc.minTotal + 24 : 0) }}>
+        <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
+          {head.map((h, i) => (
+            <div key={i} className={cn('relative h-full min-w-0 truncate px-2 pr-3 leading-9', right.includes(i) && 'text-right')}>
+              {h}{h && <ColResizer rc={rc} index={i} />}
+            </div>
+          ))}
         </div>
         {children}
       </div>
+      {rc.menu}
     </div>
   );
 }
@@ -337,7 +344,7 @@ export function PaymodeReportPage() {
       <Grid cols={cols} head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}>
         {!loading && rows.length === 0 && <EmptyState icon={<CreditCard size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
         {shown.map((r, i) => (
-          <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: cols }}>
+          <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
             <span className="num truncate px-2 font-semibold text-ink">{r.number}</span>
             <span className="num px-2 text-muted">{range.from !== range.to ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' : ''}{timeOf(r.at)}</span>
             <span className="truncate px-2 text-ink">{r.customerName}</span>
@@ -410,6 +417,8 @@ export function StockPage() {
 
   const defs = useMemo(() => STOCK_COLS.filter((c) => canCost || !c.cost), [canCost]);
   const cols = defs.map((c) => c.w).join(' ');
+  const rcSpecs = useMemo(() => parseTracks(cols, defs.map((c) => c.key)), [cols, defs]);
+  const rc = useResizableColumns('pos-stock', rcSpecs);
 
   /* filter, then sort; the totals in the footer follow the filter */
   const rows = useMemo(() => {
@@ -476,16 +485,19 @@ export function StockPage() {
         </>
       }
     >
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div style={{ minWidth: canCost ? 1500 : 1000 }}>
-          <div className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: cols }}>
-            {defs.map((c) => (
-              <button
-                key={c.key} onClick={() => onSort(c.key)} tabIndex={-1} title={`Sort by ${c.label}`}
-                className={cn('flex h-full items-center gap-1 truncate px-2 uppercase hover:text-ink', c.right && 'justify-end', sort.key === c.key && 'text-primary')}
-              >
-                <span className="truncate">{c.label}</span>{sort.key === c.key && (sort.dir === 1 ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-              </button>
+      <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
+        <div style={{ minWidth: Math.max(canCost ? 1500 : 1000, rc.customised ? rc.minTotal + 24 : 0) }}>
+          <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
+            {defs.map((c, ci) => (
+              <div key={c.key} className="relative flex h-full min-w-0 items-center overflow-hidden">
+                <button
+                  onClick={() => onSort(c.key)} tabIndex={-1} title={`Sort by ${c.label}`}
+                  className={cn('flex h-full min-w-0 flex-1 items-center gap-1 truncate px-2 pr-3 uppercase hover:text-ink', c.right && 'justify-end', sort.key === c.key && 'text-primary')}
+                >
+                  <span className="truncate">{c.label}</span>{sort.key === c.key && (sort.dir === 1 ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                </button>
+                <ColResizer rc={rc} index={ci} />
+              </div>
             ))}
           </div>
           {!loading && rows.length === 0 && <EmptyState icon={<Package size={22} />} title={query ? `No item matches "${query}"` : 'No items'} className="py-16" />}
@@ -510,16 +522,17 @@ export function StockPage() {
             return <StockLine key={l.r.id} r={l.r} cols={cols} canCost={canCost} on={my === sel} onSelect={() => setSel(my)} />;
           })}
         </div>
-      </div>
+        </div>
+        {rc.menu}
     </Frame>
   );
 }
 
-function StockLine({ r, cols, canCost, on, onSelect }: { r: StockRow; cols: string; canCost: boolean; on: boolean; onSelect: () => void }) {
+function StockLine({ r, canCost, on, onSelect }: { r: StockRow; cols?: string; canCost: boolean; on: boolean; onSelect: () => void }) {
   const loose = r.qty % 1000 !== 0 || r.unit === 'kg' || r.unit === 'l';
   const out = r.qty <= 0;
   return (
-    <div onMouseDown={onSelect} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', on && 'bg-primary-soft/60')} style={{ gridTemplateColumns: cols }}>
+    <div onMouseDown={onSelect} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', on && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
       <span className="num truncate px-2 text-xs text-muted">{r.barcode}</span>
       <span className="truncate px-2 font-medium text-ink" title={r.name}>{r.name}</span>
       <span className="truncate px-2 text-muted" title={r.category}>{r.category}</span>
@@ -597,7 +610,7 @@ export function StaffReportPage() {
       <Grid cols={cols} head={['Staff', 'Bills', 'Qty', 'Net', 'Total']} right={[1, 2, 3, 4]} minWidth={720}>
         {!loading && rows.length === 0 && <EmptyState icon={<Users size={22} />} title="No bills in this period" className="py-16" />}
         {rows.map((r) => (
-          <div key={r.staff} className="grid h-12 items-center border-b border-line/70 px-3 text-sm" style={{ gridTemplateColumns: cols }}>
+          <div key={r.staff} className="grid h-12 items-center border-b border-line/70 px-3 text-sm" style={{ gridTemplateColumns: ROW_COLS }}>
             <span className="min-w-0 px-2">
               <span className="block truncate font-medium text-ink">{r.staff}</span>
               <span className="mt-1 block h-1 overflow-hidden rounded-full bg-surface-3"><span className="block h-full rounded-full bg-primary" style={{ width: `${(r.total / max) * 100}%` }} /></span>

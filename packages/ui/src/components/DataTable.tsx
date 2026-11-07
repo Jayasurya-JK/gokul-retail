@@ -5,6 +5,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '../cn';
+import { ColResizer, minFromTrack, ROW_COLS, useResizableColumns, type ColSpec } from './useResizableColumns';
 
 export type { ColumnDef };
 
@@ -27,11 +28,13 @@ export interface DataTableProps<T> {
   onSortChange?: (s: { id: string; desc: boolean } | null) => void;
   /** Called when the user scrolls near the last row (load the next page). */
   onEndReached?: () => void;
+  /** Where column widths are remembered. Defaults to the current screen plus the column ids. */
+  storageKey?: string;
 }
 
 /** Virtualised, sortable table with keyboard row navigation (arrows, Home/End, PageUp/PageDown, Enter). */
 export function DataTable<T>({
-  data, columns, getRowId, rowHeight = 36, selectedId, onSelect, onActivate, empty, autoFocus, className, footer, sort, onSortChange, onEndReached,
+  data, columns, getRowId, rowHeight = 36, selectedId, onSelect, onActivate, empty, autoFocus, className, footer, sort, onSortChange, onEndReached, storageKey,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [internalSel, setInternalSel] = useState<string | null>(null);
@@ -77,8 +80,13 @@ export function DataTable<T>({
     }
   };
 
-  const widths = table.getVisibleLeafColumns().map((c) => (c.columnDef.meta as { w?: string } | undefined)?.w ?? 'minmax(0,1fr)');
-  const template = widths.join(' ');
+  const leaf = table.getVisibleLeafColumns();
+  const specs: ColSpec[] = leaf.map((c) => {
+    const meta = c.columnDef.meta as { w?: string; minW?: number } | undefined;
+    const track = meta?.w ?? 'minmax(0,1fr)';
+    return { id: c.id, track, min: meta?.minW ?? minFromTrack(track) };
+  });
+  const rc = useResizableColumns(storageKey ?? `${typeof location === 'undefined' ? '' : location.pathname + location.hash}|${specs.map((s) => s.id).join(',')}`, specs);
 
   return (
     <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-surface', className)}>
@@ -86,22 +94,23 @@ export function DataTable<T>({
         ref={scroller} tabIndex={0} onKeyDown={onKey}
         className="min-h-0 flex-1 overflow-auto outline-none focus-visible:[&_[data-sel=true]]:ring-1 focus-visible:[&_[data-sel=true]]:ring-inset focus-visible:[&_[data-sel=true]]:ring-primary/50"
       >
-        <div role="table" style={{ minWidth: 'max-content' }} className="min-w-full">
-          <div role="rowgroup" className="sticky top-0 z-10 border-b border-line bg-surface-2">
+        <div role="table" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={{ ...rc.rootProps.style, minWidth: 'max-content' }} className="min-w-full">
+          <div role="rowgroup" onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 border-b border-line bg-surface-2">
             {table.getHeaderGroups().map((hg) => (
-              <div key={hg.id} role="row" className="grid h-8 items-center px-4" style={{ gridTemplateColumns: template }}>
-                {hg.headers.map((h) => {
+              <div key={hg.id} role="row" className="grid h-8 items-center px-4" style={{ gridTemplateColumns: ROW_COLS }}>
+                {hg.headers.map((h, hi) => {
                   const align = (h.column.columnDef.meta as { align?: string } | undefined)?.align;
                   const dir = h.column.getIsSorted();
                   return (
                     <div
                       key={h.id} role="columnheader"
                       onClick={h.column.getToggleSortingHandler()}
-                      className={cn('flex items-center gap-1 px-2 text-xs font-semibold uppercase tracking-wide text-muted', h.column.getCanSort() && 'hover:text-ink', align === 'right' && 'justify-end', align === 'center' && 'justify-center')}
+                      className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap px-2 text-xs font-semibold uppercase tracking-wide text-muted', h.column.getCanSort() && 'hover:text-ink', align === 'right' && 'justify-end', align === 'center' && 'justify-center')}
                     >
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       {dir === 'asc' && <ArrowUp size={12} />}
                       {dir === 'desc' && <ArrowDown size={12} />}
+                      <ColResizer rc={rc} index={hi} />
                     </div>
                   );
                 })}
@@ -121,7 +130,7 @@ export function DataTable<T>({
                     onClick={() => { setInternalSel(row.id); onSelect?.(row.original); }}
                     onDoubleClick={() => onActivate?.(row.original)}
                     className={cn('absolute left-0 right-0 grid items-center border-b border-line/70 px-4 text-sm', active ? 'bg-primary-soft' : 'hover:bg-surface-2')}
-                    style={{ height: v.size, transform: `translateY(${v.start}px)`, gridTemplateColumns: template }}
+                    style={{ height: v.size, transform: `translateY(${v.start}px)`, gridTemplateColumns: ROW_COLS }}
                   >
                     {row.getVisibleCells().map((c) => {
                       const meta = c.column.columnDef.meta as { align?: string; num?: boolean } | undefined;
@@ -141,6 +150,7 @@ export function DataTable<T>({
           )}
         </div>
       </div>
+      {rc.menu}
       {footer && <div className="flex h-8 shrink-0 items-center justify-between border-t border-line bg-surface-2 px-4 text-xs text-muted">{footer}</div>}
     </div>
   );

@@ -29,6 +29,8 @@ export interface ReceiptData {
   customerAddress?: string;
   /** Loyalty balance, shown with two decimals */
   points?: number;
+  /** Points that lapse next (yyyy-mm-dd). Shown as "N pts expire dd/mm/yy" only when within 30 days; pass it only when loyalty.printExpiry is on. */
+  pointsExpiry?: { points: number; on: string } | null;
   /** Cash handed over (cash paid + change), for "Amount Received" */
   received?: number;
 }
@@ -56,6 +58,18 @@ function BarStrip({ value }: { value: string }) {
   );
 }
 
+/** "N pts expire dd/mm/yy" when the next points lapse within 30 days (same rule as the printed bill), else null. */
+export function pointsExpiryLine(e: { points: number; on: string } | null | undefined, now: Date = new Date()): string | null {
+  if (!e || !(e.points > 0)) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.on);
+  if (!m) return null;
+  const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((day.getTime() - today.getTime()) / 86_400_000);
+  if (days > 30) return null;
+  return `${e.points.toFixed(2)} pts expire ${m[3]}/${m[2]}/${m[1].slice(2)}`;
+}
+
 /** The shop's printed-bill details that are not in the basic settings (Gokul Office, Settings, Shop and Bill format). */
 export interface ReceiptShop {
   /** Tamil line under the shop name */
@@ -75,6 +89,7 @@ export interface ReceiptShop {
  * Pure display: all amounts come in already computed. Used by POS Sales/Returns and Gokul Office.
  */
 export function ReceiptPreview({ data, settings, shop, className }: { data: ReceiptData; settings: Settings; shop?: ReceiptShop; className?: string }) {
+  const expiryLine = pointsExpiryLine(data.pointsExpiry);
   const { totals: t } = data;
   const dt = new Date(data.at);
   const date = dt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
@@ -120,6 +135,7 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
           {data.customerPhone && <div>Contact No : {data.customerPhone}</div>}
           {data.customerAddress && <div>Address : {data.customerAddress}</div>}
           {data.points !== undefined && <div>Points : {data.points.toFixed(2)}</div>}
+          {data.points !== undefined && expiryLine && <div>{expiryLine}</div>}
           {rule}
         </>
       )}

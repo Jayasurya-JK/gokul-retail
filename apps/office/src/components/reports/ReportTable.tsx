@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { ReportColumn, ReportRow } from '@gokul/data';
-import { cn } from '@gokul/ui';
+import { ColResizer, ROW_COLS, cn, useResizableColumns, type ColSpec } from '@gokul/ui';
 import { cellValue, formatCell, isRight } from './format';
 
 const ROW_H = 32;
@@ -39,8 +39,9 @@ export function ReportTable({ columns, rows, totals }: { columns: ReportColumn[]
 
   // Each column keeps a floor wide enough for its numbers; the table scrolls sideways only if the floors do not fit.
   const floor = (c: (typeof columns)[number]) => (c.kind === 'money' ? 108 : c.kind === 'int' ? 66 : c.kind === 'pct' ? 56 : c.kind === 'qty' ? 84 : c.kind === 'badge' ? 80 : c.kind === 'date' ? 88 : 64);
-  const template = columns.map((c) => `minmax(${floor(c)}px,${c.w ?? (c.kind === 'money' ? '1.5fr' : c.kind === 'int' || c.kind === 'pct' ? '0.8fr' : '1fr')})`).join(' ');
-  const minWidth = columns.reduce((n, c) => n + floor(c), 0) + 24;
+  const specs: ColSpec[] = columns.map((c) => ({ id: c.key, track: `minmax(${floor(c)}px,${c.w ?? (c.kind === 'money' ? '1.5fr' : c.kind === 'int' || c.kind === 'pct' ? '0.8fr' : '1fr')})`, min: Math.min(floor(c), 48) }));
+  const rc = useResizableColumns(`office-report|${columns.map((c) => c.key).join(',')}`, specs);
+  const minWidth = (rc.customised ? rc.minTotal : columns.reduce((n, c) => n + floor(c), 0)) + 24;
   const start = Math.max(0, Math.floor(top / ROW_H) - 8);
   const end = Math.min(sorted.length, Math.ceil((top + height) / ROW_H) + 8);
 
@@ -68,18 +69,19 @@ export function ReportTable({ columns, rows, totals }: { columns: ReportColumn[]
       ref={scroller} tabIndex={0} onKeyDown={onKey} onScroll={(e) => setTop(e.currentTarget.scrollTop)}
       className="min-h-0 flex-1 overflow-auto bg-surface outline-none"
     >
-      <div role="table" className="flex min-h-full flex-col" style={{ minWidth }}>
-        <div role="row" className="sticky top-0 z-10 grid min-h-10 shrink-0 items-center py-1 border-b border-line bg-surface-2 px-3" style={{ gridTemplateColumns: template }}>
-          {columns.map((c) => {
+      <div role="table" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} className="flex min-h-full flex-col" style={{ ...rc.rootProps.style, minWidth }}>
+        <div role="row" onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid min-h-10 shrink-0 items-center py-1 border-b border-line bg-surface-2 px-3" style={{ gridTemplateColumns: ROW_COLS }}>
+          {columns.map((c, ci) => {
             const active = sort?.key === c.key;
             return (
               <div
                 key={c.key} role="columnheader"
                 onClick={() => sortable && setSort(active ? (sort!.dir === 1 ? { key: c.key, dir: -1 } : null) : { key: c.key, dir: isRight(c) ? -1 : 1 })}
-                className={cn('flex items-center gap-1 px-1 text-[11px] font-semibold uppercase leading-tight tracking-wide text-muted', sortable && 'cursor-pointer hover:text-ink', isRight(c) && 'justify-end')}
+                className={cn('relative flex min-w-0 items-center gap-1 px-1 pr-2 text-[11px] font-semibold uppercase leading-tight tracking-wide text-muted', sortable && 'cursor-pointer hover:text-ink', isRight(c) && 'justify-end')}
               >
                 <span className="line-clamp-2 break-words">{c.label}</span>
                 {active && (sort!.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                <ColResizer rc={rc} index={ci} />
               </div>
             );
           })}
@@ -97,7 +99,7 @@ export function ReportTable({ columns, rows, totals }: { columns: ReportColumn[]
                   style === 'head' ? 'bg-surface-2 font-semibold text-ink' : style === 'strong' ? 'bg-primary-soft font-semibold text-ink' : style === 'muted' ? 'text-subtle' : 'text-ink',
                   !style && (sel === i ? 'bg-primary-soft' : 'hover:bg-surface-2'),
                 )}
-                style={{ height: ROW_H, top: i * ROW_H, gridTemplateColumns: template }}
+                style={{ height: ROW_H, top: i * ROW_H, gridTemplateColumns: ROW_COLS }}
               >
                 {columns.map((c) => (
                   <div key={c.key} role="cell" className={cn('truncate px-1', isRight(c) && 'text-right num')}>
@@ -110,13 +112,14 @@ export function ReportTable({ columns, rows, totals }: { columns: ReportColumn[]
         </div>
 
         {totals && (
-          <div role="row" className="sticky bottom-0 z-10 grid h-9 shrink-0 items-center border-t-2 border-line-strong bg-surface-2 px-3 text-[13px] font-semibold text-ink" style={{ gridTemplateColumns: template }}>
+          <div role="row" className="sticky bottom-0 z-10 grid h-9 shrink-0 items-center border-t-2 border-line-strong bg-surface-2 px-3 text-[13px] font-semibold text-ink" style={{ gridTemplateColumns: ROW_COLS }}>
             {columns.map((c) => (
               <div key={c.key} role="cell" className={cn('truncate px-1', isRight(c) && 'text-right num')}>{formatCell(c, totals, { footer: true })}</div>
             ))}
           </div>
         )}
       </div>
+      {rc.menu}
     </div>
   );
 }

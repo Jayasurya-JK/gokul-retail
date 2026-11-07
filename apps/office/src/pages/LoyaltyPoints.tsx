@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Settings2, Star, Users } from 'lucide-react';
-import { formatPoints, formatRupees, type PointsCustomerRow, type PointsOverview, type PointsReport } from '@gokul/data';
+import { customerLabel, formatPoints, formatRupees, isNoName, type PointsCustomerRow, type PointsOverview, type PointsReport } from '@gokul/data';
 import {
   Button, Card, DataTable, DateRangePicker, EmptyState, FilterBar, PageHeader, SearchInput, Tabs, TabPanel, dateRangePresets, useToast,
   type ColumnDef, type DateRange,
@@ -24,8 +24,8 @@ const columns: ColumnDef<PointsCustomerRow>[] = [
       const r = c.row.original;
       return (
         <span className="flex items-center gap-2.5">
-          <Avatar initials={initialsOf(r.name)} color={nameColor(r.name)} size={24} />
-          <span className="min-w-0 truncate font-medium text-ink">{r.name}</span>
+          <Avatar initials={isNoName(r.name) ? '#' : initialsOf(r.name)} color={nameColor(r.name)} size={24} />
+          <span className={isNoName(r.name) ? 'min-w-0 truncate font-medium italic text-muted' : 'min-w-0 truncate font-medium text-ink'}>{customerLabel(r.name)}</span>
         </span>
       );
     },
@@ -90,7 +90,7 @@ function CustomersTab({ overview, filterRequest }: { overview: PointsOverview | 
     const pv = overview?.pointValue ?? 100;
     const head = ['Code', 'Customer', 'Mobile', 'Area', 'Points', 'Value (Rs)', 'Last earned', 'Last redeemed'];
     const iso = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-CA') : '');
-    const lines = all.map((r) => [r.id, r.name, r.phone, r.area, r.points.toFixed(2), ((r.points * pv) / 100).toFixed(2), iso(r.lastEarned), iso(r.lastRedeemed)].map(csvCell).join(','));
+    const lines = all.map((r) => [r.id, customerLabel(r.name), r.phone, r.area, r.points.toFixed(2), ((r.points * pv) / 100).toFixed(2), iso(r.lastEarned), iso(r.lastRedeemed)].map(csvCell).join(','));
     downloadText(`gokul-loyalty-points-${new Date().toLocaleDateString('en-CA')}.csv`, '﻿' + [head.join(','), ...lines].join('\r\n'));
     toast.show({ tone: 'success', title: 'Points exported', detail: `${all.length.toLocaleString('en-IN')} customers saved as CSV. Opens in Excel.` });
   };
@@ -115,9 +115,9 @@ function CustomersTab({ overview, filterRequest }: { overview: PointsOverview | 
           <DetailPane width={400}>
             <div className="border-b border-line p-4">
               <div className="flex items-start gap-3">
-                <Avatar initials={initialsOf(sel.name)} color={nameColor(sel.name)} size={40} />
+                <Avatar initials={isNoName(sel.name) ? '#' : initialsOf(sel.name)} color={nameColor(sel.name)} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-md font-semibold leading-tight text-ink">{sel.name}</div>
+                  <div className={isNoName(sel.name) ? 'truncate text-md font-semibold italic leading-tight text-muted' : 'truncate text-md font-semibold leading-tight text-ink'}>{customerLabel(sel.name)}</div>
                   <div className="num mt-0.5 text-sm text-muted">{sel.id} · {sel.phone || 'no mobile'}</div>
                   <div className="text-xs text-subtle">{sel.area || 'No area'}</div>
                 </div>

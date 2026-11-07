@@ -114,7 +114,8 @@ pub fn list_customers(conn: &Connection, q: &PointsQuery) -> Result<Value> {
     let matched: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM customers c WHERE {w}"), params_from_iter(ps.iter()), |x| x.get(0))?;
     let all: i64 = conn.query_row("SELECT COUNT(*) FROM customers", [], |x| x.get(0))?;
     let col = match q.sort.as_str() {
-        "name" => "c.name COLLATE NOCASE",
+        // No-name customers (blank, digits only, "none"...) always sort after the named ones.
+        "name" => "(CASE WHEN TRIM(c.name)='' OR LOWER(TRIM(c.name)) IN ('none','null','nil','na','n/a','no name','noname','unknown','customer') OR NOT (c.name GLOB '*[A-Za-z]*' OR c.name GLOB '*[^ -~]*') THEN 1 ELSE 0 END) ASC, c.name COLLATE NOCASE",
         "code" => "c.id",
         "lastEarned" => "last_earned",
         "lastRedeemed" => "last_redeemed",

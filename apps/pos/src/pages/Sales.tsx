@@ -41,6 +41,14 @@ export function Sales() {
   const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BillDetail | null>(null);
+  const [walletBits, setWalletBits] = useState<{ points?: number; pointsExpiry?: { points: number; on: string } | null }>({});
+  const detailCustomer = detail?.bill.customerId;
+  useEffect(() => {
+    let live = true;
+    if (!detailCustomer) { setWalletBits({}); return undefined; }
+    api.getCustomerWallet(detailCustomer).then((w) => { if (live) setWalletBits(w.rules.enabled ? { points: w.points, pointsExpiry: w.rules.printExpiry ? w.nextExpiry : null } : {}); }).catch(() => { if (live) setWalletBits({}); });
+    return () => { live = false; };
+  }, [detailCustomer]);
   const [version, setVersion] = useState(0);
   useRefreshOnFocus(() => setVersion((v) => v + 1));
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -269,7 +277,7 @@ export function Sales() {
               </div>
               <div className="w-[356px] shrink-0 overflow-y-auto border-l border-line bg-surface-3 px-3 py-4">
                 <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted">Receipt preview - 80 mm</div>
-                <ReceiptPreview data={billReceipt(detail, receiptCfg)} settings={settings} shop={receiptCfg} />
+                <ReceiptPreview data={{ ...billReceipt(detail, receiptCfg), ...walletBits }} settings={settings} shop={receiptCfg} />
               </div>
             </div>
           ) : (

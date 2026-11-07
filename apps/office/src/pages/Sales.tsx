@@ -29,6 +29,14 @@ const columns: ColumnDef<SalesBill>[] = [
 
 function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | null }) {
   const cfg = useReceiptConfig();
+  const [walletBits, setWalletBits] = useState<{ points?: number; pointsExpiry?: { points: number; on: string } | null }>({});
+  const billCustomer = bill.customerId;
+  useEffect(() => {
+    let live = true;
+    if (!billCustomer) { setWalletBits({}); return undefined; }
+    api.getCustomerWallet(billCustomer).then((w) => { if (live) setWalletBits(w.rules.enabled ? { points: w.points, pointsExpiry: w.rules.printExpiry ? w.nextExpiry : null } : {}); }).catch(() => { if (live) setWalletBits({}); });
+    return () => { live = false; };
+  }, [billCustomer]);
   const toast = useToast();
   const [tab, setTab] = useState('details');
   const t = bill.totals;
@@ -116,6 +124,7 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
                 number: cfg ? printNumber(bill.number, cfg.billFormat.numberFormat) : bill.number, at: bill.at, cashier: bill.cashier, customerName: bill.customerName,
                 lines: bill.lines, totals: bill.totals, payments: bill.payments,
                 stamp: bill.status === 'cancelled' ? 'CANCELLED' : bill.status === 'returned' ? 'RETURNED' : undefined,
+                customerId: bill.customerId, ...walletBits,
               }}
             />
           )}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Boxes, ChevronRight, IndianRupee, PackageX, Search, TriangleAlert } from 'lucide-react';
 import { formatQty, fuzzyFilter, groupStock, type Category, type GroupBy, type Item } from '@gokul/data';
-import { Badge, DataTable, EmptyState, FilterBar, Input, Money, Select, StatTile, cn, type ColumnDef } from '@gokul/ui';
+import { Badge, ColResizer, DataTable, EmptyState, FilterBar, Input, Money, ROW_COLS, Select, StatTile, cn, parseTracks, useResizableColumns, type ColumnDef } from '@gokul/ui';
 import { api } from '../../store';
 import { unitText } from './shared';
 
@@ -31,6 +31,7 @@ const GROUP_COLS = '64px minmax(180px,1.4fr) minmax(130px,.8fr) minmax(110px,.6f
 const GROUP_HEAD: [string, string, boolean][] = [['code', 'Code', false], ['name', 'Item', false], ['category', 'Category', false], ['brand', 'Brand', false], ['supplier', 'Supplier', false], ['stock', 'In stock', true], ['cost', 'Cost', true], ['value', 'Stock value', true]];
 
 export function StockLevels({ version }: { version: number }) {
+  const rc = useResizableColumns('office-stock-groups', parseTracks(GROUP_COLS, GROUP_HEAD.map((h) => h[0])));
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [q, setQ] = useState('');
@@ -81,12 +82,12 @@ export function StockLevels({ version }: { version: number }) {
         </div>
       </FilterBar>
       {groupBy !== 'none' ? (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-4 text-[11px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: GROUP_COLS }}>
-            {GROUP_HEAD.map(([k, label, right]) => (
-              <button key={k} onClick={() => setSort((s) => (s.key === k ? { key: k, dir: s.dir === 1 ? -1 : 1 } : { key: k, dir: 1 }))} className={cn('flex items-center gap-1 truncate text-left uppercase hover:text-ink', right && 'justify-end', sort.key === k && 'text-primary')}>
+        <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
+          <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-4 text-[11px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
+            {GROUP_HEAD.map(([k, label, right], hi) => (
+              <div key={k} className="relative flex h-full min-w-0 items-center overflow-hidden pr-1"><button onClick={() => setSort((s) => (s.key === k ? { key: k, dir: s.dir === 1 ? -1 : 1 } : { key: k, dir: 1 }))} className={cn('flex min-w-0 flex-1 items-center gap-1 truncate text-left uppercase hover:text-ink', right && 'justify-end', sort.key === k && 'text-primary')}>
                 <span className="truncate">{label}</span>{sort.key === k && (sort.dir === 1 ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-              </button>
+              </button><ColResizer rc={rc} index={hi} /></div>
             ))}
           </div>
           {groups.length === 0 && <EmptyState icon={<Boxes size={22} />} title="Nothing to show" hint="No item matches these filters." />}
@@ -103,7 +104,7 @@ export function StockLevels({ version }: { version: number }) {
                 {open && g.rows.map((r) => {
                   const st = state(r);
                   return (
-                    <div key={r.id} className="grid h-9 items-center border-b border-line/70 px-4 text-sm" style={{ gridTemplateColumns: GROUP_COLS }}>
+                    <div key={r.id} className="grid h-9 items-center border-b border-line/70 px-4 text-sm" style={{ gridTemplateColumns: ROW_COLS }}>
                       <span className="num text-muted">{r.code}</span>
                       <span className="truncate font-medium text-ink" title={r.name}>{r.name}</span>
                       <span className="truncate text-muted" title={r.category}>{r.category}</span>
@@ -125,6 +126,7 @@ export function StockLevels({ version }: { version: number }) {
         empty={<EmptyState icon={<Boxes size={22} />} title="Nothing to show" hint={level === 'out' ? 'No item is completely out of stock.' : 'No item matches these filters.'} />}
       />
       )}
+      {rc.menu}
     </div>
   );
 }
