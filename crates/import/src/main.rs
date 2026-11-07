@@ -2,8 +2,17 @@
 //! `data/import/clean/items_stock.csv` (925 rows, quantities as at 17-Oct-2026).
 //!
 //! Run from the repo root with Gokul POS and Gokul Office closed:
-//!   cargo run -p gokul-import --release -- [--csv <file>] [--db <file>]
-//! Defaults: the CSV above and the normal database, `%APPDATA%\GokulRetail\gokul.db`.
+//!   cargo run -p gokul-import --release -- [items] [--csv <file>] [--db <file>]
+//!   cargo run -p gokul-import --release -- customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run]
+//!   cargo run -p gokul-import --release -- suppliers [--csv <file>] [--db <file>] [--dry-run]
+//! Defaults: the CSVs in `data/import/clean/` (items_stock, customers + outstanding, suppliers) and the normal
+//! database, `%APPDATA%\GokulRetail\gokul.db`. No subcommand means `items`.
+//!
+//! `customers` (see `people.rs`): loads the POSBean customers (id = POSBean code, 51 placeholders for the outstanding
+//! PDF), opening points in the points ledger, and the opening receivables (`customers.outstanding` plus one audit row
+//! per PDF line, no bills). `suppliers`: creates new suppliers (id = POSBean code) and fills only the empty fields of
+//! existing ones with the same name; refuses any non-zero opening balance. Both write an 'import' audit marker so a
+//! second run is refused, run every check inside one transaction, and `--dry-run` rolls it all back.
 //!
 //! What it does, in one run:
 //! 1. Opens the database (every migration runs). Refuses if the database already has imported items.
@@ -23,6 +32,8 @@ use gokul_core::seed_demo::seed_login_and_settings;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+
+mod people;
 
 const IMPORT_BY: &str = "import";
 const STOCK_AS_AT: (i32, u32, u32) = (2026, 10, 17);
@@ -45,17 +56,37 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    const USAGE: &str = "Usage: gokul-import [items] [--csv <file>] [--db <file>] | customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run] | suppliers [--csv <file>] [--db <file>] [--dry-run]";
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let cmd = match args.first().map(String::as_str) {
+        Some(w @ ("items" | "customers" | "suppliers")) => {
+            let w = w.to_string();
+            args.remove(0);
+            w
+        }
+        _ => "items".to_string(),
+    };
     let mut csv_path: Option<PathBuf> = None;
+    let mut outstanding_path: Option<PathBuf> = None;
     let mut db_path: Option<PathBuf> = None;
-    let mut args = std::env::args().skip(1);
+    let mut dry_run = false;
+    let mut no_outstanding = false;
+    let mut args = args.into_iter();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--csv" => csv_path = Some(args.next().ok_or("--csv needs a file path")?.into()),
             "--db" => db_path = Some(args.next().ok_or("--db needs a file path")?.into()),
-            other => return Err(format!("unknown option '{other}'. Usage: gokul-import [--csv <file>] [--db <file>]")),
+            "--outstanding" if cmd == "customers" => outstanding_path = Some(args.next().ok_or("--outstanding needs a file path")?.into()),
+            "--dry-run" if cmd != "items" => dry_run = true,
+            "--no-outstanding" if cmd == "customers" => no_outstanding = true,
+            other => return Err(format!("unknown option '{other}'. {USAGE}")),
         }
     }
-    let csv_path = csv_path.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("data").join("import").join("clean").join("items_stock.csv"));
+    let clean = |file: &str| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("data").join("import").join("clean").join(file);
+    if cmd != "items" {
+        return run_people(&cmd, csv_path.unwrap_or_else(|| clean(&format!("{cmd}.csv"))), outstanding_path.unwrap_or_else(|| clean("outstanding.csv")), db_path.unwrap_or_else(db::default_db_path), dry_run, no_outstanding);
+    }
+    let csv_path = csv_path.unwrap_or_else(|| clean("items_stock.csv"));
     let db_path = db_path.unwrap_or_else(db::default_db_path);
 
     let text = std::fs::read_to_string(&csv_path).map_err(|e| format!("cannot read {}: {e}", csv_path.display()))?;
@@ -75,6 +106,41 @@ fn run() -> Result<(), String> {
     println!();
     println!("{}", report.summary);
     println!("Import committed.");
+    Ok(())
+}
+
+fn run_people(cmd: &str, csv_path: PathBuf, outstanding_path: PathBuf, db_path: PathBuf, dry_run: bool, no_outstanding: bool) -> Result<(), String> {
+    let read = |p: &PathBuf| std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()));
+    let file_name = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let csv_text = read(&csv_path)?;
+    println!("CSV: {}", csv_path.display());
+    let out_text = if cmd == "customers" && !no_outstanding {
+        println!("Outstanding CSV: {}", outstanding_path.display());
+        read(&outstanding_path)?
+    } else {
+        if no_outstanding {
+            println!("Outstanding: not loaded (--no-outstanding)");
+        }
+        String::new()
+    };
+    println!("Database: {}", db_path.display());
+    let db = Db::open(&db_path).map_err(|e| e.to_string())?;
+    let report = db
+        .with(|c| {
+            Ok(if cmd == "customers" {
+                people::customers(c, &csv_text, &out_text, &file_name(&csv_path), &file_name(&outstanding_path), dry_run, no_outstanding)
+            } else {
+                people::suppliers(c, &csv_text, &file_name(&csv_path), dry_run)
+            })
+        })
+        .map_err(|e| e.to_string())??;
+    println!();
+    println!("Notes ({}; first 20 shown):", report.notes.len());
+    for n in report.notes.iter().take(20) {
+        println!("  - {n}");
+    }
+    println!();
+    println!("{}", report.summary);
     Ok(())
 }
 
