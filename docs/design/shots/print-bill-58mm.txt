@@ -10,7 +10,7 @@
           TAX INVOICE
 --------------------------------
 BILL NO : 26/00002
-DATE : 07-11-2026    12:57:28 PM
+DATE : 07-11-2026    01:18:33 PM
 Counter : Counter 1
 --------------------------------
 ITEM      MRP   RATE QTY     AMT

@@ -100,7 +100,8 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
         </div>
       )}
       <div className="text-center">
-        <Logo size={44} className="mx-auto mb-1 grayscale contrast-125" />
+        {/* about 25 mm on paper, the same as the printed bill's logo */}
+        <Logo size={92} className="mx-auto mb-1 grayscale contrast-125" />
         <div className="text-[15px] font-bold uppercase tracking-wide">{settings.shopName}</div>
         {shop?.tagline && <div className="font-sans text-[12px] font-semibold">{shop.tagline}</div>}
         <div>{settings.address}</div>

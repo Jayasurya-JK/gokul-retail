@@ -1,5 +1,5 @@
 import type { BillFormatSettings, ShopSettings } from '@gokul/data';
-import { cn } from '@gokul/ui';
+import { cn, Logo } from '@gokul/ui';
 
 const EN = {
   invoice: 'TAX INVOICE', no: 'Bill No', date: 'Date', cashier: 'Cashier', item: 'Item', amount: 'Amount', sub: 'Sub total',
@@ -20,6 +20,8 @@ const LINES = [
 export function BillFormatPreview({ shop, fmt }: { shop: ShopSettings; fmt: BillFormatSettings }) {
   const t = fmt.language === 'ta' ? TA : EN;
   const ta = fmt.language === 'ta';
+  // the printed logo is 200 dots (about 25 mm) on 80 mm paper and 160 dots (about 20 mm) on 58 mm; the preview scales it the same way
+  const logoPx = fmt.paper === '80mm' ? 92 : 74;
   const rule = <div className="my-1.5 border-t border-dashed border-neutral-400" />;
   return (
     <div
@@ -27,7 +29,10 @@ export function BillFormatPreview({ shop, fmt }: { shop: ShopSettings; fmt: Bill
       style={{ clipPath: 'polygon(0 0,100% 0,100% calc(100% - 6px),97% 100%,94% calc(100% - 6px),91% 100%,88% calc(100% - 6px),85% 100%,82% calc(100% - 6px),79% 100%,76% calc(100% - 6px),73% 100%,70% calc(100% - 6px),67% 100%,64% calc(100% - 6px),61% 100%,58% calc(100% - 6px),55% 100%,52% calc(100% - 6px),49% 100%,46% calc(100% - 6px),43% 100%,40% calc(100% - 6px),37% 100%,34% calc(100% - 6px),31% 100%,28% calc(100% - 6px),25% 100%,22% calc(100% - 6px),19% 100%,16% calc(100% - 6px),13% 100%,10% calc(100% - 6px),7% 100%,4% calc(100% - 6px),1% 100%,0 calc(100% - 6px))' }}
     >
       <div className="text-center">
-        {shop.logo && <img src={shop.logo} alt="" className="mx-auto mb-1 h-10 w-auto object-contain grayscale" />}
+        {/* same logo as the printed bill (about 25 mm on 80 mm paper), greyscale */}
+        {shop.logo
+          ? <img src={shop.logo} alt="" className="mx-auto mb-1 object-contain grayscale" style={{ width: logoPx, height: logoPx }} />
+          : <Logo size={logoPx} className="mx-auto mb-1 grayscale contrast-125" />}
         <div className="text-[15px] font-bold uppercase tracking-wide">{shop.name || 'Shop name'}</div>
         {shop.tagline && <div className="font-sans text-[12px] font-semibold">{shop.tagline}</div>}
         {fmt.header && <div className="italic">{fmt.header}</div>}

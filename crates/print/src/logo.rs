@@ -79,9 +79,12 @@ fn resize(w: u32, h: u32, src: &[f32], tw: u32) -> (u32, u32, Vec<f32>) {
 pub fn prepare(png_bytes: &[u8], width: u32) -> Result<Raster, String> {
     let (w, h, grey) = decode(png_bytes)?;
     let (tw, th, mut g) = resize(w, h, &grey, width.max(8));
-    // lift the mid-tones a little: thermal heads print dark and swallow detail
+    // Lift the mid-tones a little (thermal heads print dark and swallow detail), then push the flat areas hard to solid black
+    // or white. Without this the dark green disc dithers into a grey speckle and the white G cannot be read; dithering is
+    // left only for the anti-aliased edges.
     for v in g.iter_mut() {
-        *v = v.clamp(0.0, 1.0).powf(0.8);
+        let lifted = v.clamp(0.0, 1.0).powf(0.8);
+        *v = ((lifted - 0.5) * 3.0 + 0.5).clamp(0.0, 1.0);
     }
     let rb = tw.div_ceil(8) as usize;
     let mut data = vec![0u8; rb * th as usize];

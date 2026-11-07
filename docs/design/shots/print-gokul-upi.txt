@@ -10,7 +10,7 @@ No: 30, Nellikuppam Main Road, Kondur, Cuddalore
                   TAX INVOICE
 ------------------------------------------------
 BILL NO : 26/00002             DATE : 07-11-2026
-Counter : Counter 1           TIME : 12:57:28 PM
+Counter : Counter 1           TIME : 01:18:32 PM
 ------------------------------------------------
 PRODUCT            MRP    RATE    QTY        AMT
 ------------------------------------------------
