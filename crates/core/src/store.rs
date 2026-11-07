@@ -266,7 +266,7 @@ fn customer_from_row(r: &Row, now: chrono::DateTime<Local>) -> rusqlite::Result<
         area: r.get(3)?,
         credit_limit: r.get(4)?,
         outstanding: r.get(5)?,
-        loyalty_points: r.get(6)?,
+        loyalty_points: crate::loyalty::from_hundredths(r.get::<_, i64>(6)?),
         last_visit: visit_label(last.as_deref(), now),
     })
 }

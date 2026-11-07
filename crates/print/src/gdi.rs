@@ -100,6 +100,11 @@ pub fn print(printer: &str, output: Option<&std::path::Path>, doc_name: &str, it
                     }
                     y += cw * 4 + cw;
                 }
+                Item::Image { raster, .. } => {
+                    // pictures are drawn as wide as the page
+                    let scale = (page_w / raster.width.max(1) as i32).max(1);
+                    y += draw_raster(dc, raster, 0, y, scale);
+                }
                 Item::Drawer | Item::Cut => {}
             }
         }

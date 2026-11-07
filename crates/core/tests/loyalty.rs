@@ -21,30 +21,33 @@ fn ledger_matches_customer(c: &Connection, cid: &str) {
     assert_eq!(cached, loyalty::balance(c, cid).unwrap(), "customers.loyalty_points is always the sum of the ledger");
 }
 
+/// Gives whole points (the database counts hundredths of a point).
 fn give_points(c: &Connection, cid: &str, pts: i64) {
+    let pts = pts * 100;
     c.execute("INSERT INTO points_ledger(customer_id,at,kind,points,note,by_name) VALUES(?1,'2026-01-01T00:00:00Z','adjust',?2,'test','t')", rusqlite::params![cid, pts]).unwrap();
     c.execute("UPDATE customers SET loyalty_points=?2 WHERE id=?1", rusqlite::params![cid, pts]).unwrap();
 }
 
 #[test]
-fn earn_one_point_per_100_rupees_rounded_down_excluding_credit_note_part() {
+fn earn_one_point_per_100_rupees_with_two_decimals_excluding_credit_note_part() {
     let (_d, db) = mini_db();
     db.with(|c| {
-        // Rs 1,080 (3 x 360) in cash: 10 points
+        // Balances below are in hundredths of a point: Rs 1,080 (3 x 360) in cash earns 10.80 points
         let b = save_bill(c, &draft_with(oil(3000), 0, Some("c1"), "cash"))?;
         assert_eq!(b.totals.grand, 108_000);
-        assert_eq!(loyalty::balance(c, "c1")?, 10);
-        // Rs 360 gives 3 points (not 4: rounded down)
+        assert_eq!(loyalty::balance(c, "c1")?, 1080);
+        assert_eq!(loyalty::fmt_points(1080), "10.80");
+        // Rs 360 gives 3.60 points (nothing is rounded down to 3)
         save_bill(c, &draft_with(oil(1000), 0, Some("c1"), "cash"))?;
-        assert_eq!(loyalty::balance(c, "c1")?, 13);
+        assert_eq!(loyalty::balance(c, "c1")?, 1440);
         // a bill with no customer earns nothing and breaks nothing
         save_bill(c, &cash_draft(oil(1000)))?;
-        assert_eq!(loyalty::balance(c, "c1")?, 13);
-        // discount: earn on the net after discount (Rs 360 - Rs 60 = Rs 300 = 3 points)
+        assert_eq!(loyalty::balance(c, "c1")?, 1440);
+        // discount: earn on the net after discount (Rs 360 - Rs 60 = Rs 300 = 3.00 points)
         save_bill(c, &draft_with(oil(1000), 6_000, Some("c1"), "cash"))?;
-        assert_eq!(loyalty::balance(c, "c1")?, 16);
+        assert_eq!(loyalty::balance(c, "c1")?, 1740);
         ledger_matches_customer(c, "c1");
-        // the part paid with a credit note earns nothing: Rs 720 bill, Rs 360 by credit note, 3 points only
+        // the part paid with a credit note earns nothing: Rs 720 bill, Rs 360 by credit note, 3.60 points only
         let first = save_bill(c, &draft_with(oil(1000), 0, Some("c1"), "cash"))?;
         let cn = billops::create_return(
             c,
@@ -54,8 +57,17 @@ fn earn_one_point_per_100_rupees_rounded_down_excluding_credit_note_part() {
         let mut d = draft_with(oil(2000), 0, Some("c1"), "cash");
         d.payments = vec![pay("credit_note", 36_000, Some(&cn.number)), pay("cash", 36_000, None)];
         save_bill(c, &d)?;
-        // return took back the 3 points of `first`, the new bill earns 3 on the cash half
-        assert_eq!(loyalty::balance(c, "c1")?, before + 3);
+        // the return took back the 3.60 points of `first`, the new bill earns 3.60 on the cash half
+        assert_eq!(loyalty::balance(c, "c1")?, before + 360);
+        // Rs 460 earns exactly 4.60
+        let mut d = draft_with(oil(1000), 0, Some("c1"), "cash");
+        d.lines[0].rate = 46_000;
+        d.lines[0].amount = 46_000;
+        d.payments = vec![pay("cash", 46_000, None)];
+        let before = loyalty::balance(c, "c1")?;
+        let b = save_bill(c, &d)?;
+        assert_eq!(b.totals.grand, 46_000);
+        assert_eq!(loyalty::balance(c, "c1")? - before, 460, "Rs 460 earns 4.60 points");
         ledger_matches_customer(c, "c1");
         Ok(())
     })
@@ -72,8 +84,8 @@ fn redeem_rules_balance_minimum_and_share_of_the_bill() {
         d.payments = vec![pay("points", 10_000, None), pay("cash", 26_000, None)];
         let b = save_bill(c, &d)?;
         assert_eq!(b.payments[0].mode, "points");
-        // 150 - 100 redeemed + earn on Rs 260 cash (2 points)
-        assert_eq!(loyalty::balance(c, "c1")?, 150 - 100 + 2);
+        // 150 - 100 redeemed + earn on Rs 260 cash (2.60 points)
+        assert_eq!(loyalty::balance(c, "c1")?, (150 - 100) * 100 + 260);
         ledger_matches_customer(c, "c1");
         // below the minimum (100) is refused and nothing is saved
         let n = count(c, "bills");
@@ -112,14 +124,14 @@ fn cancel_and_return_reverse_points_and_nothing_is_ever_deleted() {
         let mut d = draft_with(oil(3000), 0, Some("c1"), "cash"); // Rs 1,080
         d.payments = vec![pay("points", 10_000, None), pay("cash", 98_000, None)];
         let b = save_bill(c, &d)?;
-        // 200 - 100 + earn(980 -> 9)
-        assert_eq!(loyalty::balance(c, "c1")?, 109);
-        // return one of three: take back 1/3 of 9 = 3 points
+        // 200 - 100 + earn(Rs 980 = 9.80)
+        assert_eq!(loyalty::balance(c, "c1")?, 10_980);
+        // return one of three: take back a third of 9.80 = 3.26 points
         billops::create_return(
             c,
             &ReturnRequest { bill_id: b.id.clone(), picks: vec![ReturnPick { line_index: 0, qty: 1000 }], reason: "x".into(), refund_mode: "cash".into(), by: "Karthik".into(), manager_pin: "2222".into() },
         )?;
-        assert_eq!(loyalty::balance(c, "c1")?, 106);
+        assert_eq!(loyalty::balance(c, "c1")?, 10_654);
         ledger_matches_customer(c, "c1");
 
         Ok(())
@@ -138,19 +150,19 @@ fn cancelling_gives_points_back() {
             Ok(save_bill(c, &d)?)
         })
         .unwrap();
-    db.with(|c| { assert_eq!(loyalty::balance(c, "c1")?, 200 - 100 + 6); Ok(()) }).unwrap();
+    db.with(|c| { assert_eq!(loyalty::balance(c, "c1")?, (200 - 100) * 100 + 620); Ok(()) }).unwrap();
     let s = Session::pos();
     assert!(!call(&db, &s, "verifyPin", json!(["u3", "1234"])).unwrap().is_null());
     let r = call(&db, &s, "cancelBill", json!([{ "billId": b2.id, "reason": "wrong", "managerPin": "2222", "by": "x" }]));
     assert!(r.is_ok(), "{r:?}");
     db.with(|c| {
-        assert_eq!(loyalty::balance(c, "c1")?, 200, "redeemed points back, earned points taken back");
+        assert_eq!(loyalty::balance(c, "c1")?, 20_000, "redeemed points back, earned points taken back");
         ledger_matches_customer(c, "c1");
         // the ledger only ever grows
         assert!(c.execute("DELETE FROM points_ledger", []).is_err());
         assert!(c.execute("UPDATE points_ledger SET points=999", []).is_err());
         let wallet = loyalty::wallet(c, "c1")?;
-        assert_eq!(wallet["points"], 200);
+        assert_eq!(wallet["points"], json!(200.0));
         assert_eq!(wallet["pointsValue"], 20_000);
         Ok(())
     })
@@ -259,10 +271,10 @@ fn migration_to_v5_keeps_existing_data() {
     }
     let db = Db::open(&path).unwrap();
     db.with(|c| {
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 5);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 6);
         assert_eq!(count(c, "customers"), 1);
-        assert_eq!(loyalty::balance(c, "c9")?, 50, "the points the customer already had are the opening balance");
-        assert_eq!(c.query_row::<i64, _, _>("SELECT loyalty_points FROM customers WHERE id='c9'", [], |r| r.get(0))?, 50);
+        assert_eq!(loyalty::balance(c, "c9")?, 5000, "the 50 points the customer already had are the opening balance (in hundredths)");
+        assert_eq!(c.query_row::<i64, _, _>("SELECT loyalty_points FROM customers WHERE id='c9'", [], |r| r.get(0))?, 5000);
         Ok(())
     })
     .unwrap();
@@ -281,7 +293,7 @@ fn real_copy_upgrades_in_place() {
     db.with(|c| {
         let after = ["items", "bills", "customers", "stock_movements"].map(|t| count(c, t));
         assert_eq!(before, after, "no rows lost");
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 5);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 6);
         assert_eq!(c.query_row::<String, _, _>("PRAGMA integrity_check", [], |r| r.get(0))?, "ok");
         println!("upgraded copy: items/bills/customers/stock_movements before {before:?} after {after:?}");
         Ok(())

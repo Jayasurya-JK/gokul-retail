@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, DatabaseBackup, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
+import { LABEL_PRESETS, type HardwareSettings, type LabelPresetId } from '@gokul/data';
 import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
@@ -37,6 +38,10 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
       <Card title="Shop details">
         <div className="flex flex-col gap-3">
           <Input label="Shop name (printed on bills)" value={v.name} onChange={(e) => up('name', e.target.value)} />
+          <div className="grid grid-cols-[1fr_140px] gap-3">
+            <Input label="Tamil line under the name (printed as a picture)" value={v.tagline} onChange={(e) => up('tagline', e.target.value)} />
+            <Input label="Short name (stickers)" value={v.shortName} onChange={(e) => up('shortName', e.target.value)} maxLength={11} />
+          </div>
           <Input label="Legal name" value={v.legalName} onChange={(e) => up('legalName', e.target.value)} />
           <Input label="Address" value={v.address} onChange={(e) => up('address', e.target.value)} />
           <div className="grid grid-cols-[1fr_1fr_110px] gap-3">
@@ -61,8 +66,9 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
       </Card>
       <Card title="Contact">
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Shop phone" value={v.phone} onChange={(e) => up('phone', e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} className="num" />
-          <Input label="Email" value={v.email} onChange={(e) => up('email', e.target.value)} />
+          <Input label="Mobile (printed on bills)" value={v.phone} onChange={(e) => up('phone', e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} className="num" />
+          <Input label="WhatsApp for orders (printed at the foot)" value={v.whatsapp} onChange={(e) => up('whatsapp', e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} className="num" />
+          <Input label="Email" value={v.email} onChange={(e) => up('email', e.target.value)} className="col-span-2" />
         </div>
       </Card>
       <Card title="Logo">
@@ -140,8 +146,19 @@ export function BillFormatTab({ v, shop, set }: { v: BillFormatSettings; shop: S
         <Card title="Header and footer">
           <div className="flex flex-col gap-3">
             <Input label="Header line (under the shop name)" value={v.header} onChange={(e) => up('header', e.target.value)} maxLength={48} hint={`${v.header.length}/48 characters`} />
+            <Input label="Tamil footer line (printed as a picture)" value={v.footerTamil} onChange={(e) => up('footerTamil', e.target.value)} maxLength={60} />
             <Input label="Footer line" value={v.footer} onChange={(e) => up('footer', e.target.value)} maxLength={48} hint={`${v.footer.length}/48 characters`} />
           </div>
+        </Card>
+        <Card title="Bill heading by how it was paid">
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Cash" value={v.titleCash} onChange={(e) => up('titleCash', e.target.value)} maxLength={20} />
+            <Input label="UPI / QR" value={v.titleUpi} onChange={(e) => up('titleUpi', e.target.value)} maxLength={20} />
+            <Input label="Card" value={v.titleCard} onChange={(e) => up('titleCard', e.target.value)} maxLength={20} />
+            <Input label="Credit (pay later)" value={v.titleCredit} onChange={(e) => up('titleCredit', e.target.value)} maxLength={20} />
+            <Input label="Anything else" value={v.titleOther} onChange={(e) => up('titleOther', e.target.value)} maxLength={20} className="col-span-2" />
+          </div>
+          <p className="mt-2 text-xs text-muted">The small line TAX INVOICE (or BILL OF SUPPLY) stays under the heading, as the GST rules ask.</p>
         </Card>
         <Card title="What to print">
           <Row title="Show customer savings" hint={'Prints "You saved" when the price is below MRP.'}><Switch checked={v.showSavings} onCheckedChange={(x) => up('showSavings', x)} /></Row>
@@ -151,7 +168,8 @@ export function BillFormatTab({ v, shop, set }: { v: BillFormatSettings; shop: S
           {v.showQr && <div className="px-1 pb-2"><Input label="UPI id for the QR (e.g. gokuloils@okaxis)" value={v.upiId ?? ''} onChange={(e) => up('upiId', e.target.value.trim())} /></div>}
         </Card>
         <Card title="Language and paper">
-          <Row title="Bill language" hint="Screens show Tamil names. Thermal paper has no Tamil letters, so printed bills always use the English item name."><Segmented value={v.language} onChange={(x) => up('language', x)} options={[{ value: 'en', label: 'English' }, { value: 'ta', label: 'Tamil' }]} /></Row>
+          <Row title="Print Tamil item names" hint="Tamil names are drawn as pictures (Nirmala UI). Off prints the English name."><Switch checked={v.tamilNames} onCheckedChange={(x) => up('tamilNames', x)} /></Row>
+          <Row title="Printed bill number" hint="26/00123 is the financial year and a five digit running number. Numbers are still gapless."><Segmented value={v.numberFormat} onChange={(x) => up('numberFormat', x)} options={[{ value: 'yy/nnnnn', label: '26/00123' }, { value: 'raw', label: 'GK-26-000123' }]} /></Row>
           <Row title="Paper width"><Segmented value={v.paper} onChange={(x) => up('paper', x)} options={[{ value: '80mm', label: '80 mm' }, { value: '58mm', label: '58 mm' }]} /></Row>
           <Row title="Copies per bill"><div className="w-20"><NumberInput value={String(v.copies)} decimals={0} size="sm" onValueChange={(x) => up('copies', Math.min(3, Math.max(1, Number(x || 1))))} /></div></Row>
         </Card>
@@ -177,18 +195,69 @@ function TestResult({ r }: { r: { ok: boolean; message: string } | null }) {
   );
 }
 
-export function PrintersTab({ v, set, paper = '80mm' }: { v: PrinterSettings; set: (n: PrinterSettings) => void; paper?: string }) {
+/** Checks how fast characters arrive: a scanner types a whole code in a few milliseconds, a person cannot. */
+function ScannerCheck({ gapMs }: { gapMs: number }) {
+  const [val, setVal] = useState('');
+  const stamps = useRef<number[]>([]);
+  const [info, setInfo] = useState<{ chars: number; fastest: number; slowest: number } | null>(null);
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const t = stamps.current;
+      const gaps = t.slice(1).map((x, i) => x - t[i]);
+      if (t.length > 0) setInfo({ chars: t.length, fastest: gaps.length ? Math.round(Math.min(...gaps)) : 0, slowest: gaps.length ? Math.round(Math.max(...gaps)) : 0 });
+      stamps.current = [];
+      return;
+    }
+    if (e.key.length === 1) stamps.current.push(e.timeStamp);
+  };
+  const scanner = info && info.chars >= 3 && info.slowest <= gapMs;
+  return (
+    <div className="mt-3 rounded-card border border-line bg-surface-2 p-3">
+      <div className="mb-1.5 text-xs font-medium text-muted">Scanner check: click here, then scan any label (or type) and press Enter</div>
+      <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={onKey} placeholder="Scan a barcode here" autoComplete="off" />
+      {info && (
+        <div className={cn('mt-2 flex items-start gap-2 text-sm', scanner ? 'text-success' : 'text-warning')}>
+          {scanner ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <XCircle size={16} className="mt-0.5 shrink-0" />}
+          <span>
+            {info.chars} characters, {info.slowest} ms between keys at the slowest.{' '}
+            {scanner ? 'This looks like the scanner. The counter will treat it as a scan.' : info.slowest > gapMs ? `Slower than ${gapMs} ms: the counter would treat this as typing. If this was the scanner, raise the limit above ${info.slowest} ms.` : 'Too short to be a scan (needs 3 characters).'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
+  v: PrinterSettings; set: (n: PrinterSettings) => void; hardware: HardwareSettings; setHardware: (n: HardwareSettings) => void; paper?: string;
+}) {
   const cur = v.detected.find((d) => d.name === v.billPrinter);
+  const labelCur = v.detected.find((d) => d.name === v.labelPrinter);
   const up = <K extends keyof PrinterSettings>(k: K, val: PrinterSettings[K]) => set({ ...v, [k]: val });
+  const upHw = <K extends keyof HardwareSettings>(k: K, val: HardwareSettings[K]) => setHardware({ ...hardware, [k]: val });
   const [billRes, setBillRes] = useState<{ ok: boolean; message: string } | null>(null);
   const [labelRes, setLabelRes] = useState<{ ok: boolean; message: string } | null>(null);
-  const opts = (kinds: string[]) => v.detected.filter((d) => kinds.includes(d.kind)).map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (offline)` }));
+  const isTvs = /rp ?3200|tvs/i.test(v.billPrinter);
+  const labelOpts = () => ({
+    preset: v.labelPreset, width: v.labelWidth, height: v.labelHeight, gap: v.labelGap, columns: v.labelColumns, colGap: v.labelColGap,
+    darkness: v.labelDarkness, speed: v.labelSpeed, offsetX: v.labelOffsetX, offsetY: v.labelOffsetY, flip: v.labelFlip,
+  });
+  const labelOptions = v.detected.filter((d) => d.kind === 'label' || d.kind === 'other').map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (${d.note || 'not ready'})` }));
+  const num = (k: 'labelWidth' | 'labelHeight' | 'labelGap' | 'labelColumns' | 'labelColGap', label: string) => (
+    <NumberInput label={label} value={String(v[k])} decimals={1} size="sm" onValueChange={(x) => up(k, Number(x || 0))} />
+  );
+  const signed = (k: 'labelOffsetX' | 'labelOffsetY', label: string) => (
+    <Input
+      label={label} type="number" size="sm" value={v[k]} className="text-right num"
+      onChange={(e) => up(k, Math.max(-80, Math.min(80, Math.round(Number(e.target.value) || 0))))}
+    />
+  );
   return (
     <div className="grid grid-cols-2 gap-4">
       <Card title="Bill printer" actions={<Badge tone={cur ? (cur.ready ? 'success' : 'danger') : 'warning'}>{cur ? (cur.ready ? 'Ready' : cur.note || 'Not ready') : v.billPrinter ? 'Not installed' : 'Not chosen'}</Badge>}>
         <Select label="Printer" value={v.billPrinter} onChange={(e) => { up('billPrinter', e.target.value); setBillRes(null); }}
           options={[{ value: '', label: 'Choose a printer' }, ...v.detected.filter((d) => d.kind !== 'label').map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (${d.note || 'not ready'})` }))]} />
-        {cur && <p className="mt-1.5 text-xs text-muted">Port {cur.port || '-'} - driver {cur.driver || '-'}</p>}
+        {cur && <p className="mt-1.5 text-xs text-muted">Port {cur.port || '-'} - driver {cur.driver || '-'}{isTvs ? ' - TVS RP3200 Plus: 80 mm, ESC/POS, cutter and cash drawer port' : ''}</p>}
         <div className="mt-2">
           <Row title="How to print" hint={v.mode === 'escpos' ? 'Fast raw receipt commands for thermal printers (TVS, Epson, Posiflex, Retsol ...).' : 'Uses the normal Windows driver. For laser, inkjet or PDF printers.'}>
             <Segmented value={v.mode} onChange={(x) => up('mode', x)} options={[{ value: 'escpos', label: 'Thermal (ESC/POS)' }, { value: 'driver', label: 'Windows driver' }]} />
@@ -198,16 +267,58 @@ export function PrintersTab({ v, set, paper = '80mm' }: { v: PrinterSettings; se
           <Row title="Print the shop logo"><Switch checked={v.printLogo} onCheckedChange={(x) => up('printLogo', x)} /></Row>
           <Row title="Open cash drawer on cash sale" hint="Needs a drawer plugged into the printer (RJ11)."><Switch checked={v.openDrawerOnCash} onCheckedChange={(x) => up('openDrawerOnCash', x)} /></Row>
           <Row title="Cut paper after each bill"><Switch checked={v.cutter} onCheckedChange={(x) => up('cutter', x)} /></Row>
+          <Row title="Compatibility mode" hint="Turn on only if the printer prints rubbish or stops: sends no logo, no QR and no Tamil pictures, only plain text, barcode and cut."><Switch checked={v.compat} onCheckedChange={(x) => up('compat', x)} /></Row>
         </div>
-        <Button className="mt-2" icon={<Printer size={14} />} onClick={async () => setBillRes(await api.testPrint('bill', v.billPrinter, { paper, mode: v.mode, printLogo: v.printLogo }))}>Print test bill</Button>
+        <Button className="mt-2" icon={<Printer size={14} />} onClick={async () => setBillRes(await api.testPrint('bill', v.billPrinter, { paper, mode: v.mode, printLogo: v.printLogo, compat: v.compat }))}>Print test bill</Button>
         <TestResult r={billRes} />
       </Card>
-      <Card title="Barcode label printer" actions={<Badge tone="info">TSPL label</Badge>}>
-        <Select label="Printer" value={v.labelPrinter} onChange={(e) => { up('labelPrinter', e.target.value); setLabelRes(null); }} options={opts(['label', 'other'])} />
-        <p className="mt-2 text-xs text-muted">Label size and layout are set on the Barcode labels screen.</p>
-        <Button className="mt-3" icon={<Printer size={14} />} onClick={async () => setLabelRes(await api.testPrint('label', v.labelPrinter))}>Print test label</Button>
+
+      <Card title="Barcode label printer" actions={<Badge tone={labelCur ? (labelCur.ready ? 'success' : 'danger') : 'warning'}>{labelCur ? (labelCur.ready ? 'Ready' : labelCur.note || 'Not ready') : v.labelPrinter ? 'Not installed' : 'Not chosen'}</Badge>}>
+        <Select label="Printer (TSC TE244)" value={v.labelPrinter} onChange={(e) => { up('labelPrinter', e.target.value); setLabelRes(null); }} options={[{ value: '', label: 'Choose a printer' }, ...labelOptions]} />
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Select
+            label="Label size" value={v.labelPreset} onChange={(e) => {
+              const id = e.target.value as LabelPresetId;
+              const p = LABEL_PRESETS.find((x) => x.id === id);
+              set(p ? { ...v, labelPreset: id, labelWidth: p.width, labelHeight: p.height, labelGap: p.gap, labelColumns: p.columns, labelColGap: p.colGap } : { ...v, labelPreset: id });
+            }}
+            options={[...LABEL_PRESETS.map((p) => ({ value: p.id, label: p.label })), { value: 'custom', label: 'Custom size' }]}
+          />
+          <Input label="Text before the price" size="sm" value={v.labelPricePrefix} maxLength={4} onChange={(e) => up('labelPricePrefix', e.target.value)} hint="The printer has no rupee sign" />
+        </div>
+        {v.labelPreset === 'custom' && (
+          <div className="mt-3 grid grid-cols-5 gap-2">
+            {num('labelWidth', 'Width mm')}{num('labelHeight', 'Height mm')}{num('labelGap', 'Gap mm')}{num('labelColumns', 'Across')}{num('labelColGap', 'Across gap')}
+          </div>
+        )}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <NumberInput label="Darkness (0 to 15)" value={String(v.labelDarkness)} decimals={0} size="sm" onValueChange={(x) => up('labelDarkness', Math.min(15, Number(x || 0)))} />
+          <NumberInput label="Speed (inches per second)" value={String(v.labelSpeed)} decimals={0} size="sm" onValueChange={(x) => up('labelSpeed', Math.min(8, Math.max(1, Number(x || 1))))} />
+          {signed('labelOffsetX', 'Shift right (dots, 8 = 1 mm)')}
+          {signed('labelOffsetY', 'Shift down (dots, 8 = 1 mm)')}
+        </div>
+        <Row title="Labels come out upside down" hint="Turns the print 180 degrees."><Switch checked={v.labelFlip} onCheckedChange={(x) => up('labelFlip', x)} /></Row>
+        <p className="mt-1 text-xs text-muted">Print the test label, look at the frame against the sticker edge, then use the shifts until it sits square. Barcode labels are made on the Barcode labels screen.</p>
+        <Button className="mt-3" icon={<Printer size={14} />} onClick={async () => setLabelRes(await api.testPrint('label', v.labelPrinter, labelOpts()))}>Print test label</Button>
         <TestResult r={labelRes} />
       </Card>
+
+      <Card title="Barcode scanner (Retsol, USB)" className="col-span-2">
+        <div className="grid grid-cols-[1fr_1fr_1fr] gap-4">
+          <NumberInput
+            label="Fastest key gap that counts as a scan (ms)" value={String(hardware.scanGapMs)} decimals={0} size="sm"
+            onValueChange={(x) => upHw('scanGapMs', Math.min(100, Math.max(10, Number(x || 30))))} hint="Scanners type in under 15 ms; people are slower than 40 ms. Default 30."
+          />
+          <NumberInput
+            label="Shortest code (characters)" value={String(hardware.scanMinLen)} decimals={0} size="sm"
+            onValueChange={(x) => upHw('scanMinLen', Math.min(12, Math.max(2, Number(x || 3))))}
+          />
+          <div className="pt-1"><Row title="Beep for an unknown code"><Switch checked={hardware.scanBeep} onCheckedChange={(x) => upHw('scanBeep', x)} /></Row></div>
+        </div>
+        <ScannerCheck gapMs={hardware.scanGapMs} />
+        <p className="mt-2 text-xs text-muted">QR code stickers need a 2D (imager) scanner. A laser scanner reads barcodes only. Save with the Save button below; the counter picks it up when the window is next focused.</p>
+      </Card>
+
       <Card title="Printers found on this computer" className="col-span-2" bodyClassName="!p-0">
         {v.detected.map((d) => (
           <div key={d.name} className="flex items-center gap-3 border-b border-line/70 px-4 py-2.5 text-sm last:border-b-0">
@@ -217,6 +328,7 @@ export function PrintersTab({ v, set, paper = '80mm' }: { v: PrinterSettings; se
             <span className={cn('w-44 truncate text-right text-xs', d.ready ? 'text-muted' : 'text-danger')} title={d.port}>{d.ready ? `Ready${d.isDefault ? ' (Windows default)' : ''}` : d.note || 'Offline'}</span>
           </div>
         ))}
+        {v.detected.length === 0 && <div className="px-4 py-3 text-sm text-muted">No printer is installed on this computer yet. Install the TVS and TSC printer drivers first.</div>}
       </Card>
     </div>
   );

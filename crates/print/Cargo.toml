@@ -6,6 +6,7 @@ description = "Gokul Retail printing: ESC/POS builder, Windows spooler (RAW) and
 
 [dependencies]
 png = "0.18"
+serde = { version = "1", features = ["derive"] }
 qrcode = { version = "0.14", default-features = false }
 
 [target.'cfg(windows)'.dependencies]

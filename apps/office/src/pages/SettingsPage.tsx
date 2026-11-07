@@ -24,7 +24,9 @@ export function SettingsPage() {
 
   const dirtySections = useMemo(() => {
     if (!saved || !draft) return new Set<Section>();
-    return new Set(LABELS.map((l) => l.value).filter((k) => JSON.stringify(saved[k]) !== JSON.stringify(draft[k])));
+    const dirty = new Set(LABELS.map((l) => l.value).filter((k) => JSON.stringify(saved[k]) !== JSON.stringify(draft[k])));
+    if (JSON.stringify(saved.hardware) !== JSON.stringify(draft.hardware)) dirty.add('printers');
+    return dirty;
   }, [saved, draft]);
 
   const save = useCallback(async () => {
@@ -53,7 +55,7 @@ export function SettingsPage() {
           <TabPanel value="shop" className="outline-none"><ShopTab v={draft.shop} set={(n) => patch('shop', n)} /></TabPanel>
           <TabPanel value="tax" className="outline-none"><TaxTab v={draft.tax} set={(n) => patch('tax', n)} /></TabPanel>
           <TabPanel value="billFormat" className="outline-none"><BillFormatTab v={draft.billFormat} shop={draft.shop} set={(n) => patch('billFormat', n)} /></TabPanel>
-          <TabPanel value="printers" className="outline-none"><PrintersTab v={draft.printers} paper={draft.billFormat.paper} set={(n) => patch('printers', n)} /></TabPanel>
+          <TabPanel value="printers" className="outline-none"><PrintersTab v={draft.printers} hardware={draft.hardware} setHardware={(n) => patch('hardware', n)} paper={draft.billFormat.paper} set={(n) => patch('printers', n)} /></TabPanel>
           <TabPanel value="loyalty" className="outline-none"><LoyaltyTab v={draft.loyalty} set={(n) => patch('loyalty', n)} /></TabPanel>
           <TabPanel value="expenses" className="outline-none"><ExpensesTab v={draft.expenses} set={(n) => patch('expenses', n)} /></TabPanel>
           <TabPanel value="mill" className="outline-none"><MillTab v={draft.mill} set={(n) => patch('mill', n)} /></TabPanel>

@@ -16,7 +16,8 @@
     "tauri:pos": "cd apps/pos && tauri dev",
     "tauri:office": "cd apps/office && tauri dev",
     "dist:pos": "cd apps/pos && tauri build",
-    "dist:office": "cd apps/office && tauri build"
+    "dist:office": "cd apps/office && tauri build",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "@eslint/js": "9.17.0",

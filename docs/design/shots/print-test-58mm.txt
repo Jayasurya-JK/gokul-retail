@@ -2,8 +2,8 @@
 [image 160x32]
    GOKUL OILS
 12 Mill Road, Coimbatore 641001
-        Ph: 98420 12345
-     GSTIN: 33AAKFG4821M1ZQ
+    GSTIN: 33AAKFG4821M1ZQ.
+    Mobile.No : 98420 12345.
 --------------------------------
            TEST PRINT
     58 mm paper, 32 columns

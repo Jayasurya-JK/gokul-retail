@@ -3,42 +3,48 @@
 [image 160x32]
    GOKUL OILS
 12 Mill Road, Coimbatore 641001
-        Ph: 98420 12345
-     GSTIN: 33AAKFG4821M1ZQ
+    GSTIN: 33AAKFG4821M1ZQ.
+    Mobile.No : 98420 12345.
 --------------------------------
+   Cash Bill
           TAX INVOICE
 --------------------------------
-No: GK-26-000002      07-11-2026
-Cashier: Karthik        01:00 AM
+BILL NO : 26/00002
+DATE : 07-11-2026    12:57:28 PM
+Counter : Counter 1
 --------------------------------
-Item                      Amount
+ITEM      MRP   RATE QTY     AMT
+--------------------------------
 Wood Pressed Groundnut Oil 1
 Litre Pet Bottle Premium Quality
-  2 pc x 360.00 (5%) HSN
-  1508                    720.00
-Dish Wash Bar
-  1.5 pc x 38.00 (18%) HSN
-  1508                     57.00
+(HSN 1508)
+       360.00 360.00   2  720.00
+Dish Wash Bar (HSN 1508)
+        38.00  38.00 1.5   57.00
 --------------------------------
-Items 2                  Qty 3.5
-Sub total                 777.00
+ITEMS : 2        TOTAL QTY : 3.5
+TOTAL                     777.00
 ================================
-TOTAL  Rs 777.00
+[image 384x110]
 ================================
-GST      Taxable    CGST    SGST
-5%        685.71   17.14   17.15
-18%        48.31    4.34    4.35
+Tax%Taxable  SGST  CGSTTotal Amt
+5%   685.71 17.15 17.14   720.00
+18%   48.31  4.35  4.34    57.00
 --------------------------------
-CASH                      777.00
-Change given               20.00
++------------------------------+
+| Payment Details:             |
+| CASH                  777.00 |
++------------------------------+
+Amount Received           797.00
+Balance Amount             20.00
 --------------------------------
     Thank you. Visit again!
        Scan to pay by UPI
 [qr upi://pay?pa=gokuloils%40upi&pn=Gokul%20Oils&am=777.00&cu=INR&tn=GK-26-000002]
 
-[barcode GK-26-000002]
+[barcode 26/00002]
 
-          GK-26-000002
+            26/00002
 
 
 

@@ -40,6 +40,8 @@ pub enum Item {
     Logo,
     Qr(String),
     Barcode(String),
+    /// A 1-bit picture of text (Tamil, rupee sign) as wide as the paper; `text` is what it says (previews, tests).
+    Image { text: String, raster: crate::logo::Raster },
     Drawer,
     Cut,
 }
@@ -148,6 +150,18 @@ pub fn layout(doc: &Doc, paper: Paper) -> Vec<Item> {
             Op::Logo => out.push(Item::Logo),
             Op::Qr(d) => out.push(Item::Qr(d.clone())),
             Op::Barcode(d) => out.push(Item::Barcode(d.clone())),
+            Op::Pic(text, fallback, st) => {
+                let px = if st.big { 38 } else { 24 };
+                match crate::tamil::render(text, paper.dots(), px, st.bold, st.align) {
+                    Some(r) => out.push(Item::Image { text: text.clone(), raster: (*r).clone() }),
+                    None => {
+                        let w = if st.big { full / 2 } else { full };
+                        for l in wrap(fallback, w) {
+                            out.push(line(pad(&l, w, st.align), *st));
+                        }
+                    }
+                }
+            }
             Op::Drawer => out.push(Item::Drawer),
             Op::Cut => out.push(Item::Cut),
         }
@@ -171,6 +185,7 @@ pub fn to_text(items: &[Item]) -> String {
             Item::Logo => s.push_str("[ logo ]\n"),
             Item::Qr(d) => s.push_str(&format!("[ QR: {d} ]\n")),
             Item::Barcode(d) => s.push_str(&format!("[ barcode: {d} ]\n")),
+            Item::Image { text, raster } => s.push_str(&format!("[ picture {}x{}: {} ]\n", raster.width, raster.height, text.replace('\n', " / "))),
             Item::Drawer => s.push_str("[ cash drawer opens ]\n"),
             Item::Cut => s.push_str("[ - - - cut - - - ]\n"),
         }

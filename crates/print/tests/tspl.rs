@@ -1,0 +1,252 @@
+//! Golden TSPL output and layout rules for the barcode sticker printer.
+use gokul_print::barcode::{code128_modules, ean13_modules};
+use gokul_print::tspl::*;
+
+fn lab() -> Label {
+    Label {
+        shop: "Gokul Oils".into(),
+        name: "G7 Wood Pressed Sesame Oil 1L".into(),
+        mrp: 65000,
+        price: 59000,
+        per: "".into(),
+        barcode: "8904000000011".into(),
+        code: "G7".into(),
+        pack_date: "07/11/26".into(),
+        best_before: "07/05/27".into(),
+        batch: "GK2611O".into(),
+        net_qty: "1 L".into(),
+        legal: "Incl. of all taxes. Mfd & Pkd by Gokul Oils, Salem. FSSAI 12345678901234".into(),
+        price_prefix: String::new(),
+    }
+}
+fn all_fields() -> Fields {
+    Fields { shop: true, batch: true, net: true, legal: true, ..Default::default() }
+}
+fn job(spec: &Spec, f: &Fields, labels: &[Label]) -> String {
+    String::from_utf8(render_job(spec, f, labels)).unwrap()
+}
+
+#[test]
+fn golden_50x25_one_up_four_copies_is_one_print_command() {
+    let spec = Spec::from_preset(preset("50x25").unwrap());
+    let got = job(&spec, &all_fields(), &[lab(), lab(), lab(), lab()]);
+    let want = "SIZE 50 mm,25 mm\r\nGAP 3 mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY 8\r\nSPEED 4\r\nCODEPAGE 437\r\nCLS\r\n\
+TEXT 160,8,\"1\",0,1,1,\"GOKUL OILS\"\r\n\
+TEXT 12,24,\"2\",0,1,1,\"G7 Wood Pressed Sesame Oil 1L\"\r\n\
+BARCODE 77,47,\"128\",41,0,0,2,2,\"8904000000011\"\r\n\
+TEXT 148,90,\"1\",0,1,1,\"8904000000011\"\r\n\
+TEXT 12,111,\"2\",0,1,1,\"MRP Rs 650\"\r\n\
+TEXT 292,107,\"3\",0,1,1,\"Rs 590\"\r\n\
+TEXT 12,134,\"1\",0,1,1,\"Pkd 07/11/26 BB 07/05/27\"\r\n\
+TEXT 12,149,\"1\",0,1,1,\"Net 1 L Batch GK2611O\"\r\n\
+TEXT 12,164,\"1\",0,1,1,\"Incl. of all taxes. Mfd & Pkd by Gokul Oils,\"\r\n\
+TEXT 12,178,\"1\",0,1,1,\"Salem. FSSAI 12345678901234\"\r\n\
+PRINT 1,4\r\n";
+    assert_eq!(got, want);
+}
+
+#[test]
+fn golden_2up_prints_two_stickers_per_row_across_a_79_mm_page() {
+    let spec = Spec::from_preset(preset("38x25-2up").unwrap());
+    let mut b = lab();
+    b.name = "Jaggery 1 kg".into();
+    let got = job(&spec, &Fields::default(), &[lab(), b.clone(), lab()]);
+    assert!(got.starts_with("SIZE 79 mm,25 mm\r\nGAP 3 mm,0 mm\r\n"));
+    // 3 stickers = a full row (A, B) and a short row (A): two CLS, two PRINT
+    assert_eq!(got.matches("CLS\r\n").count(), 2);
+    assert_eq!(got.matches("PRINT 1,1\r\n").count(), 2);
+    // the right-hand sticker starts one label width + gap further right: (38 + 3) mm = 328 dots, plus the 12 dot margin
+    assert!(got.contains("TEXT 340,"), "{got}");
+    assert!(got.contains("TEXT 12,"));
+    assert!(got.contains("\"Jaggery 1 kg\""));
+    // the short last row has only the left sticker
+    let last_row = got.rsplit("CLS\r\n").next().unwrap();
+    assert!(!last_row.contains("TEXT 340,"));
+}
+
+#[test]
+fn identical_rows_collapse_and_different_rows_do_not() {
+    let spec = Spec::from_preset(preset("38x25-2up").unwrap());
+    let mut other = lab();
+    other.name = "Other".into();
+    let mut v = vec![lab(); 10]; // 5 identical rows
+    v.extend(vec![other.clone(); 2]);
+    let got = job(&spec, &Fields::default(), &v);
+    assert_eq!(got.matches("CLS\r\n").count(), 2);
+    assert!(got.contains("PRINT 1,5\r\n"));
+    assert!(got.contains("PRINT 1,1\r\n"));
+}
+
+#[test]
+fn calibration_offsets_and_flip() {
+    let mut spec = Spec::from_preset(preset("50x25").unwrap());
+    spec.dx = 5;
+    spec.dy = -4;
+    spec.flip = true;
+    spec.darkness = 12;
+    spec.speed = 3;
+    let got = job(&spec, &Fields { name: true, mrp: false, price: false, barcode: false, dates: false, ..Default::default() }, &[lab()]);
+    assert!(got.contains("DIRECTION 0,0\r\n") && got.contains("DENSITY 12\r\n") && got.contains("SPEED 3\r\n"));
+    assert!(got.contains("TEXT 17,4,\"2\",0,1,1,\"G7 Wood Pressed Sesame Oil 1L\"\r\n"), "{got}");
+    // a shift can never push an element off the left or top edge
+    spec.dx = -500;
+    spec.dy = -500;
+    assert!(job(&spec, &Fields::default(), &[lab()]).contains("TEXT 0,0,"));
+}
+
+#[test]
+fn real_ean13_is_drawn_as_ean13_and_shop_codes_as_code128() {
+    let spec = Spec::from_preset(preset("50x25").unwrap());
+    let mut a = lab();
+    a.barcode = "4006381333931".into();
+    let got = job(&spec, &Fields::default(), &[a]);
+    assert!(got.contains("\"EAN13\",") && got.contains("\"4006381333931\"\r\n"), "{got}");
+    // item without a barcode: the shop code goes out as Code 128
+    let mut b = lab();
+    b.barcode = String::new();
+    b.code = "G123".into();
+    let got = job(&spec, &Fields::default(), &[b]);
+    assert!(got.contains("\"128\",") && got.contains("\"G123\"\r\n"), "{got}");
+    // a 13 digit internal number with a bad check digit is not EAN13
+    let mut c = lab();
+    c.barcode = "8904000000012".into();
+    assert!(job(&spec, &Fields::default(), &[c]).contains("\"128\","));
+}
+
+#[test]
+fn long_names_wrap_then_truncate_and_text_is_ascii() {
+    assert_eq!(wrap("Wood Pressed Groundnut Oil", 14, 2), vec!["Wood Pressed", "Groundnut Oil"]);
+    assert_eq!(wrap("Wood Pressed Groundnut Oil Premium Pet Bottle", 14, 2), vec!["Wood Pressed".to_string(), "Groundnut Oi..".to_string()]);
+    assert_eq!(wrap("Supercalifragilistic", 8, 3), vec!["Supercal", "ifragili", "stic"]);
+    assert_eq!(ascii("Ghee \"A\" \u{b9}\u{b95}"), "Ghee 'A' ??");
+    assert_eq!(rs(59000), "590");
+    assert_eq!(rs(59050), "590.50");
+}
+
+#[test]
+fn loose_items_show_the_unit_and_equal_prices_show_one_amount() {
+    let spec = Spec::from_preset(preset("50x25").unwrap());
+    let mut l = lab();
+    l.per = "/kg".into();
+    let got = job(&spec, &Fields::default(), &[l.clone()]);
+    assert!(got.contains("\"MRP Rs 650/kg\"") || (got.contains("\"MRP Rs 650/kg\"") || got.contains("\"Rs 590/kg\"")), "{got}");
+    assert!(got.contains("/kg"));
+    l.mrp = l.price;
+    let got = job(&spec, &Fields::default(), &[l]);
+    assert_eq!(got.matches("Rs 590").count(), 1, "{got}");
+}
+
+#[test]
+fn nothing_ever_leaves_the_label_even_with_every_field_on() {
+    let mut f = all_fields();
+    f.qr = true;
+    let mut long = lab();
+    long.name = "Cold Pressed Organic Virgin Coconut Oil With Extra Long Marketing Name 5 Litre Jar".into();
+    long.mrp = 12_345_050;
+    long.price = 11_999_900;
+    let mut specs: Vec<Spec> = PRESETS.iter().map(Spec::from_preset).collect();
+    f.qr = true;
+    specs.push(Spec { width: 40.0, height: 20.0, gap: 2.0, columns: 2, col_gap: 2.0, ..Spec::from_preset(&PRESETS[0]) });
+    for spec in specs {
+        for l in [lab(), long.clone()] {
+            for e in layout_label(&spec, &f, &l) {
+                let (cw, ch) = (spec.cell_w(), spec.cell_h());
+                match &e {
+                    El::Text { x, y, font, xm, ym, text } => {
+                        let (fw, fh) = font_size(*font);
+                        assert!(*x + text.chars().count() as u32 * fw * *xm as u32 <= cw, "text too wide {text:?} on {}x{}", spec.width, spec.height);
+                        assert!(*y + fh * *ym as u32 <= ch, "text too low {text:?} on {}x{}", spec.width, spec.height);
+                    }
+                    El::Barcode { x, y, h, w, .. } => assert!(*x + *w <= cw && *y + *h <= ch, "barcode outside on {}x{}", spec.width, spec.height),
+                    El::Qr { x, y, cell, size, .. } => assert!(*x + cell * size <= cw && *y + cell * size <= ch),
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn fields_can_be_switched_off() {
+    let spec = Spec::from_preset(preset("50x25").unwrap());
+    let f = Fields { name: false, mrp: false, price: false, barcode: false, dates: false, ..Default::default() };
+    let got = job(&spec, &f, &[lab()]);
+    assert!(!got.contains("TEXT") && !got.contains("BARCODE"), "{got}");
+    assert!(got.ends_with("CLS\r\nPRINT 1,1\r\n"));
+}
+
+#[test]
+fn preview_barcode_width_matches_the_printed_code() {
+    let spec = Spec::from_preset(preset("50x25").unwrap());
+    let els = layout_label(&spec, &Fields::default(), &lab());
+    let Some(El::Barcode { w, narrow, rects, data, .. }) = els.iter().find(|e| matches!(e, El::Barcode { .. })).cloned() else { panic!("no barcode") };
+    assert_eq!(data, "8904000000011");
+    assert_eq!(w, code128_modules("8904000000011").unwrap() * narrow);
+    let last = rects.last().unwrap();
+    assert_eq!(last.0 + last.1, w, "bars end exactly at the code width");
+    assert_eq!(ean13_modules("4006381333931").unwrap().len(), 95);
+}
+
+#[test]
+fn qr_goes_on_the_right_and_the_text_makes_room() {
+    let spec = Spec::from_preset(preset("100x50").unwrap());
+    let f = Fields { qr: true, ..Default::default() };
+    let els = layout_label(&spec, &f, &lab());
+    let qr = els.iter().find_map(|e| if let El::Qr { x, rows, size, .. } = e { Some((*x, rows.len() as u32, *size)) } else { None }).expect("qr");
+    assert_eq!(qr.1, qr.2);
+    assert!(qr.0 > 400);
+    let got = job(&spec, &f, &[lab()]);
+    assert!(got.contains("QRCODE ") && got.contains(",M,4,A,0,\"8904000000011\""), "{got}");
+    // too narrow for a QR: skipped, label still prints
+    let small = Spec { width: 20.0, ..Spec::from_preset(preset("32x25-3up").unwrap()) };
+    assert!(!job(&small, &f, &[lab()]).contains("QRCODE"));
+}
+
+#[test]
+fn test_label_has_frame_ruler_and_a_code() {
+    let spec = Spec::from_preset(preset("38x25-2up").unwrap());
+    let got = String::from_utf8(render_test_job(&spec)).unwrap();
+    assert!(got.contains("SIZE 79 mm,25 mm") && got.contains("BOX 0,0,") && got.contains("GOKUL LABEL TEST") && got.contains("\"GOKUL123\""));
+    assert!(got.contains("38x25 mm, 2 across"));
+    assert_eq!(got.matches("GOKUL LABEL TEST").count(), 2);
+    assert_eq!(got.matches("PRINT 1,1").count(), 1);
+}
+
+#[test]
+fn sizes_are_checked() {
+    let ok = Spec::from_preset(preset("32x25-3up").unwrap());
+    assert!(ok.validate().is_ok());
+    for p in PRESETS.iter() {
+        assert!(Spec::from_preset(p).validate().is_ok(), "{}", p.id);
+    }
+    // three 38 mm labels do not fit a 4 inch printer
+    let too_wide = Spec { width: 38.0, columns: 3, col_gap: 2.0, ..ok.clone() };
+    assert!(too_wide.validate().unwrap_err().contains("at most 108"));
+    assert!(Spec { width: 5.0, ..ok.clone() }.validate().is_err());
+    assert!(Spec { columns: 0, ..ok }.validate().is_err());
+    assert_eq!(rows_needed(3, 7), 3);
+}
+
+#[test]
+fn gokul_small_sticker_matches_the_owners_label() {
+    let spec = Spec::from_preset(preset("gokul-small").unwrap());
+    assert!(spec.gokul && spec.cell_w() == 304 && spec.cell_h() == 200);
+    let mut l = lab();
+    l.shop = "Gokul".into();
+    l.name = "Paasi Paruppu Maa".into();
+    l.code = "M3".into();
+    l.price = 3800;
+    l.pack_date = String::new();
+    l.best_before = String::new();
+    let f = Fields { shop: true, name: true, price: true, mrp: false, barcode: false, dates: true, qr: true, ..Default::default() };
+    let got = job(&spec, &f, &[l.clone()]);
+    assert!(got.contains("TEXT 12,8,\"4\",0,1,1,\"GOKUL\""), "{got}");
+    assert!(got.contains("\"PAASI PARUPPU MAA\""), "{got}");
+    assert!(got.contains("QRCODE 12,") && got.contains(",M,5,A,0,\"M3\""), "{got}");
+    assert!(got.contains("\"M3\"") && got.contains("\"Rs.38.00\"") && got.contains("\"Pkd:\"") && got.contains("\"Exp:\""), "{got}");
+    // dates given: filled in
+    l.pack_date = "07/11/26".into();
+    l.best_before = "07/05/27".into();
+    let got = job(&spec, &f, &[l]);
+    assert!(got.contains("\"Pkd:07/11/26\"") && got.contains("\"Exp:07/05/27\""), "{got}");
+}

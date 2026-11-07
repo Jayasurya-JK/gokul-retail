@@ -18,7 +18,7 @@ import type {
 } from '../areas/purchasing';
 import type {
   BackupEntry, CollectionInput, CustStatement, CustomerInput, CustomerProfile, CustomerRow, ReceivableRow, RoleDef, SalesBill,
-  BackupStatus, CustomerWallet, PointsEntry, PrintKind, PrintOptions, PrinterStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
+  BackupStatus, CustomerWallet, HardwareSettings, LabelOptions, LabelPreview, PointsEntry, PrintKind, PrintOptions, PrinterStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
 } from '../areas/crm';
 import type { ReportId, ReportParams, ReportResult } from '../areas/reports';
 import type {
@@ -61,7 +61,7 @@ export const REAL_METHODS = [
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
   'saveSettingsBundle', 'testPrint', 'printDocument', 'printerStatus', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
-  'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref',
+  'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -186,7 +186,10 @@ export function createTauriApi(): Api {
     resetUserPin: (userId: string) => call<{ pin: string }>('resetUserPin', userId),
     getSettingsBundle: () => call<SettingsBundle>('getSettingsBundle'),
     saveSettingsBundle: (next: SettingsBundle) => call<SettingsBundle>('saveSettingsBundle', next),
-    testPrint: (kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean }) => call<{ ok: boolean; message: string }>('testPrint', kind, printer, opts ?? {}),
+    testPrint: (kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions) => call<{ ok: boolean; message: string }>('testPrint', kind, printer, opts ?? {}),
+    getHardware: () => call<HardwareSettings>('getHardware'),
+    labelPreview: (itemIds: string[], opts?: LabelOptions) => call<LabelPreview>('labelPreview', itemIds, opts ?? {}),
+    printLabels: (entries: { itemId: string; copies: number }[], opts?: LabelOptions) => call<{ ok: boolean; message: string }>('printLabels', entries, opts ?? {}),
     printDocument: (kind: PrintKind, id: string, opts?: PrintOptions) => call<{ ok: boolean; message: string }>('printDocument', kind, id, opts ?? {}),
     printerStatus: () => call<PrinterStatus>('printerStatus'),
     backupNow: () => call<BackupEntry>('backupNow'),

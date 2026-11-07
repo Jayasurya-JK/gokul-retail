@@ -693,6 +693,46 @@ pub(crate) fn default_backup_dir(conn: &Connection) -> PathBuf {
     db.parent().map(|p| p.join("Backups")).unwrap_or_else(|| PathBuf::from("Backups"))
 }
 
+/// New printer keys get their default when an older saved bundle does not have them; the shop's own printers (TVS RP3200 Plus,
+/// TSC TE244) are preselected as soon as Windows has them and nothing was chosen yet.
+fn fill_printer_defaults(p: &mut Value) {
+    let defaults = [
+        ("compat", json!(false)), ("labelPreset", json!("gokul-small")), ("labelWidth", json!(38)), ("labelHeight", json!(25)), ("labelGap", json!(3)), ("labelPricePrefix", json!("Rs.")),
+        ("labelColumns", json!(1)), ("labelColGap", json!(0)), ("labelDarkness", json!(8)), ("labelSpeed", json!(4)),
+        ("labelOffsetX", json!(0)), ("labelOffsetY", json!(0)), ("labelFlip", json!(false)),
+    ];
+    for (k, v) in defaults {
+        if p[k].is_null() {
+            p[k] = v;
+        }
+    }
+    // nothing chosen, or the chosen one is not installed on this computer but the shop's TVS RP3200 Plus is: preselect it
+    let bill = p["billPrinter"].as_str().unwrap_or("").trim().to_string();
+    if bill.is_empty() || (!bill.starts_with("FILE:") && gokul_print::printer_state(&bill) == gokul_print::PrinterState::NotFound) {
+        if let Some(name) = crate::printing::auto_bill_printer() {
+            p["billPrinter"] = json!(name);
+            p["mode"] = json!("escpos");
+            p["cutter"] = json!(true);
+            p["openDrawerOnCash"] = json!(true);
+        }
+    }
+    if p["labelPrinter"].as_str().unwrap_or("").trim().is_empty() {
+        if let Some(name) = crate::printing::auto_label_printer() {
+            p["labelPrinter"] = json!(name);
+        }
+    }
+}
+
+/// Scanner and counter hardware settings that the POS reads (any signed-in user): how fast keystrokes must arrive to count as a scan.
+pub fn get_hardware(conn: &Connection) -> Result<Value> {
+    let h = blob(conn, "bundle.hardware")?.unwrap_or(Value::Null);
+    Ok(json!({
+        "scanGapMs": h["scanGapMs"].as_i64().unwrap_or(30).clamp(10, 100),
+        "scanMinLen": h["scanMinLen"].as_i64().unwrap_or(3).clamp(2, 12),
+        "scanBeep": h["scanBeep"].as_bool().unwrap_or(true),
+    }))
+}
+
 pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
     let g = |k: &str| get_setting(conn, k).ok().flatten().unwrap_or_default();
     let round = g("roundToRupee") != "0";
@@ -722,6 +762,20 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
     if printers["printLogo"].is_null() {
         printers["printLogo"] = json!(true);
     }
+    fill_printer_defaults(&mut printers);
+    let mut shop = shop;
+    for (k, v) in [("shortName", ""), ("tagline", ""), ("whatsapp", "")] {
+        if shop[k].is_null() {
+            shop[k] = json!(v);
+        }
+    }
+    let mut bill_format = bill_format;
+    for (k, v) in [("footerTamil", json!("")), ("titleCash", json!("Cash Bill")), ("titleUpi", json!("BHARATQR Bill")), ("titleCard", json!("Card Bill")),
+                   ("titleCredit", json!("Credit Bill")), ("titleOther", json!("Bill")), ("tamilNames", json!(false)), ("numberFormat", json!("yy/nnnnn"))] {
+        if bill_format[k].is_null() {
+            bill_format[k] = v;
+        }
+    }
     let mut backup = blob(conn, "bundle.backup")?.unwrap_or_else(|| {
         json!({ "schedule": "daily", "time": "02:00", "location": "", "keep": 30, "copyToUsb": false })
     });
@@ -735,8 +789,9 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
     let expenses = json!({ "limit": crate::expenses::expense_limit(conn) });
     let mill = blob(conn, "bundle.mill")?.unwrap_or_else(crate::mill::default_mill_bundle);
     let loyalty = crate::loyalty::rules_json(conn);
+    let hardware = get_hardware(conn)?;
     Ok(json!({ "shop": shop, "tax": tax, "billFormat": bill_format, "printers": printers, "backup": backup,
-               "security": security, "expenses": expenses, "mill": mill, "loyalty": loyalty }))
+               "security": security, "expenses": expenses, "mill": mill, "loyalty": loyalty, "hardware": hardware }))
 }
 
 pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value> {
@@ -813,6 +868,15 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
         o.remove("detected"); // read-only: always the live list from Windows
     }
     set_setting(&tx, "bundle.printers", &printers_v.to_string())?;
+    if next["hardware"].is_object() {
+        let h = &next["hardware"];
+        let clean = json!({
+            "scanGapMs": h["scanGapMs"].as_i64().unwrap_or(30).clamp(10, 100),
+            "scanMinLen": h["scanMinLen"].as_i64().unwrap_or(3).clamp(2, 12),
+            "scanBeep": h["scanBeep"].as_bool().unwrap_or(true),
+        });
+        set_setting(&tx, "bundle.hardware", &clean.to_string())?;
+    }
     let mut backup = next["backup"].clone();
     if let Some(o) = backup.as_object_mut() {
         o.remove("history");

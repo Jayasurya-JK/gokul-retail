@@ -47,6 +47,9 @@ pub enum Op {
     Qr(String),
     /// Code 128 barcode with the number printed under it.
     Barcode(String),
+    /// Text drawn with a Windows font and sent as a picture, for what the printer cannot print itself (Tamil, the rupee sign).
+    /// Second field: the plain text to print instead when no font is available.
+    Pic(String, String, Style),
     /// Kick the cash drawer.
     Drawer,
     Cut,

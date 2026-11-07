@@ -74,10 +74,10 @@ pub struct PrinterInfo {
 pub fn classify(name: &str, driver: &str) -> PrinterKind {
     let s = format!("{name} {driver}").to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
-    if has(&["tsc ", "tspl", "zebra", "godex", "label", "argox", "sato", "tth ", "ttp-", "ttp "]) {
+    if has(&["tsc ", "tsc-", "te244", "te 244", "te-244", "tspl", "zebra", "godex", "label", "argox", "sato", "tth ", "ttp-", "ttp "]) {
         PrinterKind::Label
     } else if has(&[
-        "tvs", "rp3160", "rp 3160", "rp-3160", "tm-t", "tm t", "epson tm", "posiflex", "retsol", "thermal", "receipt", "pos-", "pos ", "pos80", "pos58",
+        "tvs", "rp3200", "rp 3200", "rp-3200", "rp3160", "rp 3160", "rp-3160", "tm-t", "tm t", "epson tm", "posiflex", "retsol", "thermal", "receipt", "pos-", "pos ", "pos80", "pos58",
         "xprinter", "x-printer", "bixolon", "star tsp", "tsp1", "citizen ct", "ct-s", "sewoo", "rongta", "everycom", "gprinter", "gp-", "zjiang", "zj-",
         "esc/pos", "escpos", "80mm", "58mm", "80 mm", "58 mm", "jp80", "3nstar", "partner", "tally", "wep", "ep-", "bill printer", "billing",
     ]) {

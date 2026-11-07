@@ -1,0 +1,51 @@
+[ logo ]
+ SRI GOKUL ENTERPRISES
+[ picture 576x37: வாகை மரச்செக்கு எண்ணெய் ]
+No: 30, Nellikuppam Main Road, Kondur, Cuddalore
+                   - 607006.
+            GSTIN: 33EAEPK8839P2ZX.
+            Mobile.No : 9445099191.
+------------------------------------------------
+       Cash Bill
+                  TAX INVOICE
+------------------------------------------------
+Customer Name : Murugan
+Cust ID : c1
+Contact No : 98400 11111
+Address : 12, Gandhi Street, Kondur
+Points : 7.58
+------------------------------------------------
+BILL NO : 26/00001             DATE : 07-11-2026
+Counter : Counter 1           TIME : 12:57:28 PM
+------------------------------------------------
+PRODUCT            MRP    RATE    QTY        AMT
+------------------------------------------------
+Wood Pressed Groundnut Oil 1 Litre (HSN 1508)
+                360.00  360.00      2     720.00
+Dish Wash Bar (HSN 1508)
+                 38.00   38.00      1      38.00
+------------------------------------------------
+ITEMS : 2                          TOTAL QTY : 3
+TOTAL                                     758.00
+================================================
+[ picture 576x56: NET AMOUNT ₹ : 758.00 ]
+================================================
+Tax %  Taxable Val     SGST     CGST   Total Amt
+5%          685.71    17.15    17.14      720.00
+18%          32.20     2.90     2.90       38.00
+------------------------------------------------
++----------------------------------------------+
+| Payment Details:                             |
+| CASH                                  758.00 |
++----------------------------------------------+
+Amount Received                           781.00
+Balance Amount                             23.00
+------------------------------------------------
+Points earned 7.58                  Balance 7.58
+------------------------------------------------
+       For Orders: WhatsApp : 9445099191
+[ picture 576x37: இயற்கை உணவோடு வாழுங்கள் ]
+  Save Your Health, With Our Natural Product !
+[ barcode: 26/00001 ]
+                    26/00001
+[ - - - cut - - - ]

@@ -1,57 +1,74 @@
-import { formatRupees, type Item } from '@gokul/data';
-import { Barcode } from './Barcode';
-import { unitText } from './shared';
+import type { LabelElement, LabelFieldChoice, LabelPreview } from '@gokul/data';
 
-export type LabelSize = '38x25' | '50x25' | '2up';
-export interface LabelFields { name: boolean; mrp: boolean; price: boolean; dates: boolean; batch: boolean }
+/** Preview scale: pixels per printer dot (8 dots = 1 mm, so 5.4 px per mm). */
+export const PX_PER_DOT = 5.4 / 8;
 
-export const SIZES: { value: LabelSize; label: string; hint: string; w: number; h: number; across: number }[] = [
-  { value: '38x25', label: '38 x 25 mm', hint: 'Small, one across', w: 38, h: 25, across: 1 },
-  { value: '50x25', label: '50 x 25 mm', hint: 'Wide, one across', w: 50, h: 25, across: 1 },
-  { value: '2up', label: '2-up 38 x 25', hint: 'Two across, 80 mm roll', w: 38, h: 25, across: 2 },
-];
+export const DEFAULT_FIELDS: LabelFieldChoice = {
+  shop: false, name: true, mrp: true, price: true, barcode: true, dates: true, batch: false, net: false, legal: false, qr: false,
+};
 
-/** Preview scale: pixels per millimetre. */
-export const MM = 5.4;
+/** The shop's own small sticker: GOKUL, item name, QR of the item code, code, price, Pkd and Exp. */
+export const GOKUL_FIELDS: LabelFieldChoice = {
+  shop: true, name: true, mrp: false, price: true, barcode: false, dates: true, batch: false, net: false, legal: false, qr: true,
+};
 
-const addMonths = (d: Date, m: number) => { const x = new Date(d); x.setMonth(x.getMonth() + m); return x; };
-const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, ' ');
+/** Printer built-in fonts 1 to 5: character cell width and height in dots (TSPL). */
+const FONT: Record<number, [number, number]> = { 1: [8, 12], 2: [12, 20], 3: [16, 24], 4: [24, 32], 5: [32, 48] };
 
-export function labelDates(item: Item) {
-  const packed = new Date();
-  const months = item.categoryId === 'oil' || item.categoryId === 'ghee' ? 6 : item.categoryId === 'jag' ? 4 : 9;
-  return { pkd: fmt(packed), exp: fmt(addMonths(packed, months)) };
-}
-export const batchCode = (item: Item) => `GK${String(new Date().getFullYear()).slice(2)}${String(new Date().getMonth() + 1).padStart(2, '0')}${item.categoryId[0].toUpperCase()}`;
-
-/** One label drawn to scale. Colours are fixed black on white because that is what the sticker prints. */
-export function LabelCard({ item, size, fields }: { item: Item; size: LabelSize; fields: LabelFields }) {
-  const s = SIZES.find((x) => x.value === size)!;
-  const dates = labelDates(item);
-  const per = item.loose ? `/${unitText(item.unit)}` : '';
+/**
+ * One sticker drawn from the same element list that is sent to the printer (see crates/print/src/tspl.rs), in dots.
+ * Text cells are stretched to the printer font's cell size, bars and QR modules are the real ones. Black on white because
+ * that is what the sticker prints.
+ */
+export function LabelSvg({ elements, cellW, cellH, scale = PX_PER_DOT }: { elements: LabelElement[]; cellW: number; cellH: number; scale?: number }) {
   return (
-    <div
-      className="flex shrink-0 flex-col overflow-hidden rounded-[3px] bg-white text-black shadow-sm ring-1 ring-black/10"
-      style={{ width: s.w * MM, height: s.h * MM, padding: 1.2 * MM }}
+    <svg
+      width={cellW * scale} height={cellH * scale} viewBox={`0 0 ${cellW} ${cellH}`} role="img" aria-label="Label preview"
+      className="shrink-0 rounded-[3px] bg-white shadow-sm ring-1 ring-black/10"
     >
-      {fields.name && (
-        <div className="font-bold leading-[1.1]" style={{ fontSize: 2.15 * MM, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {item.name.replace(' (Loose)', '')}
+      {elements.map((e, i) => {
+        switch (e.k) {
+          case 'text': {
+            const [fw, fh] = FONT[e.font] ?? FONT[2];
+            const len = e.text.length * fw * e.xm;
+            return (
+              <text
+                key={i} x={e.x} y={e.y + fh * e.ym * 0.8} fill="#000" textLength={len} lengthAdjust="spacingAndGlyphs"
+                fontFamily="Consolas, 'Courier New', monospace" fontWeight={600} fontSize={fh * e.ym * 0.9} style={{ whiteSpace: 'pre' }}
+              >
+                {e.text}
+              </text>
+            );
+          }
+          case 'barcode':
+            return <g key={i} fill="#000">{e.rects.map(([dx, w], k) => <rect key={k} x={e.x + dx} y={e.y} width={w} height={e.h} />)}</g>;
+          case 'qr':
+            return (
+              <g key={i} fill="#000">
+                {e.rows.flatMap((row, r) => [...row].map((c, k) => (c === '1' ? <rect key={`${r}-${k}`} x={e.x + k * e.cell} y={e.y + r * e.cell} width={e.cell} height={e.cell} /> : null)))}
+              </g>
+            );
+          case 'bar':
+            return <rect key={i} x={e.x} y={e.y} width={e.w} height={e.h} fill="#000" />;
+          case 'frame':
+            return <rect key={i} x={e.x + e.t / 2} y={e.y + e.t / 2} width={e.w - e.t} height={e.h - e.t} fill="none" stroke="#000" strokeWidth={e.t} />;
+        }
+      })}
+    </svg>
+  );
+}
+
+/** A piece of the roll: `columns` stickers across, as many rows as needed, with the real gaps. */
+export function LabelRoll({ spec, cells }: { spec: NonNullable<LabelPreview['spec']>; cells: LabelElement[][] }) {
+  const rows: LabelElement[][][] = [];
+  for (let i = 0; i < cells.length; i += spec.columns) rows.push(cells.slice(i, i + spec.columns));
+  return (
+    <div className="mx-auto flex w-fit flex-col" style={{ gap: spec.gapMm * 5.4 }}>
+      {rows.map((row, r) => (
+        <div key={r} className="flex" style={{ gap: spec.colGapDots * PX_PER_DOT }}>
+          {row.map((els, c) => <LabelSvg key={c} elements={els} cellW={spec.cellW} cellH={spec.cellH} />)}
         </div>
-      )}
-      <div className="min-h-0 flex-1 py-[2px]"><Barcode code={item.barcode} className="h-full w-full" /></div>
-      {(fields.mrp || fields.price) && (
-        <div className="flex items-baseline justify-between font-semibold leading-none" style={{ fontSize: 2.1 * MM }}>
-          {fields.mrp && <span className={fields.price ? 'font-normal' : ''} style={{ fontSize: fields.price ? 1.75 * MM : undefined }}>MRP {formatRupees(item.mrp, { decimals: false })}{per}</span>}
-          {fields.price && <span style={{ fontSize: 2.5 * MM }}>{formatRupees(item.price, { decimals: false })}{per}</span>}
-        </div>
-      )}
-      {(fields.dates || fields.batch) && (
-        <div className="mt-[2px] flex items-center justify-between leading-none text-black/80" style={{ fontSize: 1.45 * MM }}>
-          {fields.dates && <span className="truncate">Pkd {dates.pkd} Exp {dates.exp}</span>}
-          {fields.batch && <span className="ml-1 shrink-0 font-medium">{batchCode(item)}</span>}
-        </div>
-      )}
+      ))}
     </div>
   );
 }

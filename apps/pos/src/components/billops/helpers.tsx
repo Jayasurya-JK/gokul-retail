@@ -1,5 +1,5 @@
 import { Ban, CheckCircle2, CornerUpLeft, HandCoins } from 'lucide-react';
-import { type Bill, type BillDetail, type CreditNote, type PayMode, type RefundMode } from '@gokul/data';
+import { billTitleFor, printNumber, type Bill, type BillDetail, type CreditNote, type PayMode, type ReceiptConfig, type RefundMode } from '@gokul/data';
 import { Badge } from '@gokul/ui';
 import type { ReceiptData } from '@gokul/ui';
 
@@ -39,11 +39,15 @@ export function StatusBadge({ bill, detail }: { bill: Bill; detail?: BillDetail 
   return <Badge tone="success"><CheckCircle2 size={11} /> Paid</Badge>;
 }
 
-export function billReceipt(d: BillDetail): ReceiptData {
+export function billReceipt(d: BillDetail, cfg?: ReceiptConfig): ReceiptData {
   const { bill } = d;
+  const f = cfg?.billFormat;
+  const cash = bill.payments.filter((p) => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
   return {
-    title: 'TAX INVOICE', number: bill.number, at: bill.at, cashier: bill.cashier, customerName: bill.customerName,
-    lines: bill.lines, totals: bill.totals, payments: bill.payments,
+    title: f ? billTitleFor(bill.payments, f) : 'TAX INVOICE', subtitle: f ? 'TAX INVOICE' : undefined,
+    number: f ? printNumber(bill.number, f.numberFormat) : bill.number, at: bill.at, cashier: bill.cashier, counter: bill.counter,
+    customerName: bill.customerName, customerId: bill.customerId,
+    lines: bill.lines, totals: bill.totals, payments: bill.payments, received: cash || undefined,
     stamp: bill.status === 'cancelled' ? 'Cancelled' : undefined,
     note: d.reprints > 0 ? `DUPLICATE COPY - reprint ${d.reprints}` : undefined,
   };

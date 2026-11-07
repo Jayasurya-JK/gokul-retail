@@ -101,6 +101,7 @@ pub fn render(items: &[Item], o: &Options) -> Vec<u8> {
                 b.push(0x0A);
                 b.extend_from_slice(&ALIGN_LEFT);
             }
+            Item::Image { raster: r, .. } => raster(&mut b, r),
             Item::Drawer => b.extend_from_slice(&DRAWER_PULSE),
             Item::Cut => {
                 b.extend(std::iter::repeat(0x0A).take(o.feed_before_cut as usize));

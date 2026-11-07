@@ -29,16 +29,18 @@ export function BillFormatPreview({ shop, fmt }: { shop: ShopSettings; fmt: Bill
       <div className="text-center">
         {shop.logo && <img src={shop.logo} alt="" className="mx-auto mb-1 h-10 w-auto object-contain grayscale" />}
         <div className="text-[15px] font-bold uppercase tracking-wide">{shop.name || 'Shop name'}</div>
+        {shop.tagline && <div className="font-sans text-[12px] font-semibold">{shop.tagline}</div>}
         {fmt.header && <div className="italic">{fmt.header}</div>}
         <div>{[shop.address, shop.city, shop.pincode].filter(Boolean).join(', ')}</div>
-        <div>Ph: {shop.phone}</div>
-        <div className="font-semibold">GSTIN: {shop.gstin}</div>
+        <div className="font-semibold">GSTIN: {shop.gstin}.</div>
+        <div>Mobile.No : {shop.phone}.</div>
         {shop.fssai && <div>FSSAI: {shop.fssai}</div>}
       </div>
       {rule}
-      <div className="text-center text-[12.5px] font-bold tracking-widest">{t.invoice}</div>
+      <div className="text-center text-[14px] font-bold">{fmt.titleCash || 'Cash Bill'}</div>
+      <div className="text-center text-[10.5px] tracking-widest">{t.invoice}</div>
       {rule}
-      <div className="flex justify-between"><span>{t.no}: <b>GK-048301</b></span><span>06/11/2026</span></div>
+      <div className="flex justify-between"><span>{t.no}: <b>26/00123</b></span><span>06/11/2026</span></div>
       <div className="flex justify-between"><span>{t.cashier}: Karthik</span><span>11:42 AM</span></div>
       {rule}
       <div className="flex justify-between font-bold"><span>{t.item}</span><span>{t.amount}</span></div>
@@ -66,7 +68,9 @@ export function BillFormatPreview({ shop, fmt }: { shop: ShopSettings; fmt: Bill
         </>
       )}
       {rule}
-      <div className="text-center">{fmt.footer || ' '}</div>
+      {shop.whatsapp && <div className="text-center font-bold">For Orders: WhatsApp : {shop.whatsapp}</div>}
+      {fmt.footerTamil && <div className="text-center font-sans text-[12.5px] font-semibold">{fmt.footerTamil}</div>}
+      <div className="text-center font-semibold">{fmt.footer || ' '}</div>
       {fmt.showQr && (
         <div className="mt-2 flex flex-col items-center gap-1">
           <div className="grid h-16 w-16 grid-cols-8 grid-rows-8 gap-px bg-white p-0.5" aria-hidden>

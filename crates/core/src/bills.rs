@@ -278,7 +278,9 @@ pub fn list_bills(conn: &Connection, f: &BillFilter) -> Result<Vec<Bill>> {
     }
     if let Some(q) = f.query.as_ref().filter(|q| !q.trim().is_empty()) {
         conds.push("(b.number LIKE ? ESCAPE '\\' OR b.customer_name LIKE ? ESCAPE '\\')");
-        let pat = format!("%{}%", like_escape(q.trim()));
+        // a printed number "26/00123" is searched as the internal number
+        let wanted = db::load_settings(conn).ok().and_then(|st| db::internal_bill_number(&st.bill_prefix, q)).unwrap_or_else(|| q.trim().to_string());
+        let pat = format!("%{}%", like_escape(&wanted));
         args.push(pat.clone().into());
         args.push(pat.into());
     }

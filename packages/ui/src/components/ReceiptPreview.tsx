@@ -12,7 +12,7 @@ export interface ReceiptData {
   customerName?: string;
   /** e.g. "Against bill GK-048201" on a credit note */
   reference?: string;
-  lines: BillLine[];
+  lines: (BillLine & { mrp?: number })[];
   totals: BillTotals;
   payments?: Payment[];
   /** Credit note: amounts are going back to the customer */
@@ -21,6 +21,16 @@ export interface ReceiptData {
   stamp?: string;
   /** Extra line under the totals, e.g. refund mode */
   note?: ReactNode;
+  /** Small line under the title: TAX INVOICE */
+  subtitle?: string;
+  counter?: string;
+  customerId?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  /** Loyalty balance, shown with two decimals */
+  points?: number;
+  /** Cash handed over (cash paid + change), for "Amount Received" */
+  received?: number;
 }
 
 const DECIMAL = ['kg', 'g', 'l', 'ml'];
@@ -46,17 +56,34 @@ function BarStrip({ value }: { value: string }) {
   );
 }
 
+/** The shop's printed-bill details that are not in the basic settings (Gokul Office, Settings, Shop and Bill format). */
+export interface ReceiptShop {
+  /** Tamil line under the shop name */
+  tagline?: string;
+  /** "For Orders: WhatsApp" number */
+  whatsapp?: string;
+  /** Tamil line above the footer */
+  footerTamil?: string;
+  /** Mobile number line ("Mobile.No : ...") */
+  mobile?: string;
+}
+
 /**
- * 80mm thermal receipt, drawn like the paper (monospace, black on white, even in dark theme).
- * Pure display: all amounts come in already computed. Used by POS History/Returns and Gokul Office.
+ * 80mm thermal receipt, drawn like the paper (monospace, black on white, even in dark theme). A sale follows the shop's own
+ * bill: logo, name, Tamil line, address, GSTIN, title by payment mode, customer, BILL NO / DATE, product table, NET AMOUNT, tax
+ * table, payment box, footer. A credit note keeps the simple refund layout.
+ * Pure display: all amounts come in already computed. Used by POS Sales/Returns and Gokul Office.
  */
-export function ReceiptPreview({ data, settings, className }: { data: ReceiptData; settings: Settings; className?: string }) {
+export function ReceiptPreview({ data, settings, shop, className }: { data: ReceiptData; settings: Settings; shop?: ReceiptShop; className?: string }) {
   const { totals: t } = data;
   const dt = new Date(data.at);
-  const date = dt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const date = dt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
   const sign = data.refund ? '-' : '';
+  const isBill = !data.refund;
   const rule = <div className="my-1.5 border-t border-dashed border-neutral-400" />;
+  const cash = (data.payments ?? []).filter((p) => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
+  const row = 'grid grid-cols-[1fr_52px_52px_34px_62px] gap-x-1 text-right';
   return (
     <div
       className={cn(
@@ -75,59 +102,113 @@ export function ReceiptPreview({ data, settings, className }: { data: ReceiptDat
       <div className="text-center">
         <Logo size={44} className="mx-auto mb-1 grayscale contrast-125" />
         <div className="text-[15px] font-bold uppercase tracking-wide">{settings.shopName}</div>
+        {shop?.tagline && <div className="font-sans text-[12px] font-semibold">{shop.tagline}</div>}
         <div>{settings.address}</div>
-        <div>Ph: {settings.phone}</div>
-        <div className="font-semibold">GSTIN: {settings.gstin}</div>
+        <div className="font-semibold">GSTIN: {settings.gstin}.</div>
+        {isBill && settings.phone && <div>Mobile.No : {settings.phone}.</div>}
+        {!isBill && <div>Ph: {settings.phone}</div>}
       </div>
       {rule}
-      <div className="text-center text-[12.5px] font-bold tracking-widest">{data.title}</div>
+      <div className="text-center text-[14px] font-bold tracking-wide">{data.title}</div>
+      {data.subtitle && <div className="text-center text-[10.5px] tracking-widest">{data.subtitle}</div>}
       {rule}
-      <div className="flex justify-between"><span>No: <b>{data.number}</b></span><span>{date}</span></div>
-      <div className="flex justify-between"><span>Cashier: {data.cashier}</span><span>{time}</span></div>
-      {data.customerName && data.customerName !== 'Walk-in' && <div>Customer: {data.customerName}</div>}
-      {data.reference && <div className="font-semibold">{data.reference}</div>}
+      {isBill && data.customerName && data.customerName !== 'Walk-in' && (
+        <>
+          <div>Customer Name : {data.customerName}</div>
+          {data.customerId && <div>Cust ID : {data.customerId}</div>}
+          {data.customerPhone && <div>Contact No : {data.customerPhone}</div>}
+          {data.customerAddress && <div>Address : {data.customerAddress}</div>}
+          {data.points !== undefined && <div>Points : {data.points.toFixed(2)}</div>}
+          {rule}
+        </>
+      )}
+      {isBill ? (
+        <>
+          <div className="flex justify-between"><span>BILL NO : <b>{data.number}</b></span><span>DATE : {date}</span></div>
+          <div className="flex justify-between"><span>Counter : {data.counter ?? data.cashier}</span><span>TIME : {time}</span></div>
+        </>
+      ) : (
+        <>
+          <div className="flex justify-between"><span>No: <b>{data.number}</b></span><span>{date}</span></div>
+          <div className="flex justify-between"><span>By: {data.cashier}</span><span>{time}</span></div>
+          {data.customerName && data.customerName !== 'Walk-in' && <div>Customer: {data.customerName}</div>}
+          {data.reference && <div className="font-semibold">{data.reference}</div>}
+        </>
+      )}
       {rule}
-      <div className="flex justify-between font-bold"><span>Item</span><span>Amount</span></div>
-      <div className="mt-1 space-y-1.5">
-        {data.lines.map((l, i) => (
-          <div key={i}>
-            <div className="break-words font-semibold">{l.name}</div>
-            <div className="flex justify-between">
-              <span>{formatQty(l.qty, DECIMAL.includes(l.unit))} {l.unit} x {money(l.rate)}{l.gstRate ? ` (${l.gstRate}%)` : ''}</span>
-              <span className="font-semibold">{sign}{money(l.amount)}</span>
-            </div>
-            {l.discount > 0 && <div className="flex justify-between text-neutral-600"><span>  Disc</span><span>-{money(l.discount)}</span></div>}
+      {isBill ? (
+        <>
+          <div className={cn(row, 'font-bold')}><span className="text-left">PRODUCT</span><span>MRP</span><span>RATE</span><span>QTY</span><span>AMT</span></div>
+          {rule}
+          <div className="space-y-1.5">
+            {data.lines.map((l, i) => (
+              <div key={i}>
+                <div className="break-words font-semibold">{l.name}</div>
+                <div className={row}>
+                  <span />
+                  <span>{l.mrp ? money(l.mrp) : ''}</span><span>{money(l.rate)}</span>
+                  <span>{formatQty(l.qty, DECIMAL.includes(l.unit))}</span><span className="font-semibold">{money(l.amount)}</span>
+                </div>
+                {l.discount > 0 && <div className="flex justify-between text-neutral-600"><span>  Discount</span><span>-{money(l.discount)}</span></div>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      ) : (
+        <>
+          <div className="flex justify-between font-bold"><span>Item</span><span>Amount</span></div>
+          <div className="mt-1 space-y-1.5">
+            {data.lines.map((l, i) => (
+              <div key={i}>
+                <div className="break-words font-semibold">{l.name}</div>
+                <div className="flex justify-between">
+                  <span>{formatQty(l.qty, DECIMAL.includes(l.unit))} {l.unit} x {money(l.rate)}{l.gstRate ? ` (${l.gstRate}%)` : ''}</span>
+                  <span className="font-semibold">{sign}{money(l.amount)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {rule}
-      <div className="flex justify-between"><span>Items {t.itemCount}</span><span>Qty {formatQty(t.qtyCount, t.qtyCount % 1000 !== 0)}</span></div>
-      <div className="flex justify-between"><span>Sub total</span><span>{sign}{money(t.gross)}</span></div>
+      <div className="flex justify-between"><span>ITEMS : {t.itemCount}</span><span>TOTAL QTY : {formatQty(t.qtyCount, t.qtyCount % 1000 !== 0)}</span></div>
+      <div className="flex justify-between font-bold"><span>{isBill ? 'TOTAL' : 'Sub total'}</span><span>{sign}{money(t.gross)}</span></div>
       {t.discount > 0 && <div className="flex justify-between"><span>Discount</span><span>-{money(t.discount)}</span></div>}
       {t.roundOff !== 0 && <div className="flex justify-between"><span>Round off</span><span>{t.roundOff > 0 ? '+' : '-'}{money(Math.abs(t.roundOff))}</span></div>}
-      <div className="mt-1 flex items-baseline justify-between border-y border-neutral-900 py-1 font-sans text-[16px] font-extrabold">
-        <span>{data.refund ? 'REFUND' : 'TOTAL'}</span><span className="num">{sign}₹{money(t.grand)}</span>
+      <div className="mt-1 flex items-baseline justify-between border-y-2 border-neutral-900 py-1 font-sans text-[16px] font-extrabold">
+        <span>{data.refund ? 'REFUND' : 'NET AMOUNT ₹ :'}</span><span className="num">{sign}{money(t.grand)}</span>
       </div>
       {rule}
-      <div className="grid grid-cols-[34px_1fr_1fr_1fr] gap-x-1 text-[10.5px]">
-        <span className="font-bold">GST</span><span className="text-right font-bold">Taxable</span><span className="text-right font-bold">CGST</span><span className="text-right font-bold">SGST</span>
+      <div className="grid grid-cols-[34px_1fr_1fr_1fr_1fr] gap-x-1 text-[10.5px]">
+        <span className="font-bold">Tax %</span><span className="text-right font-bold">Taxable Val</span><span className="text-right font-bold">SGST</span><span className="text-right font-bold">CGST</span><span className="text-right font-bold">Total Amt</span>
         {t.slabs.map((s) => (
           <div key={s.rate} className="contents">
-            <span>{s.rate}%</span><span className="text-right">{money(s.taxable)}</span><span className="text-right">{money(s.cgst)}</span><span className="text-right">{money(s.sgst)}</span>
+            <span>{s.rate}%</span><span className="text-right">{money(s.taxable)}</span><span className="text-right">{money(s.sgst)}</span><span className="text-right">{money(s.cgst)}</span><span className="text-right">{money(s.taxable + s.cgst + s.sgst)}</span>
           </div>
         ))}
       </div>
       {data.payments && data.payments.length > 0 && (
         <>
           {rule}
-          {data.payments.map((p, i) => (
-            <div key={i} className="flex justify-between"><span className="uppercase">{p.mode}{p.ref ? ` (${p.ref.slice(-6)})` : ''}</span><span>{money(p.amount)}</span></div>
-          ))}
+          <div className="border border-neutral-900 px-2 py-1">
+            <div className="font-bold">Payment Details:</div>
+            {data.payments.map((p, i) => (
+              <div key={i} className="flex justify-between"><span className="uppercase">{p.mode === 'credit_note' && p.ref === 'PTS' ? 'points' : p.mode}{p.ref && p.ref !== 'PTS' ? ` (${p.ref.slice(-6)})` : ''}</span><span>{money(p.amount)}</span></div>
+            ))}
+          </div>
+          {cash > 0 && (
+            <>
+              <div className="mt-1 flex justify-between"><span>Amount Received</span><span>{money(data.received ?? cash)}</span></div>
+              <div className="flex justify-between"><span>Balance Amount</span><span>{money(Math.max(0, (data.received ?? cash) - cash))}</span></div>
+            </>
+          )}
         </>
       )}
       {data.note && <>{rule}<div className="text-center font-semibold">{data.note}</div></>}
       {rule}
-      <div className="text-center">{settings.receiptFooter}</div>
+      {isBill && shop?.whatsapp && <div className="text-center font-bold">For Orders: WhatsApp : {shop.whatsapp}</div>}
+      {isBill && shop?.footerTamil && <div className="text-center font-sans text-[12.5px] font-semibold">{shop.footerTamil}</div>}
+      <div className="text-center font-semibold">{settings.receiptFooter}</div>
       <div className="mt-2 text-neutral-900"><BarStrip value={data.number} /></div>
       <div className="text-center text-[10px] tracking-[0.2em]">{data.number}</div>
     </div>

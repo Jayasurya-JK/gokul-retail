@@ -10,6 +10,7 @@ import { Returns } from './pages/Returns';
 import { Expenses } from './pages/Expenses';
 import { DayClose } from './pages/DayClose';
 import { Lock } from './pages/Lock';
+import { ScanRouter } from './scanner';
 
 function Guard({ children }: { children: JSX.Element }) {
   const user = useSession((s) => s.user);
@@ -22,6 +23,7 @@ export function App() {
     <TooltipProvider>
       <ToastProvider>
         <HashRouter>
+          <ScanRouter />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/billing" element={<Guard><Billing /></Guard>} />

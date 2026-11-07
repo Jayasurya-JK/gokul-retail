@@ -105,6 +105,14 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
             return ok(crate::printing::print_document(db, &arg::<String>(a, 0, "kind")?, &arg::<String>(a, 1, "id")?, &opts));
         }
         "printerStatus" => return ok(crate::printing::printer_status(db)),
+        "printLabels" => {
+            let opts = a.get(1).cloned().unwrap_or(Value::Null);
+            return ok(crate::labels::print_labels(db, a.first().unwrap_or(&Value::Null), &opts));
+        }
+        "labelPreview" => {
+            let opts = a.get(1).cloned().unwrap_or(Value::Null);
+            return ok(crate::labels::label_preview(db, &arg::<Vec<String>>(a, 0, "itemIds")?, &opts));
+        }
         "testPrint" => {
             let opts = a.get(2).cloned().unwrap_or(Value::Null);
             return ok(crate::printing::test_print(db, &arg::<String>(a, 0, "kind")?, &arg::<String>(a, 1, "printer")?, &opts));
@@ -296,6 +304,9 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "closeMillSheet" => ok(mill::close_sheet(c, &arg::<mill::CloseInput>(a, 0, "input")?)?),
         "listMillSheets" => ok(mill::list_sheets(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(60))?),
 
+        // ----- Scanner settings (the POS reads them) -----
+        "getHardware" => ok(crm::get_hardware(c)?),
+
         // ----- UI preferences (per counter) -----
         "getUiPref" => {
             let key = format!("ui.{}.{}", crate::db::load_settings(c)?.counter, arg::<String>(a, 0, "key")?);
@@ -332,5 +343,5 @@ pub const METHODS: &[&str] = &[
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
-    "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref",
+    "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
 ];

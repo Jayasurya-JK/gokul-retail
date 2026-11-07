@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Printer, Receipt, Search } from 'lucide-react';
-import { formatQty, formatRupees, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
+import { billTitleFor, formatQty, formatRupees, printNumber, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, Tabs, TabPanel,
   dateRangePresets, useToast, type ColumnDef, type DateRange,
 } from '@gokul/ui';
 import { api } from '../store';
+import { useReceiptConfig } from '../receiptConfig';
 import { billMode, csvCell, DetailPane, downloadText, fmtDate, fmtDateTime, fmtShort, fmtTime, modeLabel, PropRow, SectionLabel, SplitBar, StatusBadge } from '../components/crm/common';
 
 const DECIMAL = ['kg', 'g', 'l', 'ml'];
@@ -27,6 +28,7 @@ const columns: ColumnDef<SalesBill>[] = [
 ];
 
 function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | null }) {
+  const cfg = useReceiptConfig();
   const toast = useToast();
   const [tab, setTab] = useState('details');
   const t = bill.totals;
@@ -108,9 +110,10 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
         <TabPanel value="receipt" className="min-h-0 flex-1 overflow-auto bg-surface-3 px-4 py-5 outline-none">
           {settings && (
             <ReceiptPreview
-              settings={settings}
+              settings={settings} shop={cfg}
               data={{
-                title: 'TAX INVOICE', number: bill.number, at: bill.at, cashier: bill.cashier, customerName: bill.customerName,
+                title: cfg ? billTitleFor(bill.payments, cfg.billFormat) : 'TAX INVOICE', subtitle: cfg ? 'TAX INVOICE' : undefined,
+                number: cfg ? printNumber(bill.number, cfg.billFormat.numberFormat) : bill.number, at: bill.at, cashier: bill.cashier, customerName: bill.customerName,
                 lines: bill.lines, totals: bill.totals, payments: bill.payments,
                 stamp: bill.status === 'cancelled' ? 'CANCELLED' : bill.status === 'returned' ? 'RETURNED' : undefined,
               }}

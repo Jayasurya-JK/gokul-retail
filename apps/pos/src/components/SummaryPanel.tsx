@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, Receipt, UserRound, X } from 'lucide-react';
 import type { BillTotals, CreditNote, Customer, CustomerWallet } from '@gokul/data';
-import { creditLeft, formatPaise, formatQty, formatRupees } from '@gokul/data';
+import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees } from '@gokul/data';
 import { Button, Kbd, Money, cn } from '@gokul/ui';
 import { plural } from '../plural';
 
@@ -80,7 +80,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
           <span className="mt-2 grid w-full grid-cols-3 gap-1.5 border-t border-line pt-2 text-center">
             <CustStat k="Owes" v={formatRupees(customer.outstanding, { decimals: false })} tone={customer.outstanding ? 'warning' : undefined} />
             <CustStat k={customer.creditLimit === 0 ? 'Credit' : 'Credit left'} v={creditText} />
-            <CustStat k="Points" v={String(wallet?.points ?? customer.loyaltyPoints)} />
+            <CustStat k="Points" v={formatPoints(wallet?.points ?? customer.loyaltyPoints)} />
           </span>
         )}
         {customer && (wallet?.storeCredit ?? 0) > 0 && (

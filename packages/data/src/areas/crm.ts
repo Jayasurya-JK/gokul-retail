@@ -202,6 +202,12 @@ export interface ShopSettings {
   email: string;
   gstin: string;
   fssai: string;
+  /** Short name on stickers (GOKUL) */
+  shortName: string;
+  /** Tamil line under the shop name on the bill */
+  tagline: string;
+  /** Number for orders on WhatsApp, printed at the foot of the bill */
+  whatsapp: string;
   /** Data URL of the logo, if one was chosen */
   logo?: string;
 }
@@ -229,6 +235,14 @@ export interface BillFormatSettings {
   language: 'en' | 'ta';
   copies: number;
   paper: '80mm' | '58mm';
+  /** Tamil line under the item lines at the foot of the bill */
+  footerTamil: string;
+  /** Bill heading by how it was paid */
+  titleCash: string; titleUpi: string; titleCard: string; titleCredit: string; titleOther: string;
+  /** Print Tamil item names (as pictures) instead of English ones */
+  tamilNames: boolean;
+  /** 'yy/nnnnn' prints 26/00123, 'raw' prints the internal number */
+  numberFormat: 'yy/nnnnn' | 'raw';
 }
 
 export interface PrinterSettings {
@@ -240,8 +254,80 @@ export interface PrinterSettings {
   autoPrint: boolean;
   openDrawerOnCash: boolean;
   cutter: boolean;
+  /** Safe mode for a bill printer that misbehaves: no logo picture and no QR code (text, barcode and cut only) */
+  compat: boolean;
+  /** Label printer (TSC TE244): ready size id, or 'custom' with the size below */
+  labelPreset: LabelPresetId;
+  labelWidth: number;
+  labelHeight: number;
+  labelGap: number;
+  labelColumns: number;
+  labelColGap: number;
+  /** 0 to 15 */
+  labelDarkness: number;
+  /** inches per second */
+  labelSpeed: number;
+  /** calibration shift in dots (8 dots = 1 mm) */
+  labelOffsetX: number;
+  labelOffsetY: number;
+  /** labels come out upside down: turn the print 180 degrees */
+  labelFlip: boolean;
+  /** Text before the price on the Gokul sticker (the printer cannot print the rupee sign) */
+  labelPricePrefix: string;
   /** Read-only: the printers Windows reports right now */
   detected: { name: string; kind: 'thermal' | 'label' | 'other'; ready: boolean; state?: string; port?: string; driver?: string; isDefault?: boolean; note?: string }[];
+}
+
+export type LabelPresetId = 'gokul-small' | '50x25' | '38x25-2up' | '32x25-3up' | '100x50' | 'custom';
+
+/** The sticker sizes that are ready to use (the printing code in Rust has the same list). */
+export const LABEL_PRESETS: { id: Exclude<LabelPresetId, 'custom'>; label: string; hint: string; width: number; height: number; gap: number; columns: number; colGap: number }[] = [
+  { id: 'gokul-small', label: 'Gokul small 38 x 25 mm', hint: 'GOKUL, name, QR of the code, price, Pkd and Exp', width: 38, height: 25, gap: 3, columns: 1, colGap: 0 },
+  { id: '50x25', label: '50 x 25 mm', hint: 'One across', width: 50, height: 25, gap: 3, columns: 1, colGap: 0 },
+  { id: '38x25-2up', label: '38 x 25 mm, 2 across', hint: '79 mm of the 4 inch roll', width: 38, height: 25, gap: 3, columns: 2, colGap: 3 },
+  { id: '32x25-3up', label: '32 x 25 mm, 3 across', hint: '100 mm of the 4 inch roll', width: 32, height: 25, gap: 3, columns: 3, colGap: 2 },
+  { id: '100x50', label: '100 x 50 mm', hint: 'Big sticker, one across', width: 100, height: 50, gap: 3, columns: 1, colGap: 0 },
+];
+
+/** Scanner settings the counter reads: how fast keystrokes must arrive to count as a barcode scan. */
+export interface HardwareSettings {
+  /** Largest pause between two keys (ms) that still counts as the scanner typing. Hands are slower than 40 ms. */
+  scanGapMs: number;
+  /** Shortest code (characters) accepted as a scan */
+  scanMinLen: number;
+  /** Short beep when a scanned code is not found */
+  scanBeep: boolean;
+}
+
+/** Which fields a sticker carries. */
+export interface LabelFieldChoice {
+  shop: boolean; name: boolean; mrp: boolean; price: boolean; barcode: boolean; dates: boolean; batch: boolean; net: boolean; legal: boolean; qr: boolean;
+}
+export interface LabelOptions {
+  preset?: LabelPresetId;
+  width?: number; height?: number; gap?: number; columns?: number; colGap?: number;
+  darkness?: number; speed?: number; offsetX?: number; offsetY?: number; flip?: boolean;
+  /** Label printer name; empty uses the one saved in Settings */
+  printer?: string;
+  fields?: Partial<LabelFieldChoice>;
+  /** YYYY-MM-DD, default today */
+  packDate?: string;
+  /** Months until best before; 0 prints no date; default by category */
+  bestBeforeMonths?: number;
+  batch?: string;
+}
+/** One thing the printer draws, in dots (203 dpi, 8 dots = 1 mm) from the sticker's top-left corner. */
+export type LabelElement =
+  | { k: 'text'; x: number; y: number; font: number; xm: number; ym: number; text: string }
+  | { k: 'barcode'; x: number; y: number; h: number; kind: string; data: string; narrow: number; w: number; rects: [number, number][] }
+  | { k: 'qr'; x: number; y: number; cell: number; data: string; size: number; rows: string[] }
+  | { k: 'bar'; x: number; y: number; w: number; h: number }
+  | { k: 'frame'; x: number; y: number; w: number; h: number; t: number };
+export interface LabelPreview {
+  ok: boolean;
+  message: string;
+  spec: { widthMm: number; heightMm: number; gapMm: number; columns: number; colGapMm: number; cellW: number; cellH: number; colGapDots: number } | null;
+  labels: { itemId: string; elements: LabelElement[] }[];
 }
 
 export interface BackupEntry { id: string; at: string; sizeMb: number; kind: 'auto' | 'manual' | 'day-close'; ok: boolean }
@@ -338,6 +424,7 @@ export interface SettingsBundle {
   tax: TaxSettings;
   billFormat: BillFormatSettings;
   printers: PrinterSettings;
+  hardware: HardwareSettings;
   backup: BackupSettings;
   security: SecuritySettings;
   expenses: ExpenseSettings;
@@ -371,7 +458,14 @@ export interface CrmApi {
   /* settings */
   getSettingsBundle(): Promise<SettingsBundle>;
   saveSettingsBundle(next: SettingsBundle): Promise<SettingsBundle>;
-  testPrint(kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean }): Promise<{ ok: boolean; message: string }>;
+  /** A real test page: a bill, or a calibration label (frame, ruler, scannable code) with the label settings passed in `opts`. */
+  testPrint(kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean; compat?: boolean } & LabelOptions): Promise<{ ok: boolean; message: string }>;
+  /** Scanner settings; any signed-in user (the counter needs them) */
+  getHardware(): Promise<HardwareSettings>;
+  /** The exact elements the printer will draw for each item (the preview on the Labels page). */
+  labelPreview(itemIds: string[], opts?: LabelOptions): Promise<LabelPreview>;
+  /** Prints barcode stickers: `copies` per item. A problem is an answer `{ ok: false, message }`. */
+  printLabels(entries: { itemId: string; copies: number }[], opts?: LabelOptions): Promise<{ ok: boolean; message: string }>;
   /** Prints a saved document. A printing problem is an answer ({ ok: false, message }), never an error: the record stays saved. */
   printDocument(kind: PrintKind, id: string, opts?: PrintOptions): Promise<{ ok: boolean; message: string }>;
   /** The real state of the bill printer: configured and reachable */
@@ -441,7 +535,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     shop: {
       name: s.shopName, legalName: 'Gokul Oils (Proprietor: Suresh Kumar)', address: '48, Mettupalayam Road, Gandhipuram',
       city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
-      gstin: s.gstin, fssai: '12418009000417',
+      gstin: s.gstin, fssai: '12418009000417', shortName: 'GOKUL', tagline: '', whatsapp: '',
     },
     tax: {
       scheme: 'regular', compositionRatePct: 1,
@@ -454,9 +548,12 @@ function seedSettings(store: MockStore): SettingsBundle {
     billFormat: {
       header: 'Cold pressed oils, made in front of you', footer: s.receiptFooter, showSavings: true, showHsn: true,
       showGstSummary: true, showQr: false, upiId: '', language: 'en', copies: 1, paper: '80mm',
+      footerTamil: '', titleCash: 'Cash Bill', titleUpi: 'BHARATQR Bill', titleCard: 'Card Bill', titleCredit: 'Credit Bill', titleOther: 'Bill', tamilNames: false, numberFormat: 'yy/nnnnn',
     },
     printers: {
       mode: 'escpos', printLogo: true, billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
+      compat: false, labelPricePrefix: 'Rs.', labelPreset: 'gokul-small', labelWidth: 38, labelHeight: 25, labelGap: 3, labelColumns: 1, labelColGap: 0, labelDarkness: 8,
+      labelSpeed: 4, labelOffsetX: 0, labelOffsetY: 0, labelFlip: false,
       detected: [
         { name: s.printer, kind: 'thermal', ready: true },
         { name: 'TSC TE244', kind: 'label', ready: true },
@@ -464,6 +561,7 @@ function seedSettings(store: MockStore): SettingsBundle {
         { name: 'Epson TM-T82 (USB002)', kind: 'thermal', ready: false },
       ],
     },
+    hardware: { scanGapMs: 30, scanMinLen: 3, scanBeep: true },
     security: { lockoutAttempts: 5, lockoutSeconds: 60, voidLineNeedsPin: false },
     expenses: { limit: 100000 },
     mill: { operators: ['Operator 1', 'Operator 2'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 },
@@ -766,6 +864,25 @@ export function createCrmMock(store: MockStore): CrmApi {
       const p = bundle.printers.detected.find((d) => d.name === printer);
       if (!p || !p.ready) return delay({ ok: false, message: `${printer || 'Printer'} is not ready. Check the cable and that it has paper.` });
       return delay({ ok: true, message: kind === 'bill' ? `Test bill sent to ${printer}.` : `Test label sent to ${printer}.` });
+    },
+    getHardware: () => delay(clone(bundle.hardware)),
+    printLabels: () => delay({ ok: true, message: 'Preview only: nothing is printed in the browser.' }),
+    labelPreview: (ids, opts) => {
+      // Browser preview only: a rough layout. The desktop app draws the exact one from the printing code.
+      const preset = LABEL_PRESETS.find((p) => p.id === (opts?.preset ?? bundle.printers.labelPreset)) ?? LABEL_PRESETS[0];
+      const w = opts?.width ?? preset.width, h = opts?.height ?? preset.height, cols = opts?.columns ?? preset.columns, cg = opts?.colGap ?? preset.colGap;
+      const list = ids.map((id) => store.items.find((i) => i.id === id)).filter((i): i is NonNullable<typeof i> => !!i);
+      return delay({
+        ok: true, message: '',
+        spec: { widthMm: w, heightMm: h, gapMm: preset.gap, columns: cols, colGapMm: cg, cellW: w * 8, cellH: h * 8, colGapDots: cg * 8 },
+        labels: list.map((i) => ({
+          itemId: i.id,
+          elements: [
+            { k: 'text' as const, x: 12, y: 10, font: 2, xm: 1, ym: 1, text: i.name.slice(0, Math.floor((w * 8 - 24) / 12)) },
+            { k: 'text' as const, x: 12, y: h * 8 - 40, font: 3, xm: 1, ym: 1, text: `Rs ${Math.round(i.price / 100)}` },
+          ],
+        })),
+      });
     },
     printDocument: () => delay({ ok: true, message: 'Preview only: nothing is printed in the browser.' }),
     printerStatus: () => {

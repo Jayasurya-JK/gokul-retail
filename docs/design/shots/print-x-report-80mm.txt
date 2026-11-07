@@ -2,20 +2,20 @@
 [image 200x72]
        GOKUL OILS
         12 Mill Road, Coimbatore 641001
-                Ph: 98420 12345
-             GSTIN: 33AAKFG4821M1ZQ
+            GSTIN: 33AAKFG4821M1ZQ.
+            Mobile.No : 98420 12345.
 ------------------------------------------------
              X REPORT (day so far)
              The day is still open
 ------------------------------------------------
-Printed 07-11-2026                      01:00 AM
+Printed 07-11-2026                      12:57 PM
 Counter                                Counter 1
-Opened by Karthik            07-11-2026 01:00 AM
+Opened by Cashier            07-11-2026 12:57 PM
 ------------------------------------------------
-Bills                                          1
-Items sold                                     2
-SALES                                     777.00
-  Cash                                    777.00
+Bills                                          0
+Items sold                                     0
+SALES                                       0.00
+  Cash                                      0.00
   UPI                                       0.00
   Card                                      0.00
   Credit                                    0.00
@@ -23,24 +23,29 @@ Discounts given                             0.00
 Returns (0)                                -0.00
 Cancelled bills (0)                        -0.00
 ------------------------------------------------
-GST          Taxable          CGST          SGST
-5%            685.71         17.14         17.15
-18%            48.31          4.34          4.35
-------------------------------------------------
 EXPENSES
-  Tea / snacks x2 (+50.00 other)          100.00
-  Paid from drawer (1)                    100.00
-  Paid by UPI/bank (1), not in drawer      50.00
+  None today                                0.00
+  Paid from drawer (0)                      0.00
+  Paid by UPI/bank (0), not in drawer       0.00
 ------------------------------------------------
 CASH DRAWER
-  Opening cash                       1,00,000.00
-+ Cash sales                              777.00
-+ Cash added                              200.00
+  Opening cash                              0.00
++ Cash sales                                0.00
++ Cash added                                0.00
 + Customer collections                      0.00
-- Cash taken out                           70.00
+- Cash taken out                            0.00
 - Supplier payments                         0.00
 - Cash refunds                              0.00
-- Expenses (cash) (1)                     100.00
+- Expenses (cash) (0)                       0.00
+================================================
+= EXPECTED CASH                             0.00
+================================================
+
+
+
+
+[cut]
+ (cash) (1)                     100.00
 ================================================
 = EXPECTED CASH                      1,00,807.00
 ================================================

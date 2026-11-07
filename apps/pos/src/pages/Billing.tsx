@@ -16,6 +16,7 @@ import { ConfirmDialog, CustomerDialog, HeldDialog, ItemSearchDialog, PromptDial
 import { PaymentDialog } from '../components/PaymentDialog';
 import { printBillAfterSave, printWithToast } from '../printing';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
+import { beepError, useScanHandler } from '../scanner';
 
 type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx';
 const FIELD_ORDER: EditField[] = ['qty', 'rate', 'disc'];
@@ -190,6 +191,33 @@ export function Billing() {
     }
   };
 
+  /* ---------- scanner ----------
+     The global listener (scanner.tsx) recognises the scanner by its typing speed and hands the finished code here, wherever
+     the keyboard focus is: scan box, a grid cell being edited, or the type-ahead open. The code goes to the exact code or
+     barcode first, never the fuzzy list. The same item scanned again adds one more. */
+  const lowerMap = useMemo(() => new Map([...itemMap].map(([k, v]) => [k.toLowerCase(), v])), [itemMap]);
+  useScanHandler((raw) => {
+    const code = raw.trim();
+    if (!code) return;
+    if (dialog || pinAsk || saving) { toast.show({ tone: 'info', title: 'Finish or close this window first', detail: 'Then scan the next item.' }); return; }
+    if (editRef.current) commitEdit(false);
+    let qty: number | undefined;
+    const pre = scan.trim().match(/^(\d+(?:\.\d{1,3})?)\*$/);
+    if (pre) { qty = parseQty(pre[1]) ?? undefined; setScan(''); }
+    const hit = itemMap.get(code) ?? lowerMap.get(code.toLowerCase());
+    if (hit) { addItem(hit, qty); return; }
+    const miss = () => {
+      beepError();
+      toast.show({ tone: 'error', title: `Item not found: ${code}`, detail: 'Check the label, or press F2 to search by name.' });
+      flashError();
+    };
+    api.findItemByCode(code).then((found) => {
+      if (!found) { miss(); return; }
+      setItems((cur) => (cur.some((i) => i.id === found.id) ? cur : [...cur, found]));
+      addItem(found, qty);
+    }, miss);
+  });
+
   /* ---------- actions ---------- */
   const doHold = async () => {
     if (!lines.length) { toast.show({ tone: 'info', title: 'Nothing to hold', detail: 'Add items to the bill first.' }); return; }
@@ -359,7 +387,7 @@ export function Billing() {
         <div className="relative flex-1">
           <ScanBarcode size={20} className={cn('pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2', scanError ? 'text-danger' : 'text-primary')} />
           <input
-            ref={scanRef} value={scan} autoComplete="off" spellCheck={false} aria-label="Scan barcode or type item code"
+            ref={scanRef} data-scan-input value={scan} autoComplete="off" spellCheck={false} aria-label="Scan barcode or type item code"
             onChange={(e) => { setScan(e.target.value); setDismissed(false); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); submitScan(); }

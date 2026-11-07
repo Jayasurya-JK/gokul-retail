@@ -126,7 +126,7 @@ pub fn seed_demo(conn: &mut Connection) -> Result<()> {
         let last = now - Duration::days(c.last_visit_days);
         tx.execute(
             "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            params![c.id, c.name, c.phone, c.area, c.credit_limit, c.outstanding, c.loyalty_points, iso(last), iso(now)],
+            params![c.id, c.name, c.phone, c.area, c.credit_limit, c.outstanding, c.loyalty_points * 100, iso(last), iso(now)],
         )?;
     }
     tx.execute("INSERT INTO sequences(series,fy,last_seq) VALUES('CUSTOMER','-',?1)", [data.customers.len() as i64])?;

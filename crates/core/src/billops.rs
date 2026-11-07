@@ -141,8 +141,10 @@ pub fn find_bill_for_return(conn: &Connection, code: &str) -> Result<Option<Bill
     if c.is_empty() {
         return Ok(None);
     }
+    // The printed form "26/00123" is turned back into the internal number.
+    let internal = db::load_settings(conn).ok().and_then(|st| db::internal_bill_number(&st.bill_prefix, c));
     // Indexed exact match; numbers are stored upper-case, so a lower-case scan still finds them.
-    for candidate in [c.to_string(), c.to_uppercase()] {
+    for candidate in internal.into_iter().chain([c.to_string(), c.to_uppercase()]) {
         if let Some(b) = query_bills(conn, "b.number = ?", [candidate], 1)?.pop() {
             return Ok(Some(detail_of(conn, b)?));
         }

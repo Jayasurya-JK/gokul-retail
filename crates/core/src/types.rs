@@ -46,7 +46,8 @@ pub struct Customer {
     pub area: String,
     pub credit_limit: i64,
     pub outstanding: i64,
-    pub loyalty_points: i64,
+    /// Points with two decimals (the database holds hundredths).
+    pub loyalty_points: f64,
     pub last_visit: String,
 }
 

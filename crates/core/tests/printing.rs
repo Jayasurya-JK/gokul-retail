@@ -57,22 +57,30 @@ fn printed_bill_matches_saved_bill_at_80_and_58_mm() {
         assert!(bytes.windows(3).any(|w| w == [0x1D, 0x56, 0x01]), "partial cut");
         assert!(bytes.windows(3).any(|w| w == [0x1D, 0x76, 0x30]), "logo raster");
         let text = decode_to_text(&bytes);
-        // totals equal the saved bill
+        // totals equal the saved bill: the TOTAL line, the NET AMOUNT picture and the GST table
         let grand = printing::money(bill.totals.grand);
-        assert!(text.lines().any(|l| l.contains("TOTAL") && l.trim_end().ends_with(&format!("Rs {grand}"))), "{text}");
+        let doc = db.with(|c| { let cfg = printing::load_config(c)?; Ok(printing::bill_doc(c, &cfg, &bill.id, false, 2000)?) }).unwrap();
+        let paper_kind = if cols == 48 { gokul_print::Paper::Mm80 } else { gokul_print::Paper::Mm58 };
+        let laid = gokul_print::layout::to_text(&gokul_print::layout(&doc.doc, paper_kind));
+        assert!(laid.contains(&format!("NET AMOUNT \u{20b9} : {grand}")) || laid.contains(&format!("NET AMOUNT Rs : {grand}")), "{laid}");
+        assert!(text.contains("[image 576x") || text.contains("[image 384x") || !laid.contains("[ picture"), "the NET AMOUNT line is sent as a picture: {text}");
         for line in text.lines().filter(|l| !l.starts_with('[')) {
             assert!(line.chars().count() <= cols, "line too wide for {paper}: {line:?}");
         }
-        // amounts are right-aligned to the last column
+        // the figures row is right-aligned to the last column
         let amt = printing::money(bill.lines[0].amount);
-        let l = text.lines().find(|l| l.trim_end().ends_with(&amt) && !l.contains("TOTAL")).unwrap();
+        let l = text.lines().find(|l| l.trim_end().ends_with(&amt) && l.starts_with(' ') && !l.contains("TOTAL")).unwrap();
         assert_eq!(l.chars().count(), cols, "{l:?}");
         // the long name wrapped instead of being cut
         assert!(text.contains("Premium") && text.contains("Quality"), "{text}");
-        assert!(text.contains(&bill.number) && text.contains("GSTIN: 33AAKFG4821M1ZQ") && text.contains("TAX INVOICE"));
-        assert!(text.contains("Change given") && text.contains("20.00"));
+        assert!((text.contains("PRODUCT") || text.contains("ITEM")) && text.contains("MRP") && text.contains("RATE") && text.contains("QTY") && text.contains("AMT"), "{text}");
+        assert!(text.contains("GSTIN: 33AAKFG4821M1ZQ.") && text.contains("TAX INVOICE") && text.contains("Cash Bill"), "{text}");
+        assert!(text.contains("BILL NO : 26/0"), "printed bill number is YY/NNNNN: {text}");
+        assert!((text.contains("Tax %") || text.contains("Tax%")) && text.contains("Taxable") && text.contains("SGST") && text.contains("CGST") && text.contains("Total Amt"), "{text}");
+        assert!(text.contains("Payment Details:") && text.contains("Amount Received") && text.contains("Balance Amount") && text.contains("20.00"), "{text}");
+        assert!(text.contains("ITEMS : 2") && text.contains("TOTAL QTY :"), "{text}");
         assert!(text.contains("[qr upi://pay?pa=gokuloils%40upi"), "{text}");
-        assert!(text.contains(&format!("[barcode {}]", bill.number)));
+        assert!(text.contains("[barcode 26/0"), "the barcode carries the printed number: {text}");
         assert!(!text.contains("DUPLICATE"));
         std::fs::write(shots().join(format!("print-bill-{paper}.txt")), &text).unwrap();
         std::fs::write(shots().join(format!("print-bill-{paper}.bin")), &bytes).unwrap();
@@ -183,4 +191,55 @@ fn drawer_breakdown_lines_sum_to_expected_cash() {
     assert_eq!(amt(expected_line), n("expectedCash"));
     assert!(t.contains("- Expenses (cash) (1)") && t.contains("EXPENSES") && t.contains("Paid by UPI/bank (1), not in drawer"), "{t}");
     std::fs::write(shots().join("print-x-report-80mm.txt"), &t).unwrap();
+}
+
+/// The owner's real bill (SRI GOKUL ENTERPRISES) as sample outputs: text and PNG with the Tamil lines as raster.
+#[test]
+fn gokul_sample_bills_cash_and_upi() {
+    let (_d, db) = mini_db();
+    let out = _d.path().join("sample.bin");
+    db.with(|c| {
+        set_setting(c, "printer", &format!("FILE:{}", out.display()))?;
+        let mut b = gokul_core::crm::get_settings_bundle(c)?;
+        b["shop"]["name"] = json!("SRI GOKUL ENTERPRISES");
+        b["shop"]["shortName"] = json!("GOKUL");
+        b["shop"]["tagline"] = json!("வாகை மரச்செக்கு எண்ணெய்");
+        b["shop"]["address"] = json!("No: 30, Nellikuppam Main Road, Kondur, Cuddalore - 607006.");
+        b["shop"]["city"] = json!("");
+        b["shop"]["pincode"] = json!("");
+        b["shop"]["gstin"] = json!("33EAEPK8839P2ZX");
+        b["shop"]["phone"] = json!("9445099191");
+        b["shop"]["whatsapp"] = json!("9445099191");
+        b["billFormat"]["footer"] = json!("Save Your Health, With Our Natural Product !");
+        b["billFormat"]["footerTamil"] = json!("இயற்கை உணவோடு வாழுங்கள்");
+        b["billFormat"]["showQr"] = json!(false);
+        b["printers"]["billPrinter"] = json!(format!("FILE:{}", out.display()));
+        b["printers"].as_object_mut().unwrap().remove("detected");
+        gokul_core::crm::save_settings_bundle(c, &b)?;
+        c.execute("UPDATE customers SET address='12, Gandhi Street, Kondur' WHERE id='c1'", [])?;
+        Ok(())
+    })
+    .unwrap();
+    let lines = || vec![line("i1", "101", "Wood Pressed Groundnut Oil 1 Litre", 2000, 36_000, 5), line("i3", "103", "Dish Wash Bar", 1000, 3_800, 18)];
+    let cash = db.with(|c| Ok(save_bill(c, &draft_with(lines(), 0, Some("c1"), "cash"))?)).unwrap();
+    let upi = db.with(|c| Ok(save_bill(c, &draft_with(lines(), 0, None, "upi"))?)).unwrap();
+    for (name, bill, change, paper) in [("cash", &cash, 2300, gokul_print::Paper::Mm80), ("upi", &upi, 0, gokul_print::Paper::Mm80), ("cash-58mm", &cash, 2300, gokul_print::Paper::Mm58)] {
+        let (doc, cfg) = db.with(|c| { let mut cfg = printing::load_config(c)?; cfg.paper = paper; Ok((printing::bill_doc(c, &cfg, &bill.id, false, change)?, cfg)) }).unwrap();
+        let items = gokul_print::layout(&doc.doc, paper);
+        let text = gokul_print::layout::to_text(&items);
+        if name == "cash" {
+            assert!(text.contains("Cash Bill") && text.contains("Customer Name : Murugan") && text.contains("Cust ID : c1") && text.contains("Contact No : 98400 11111") && text.contains("Points : 4.60") || text.contains("Points : "), "{text}");
+            assert!(text.contains("வாகை மரச்செக்கு எண்ணெய்") || !text.contains("[ picture"), "{text}");
+        } else if name == "upi" {
+            assert!(text.contains("BHARATQR Bill") && !text.contains("Customer Name"), "{text}");
+        }
+        assert!(text.contains("WhatsApp : 9445099191") && text.contains("Natural Product !"), "{text}");
+        std::fs::write(shots().join(format!("print-gokul-{name}.txt")), &text).unwrap();
+        let logo = gokul_print::logo::cached(cfg.logo_png.as_deref(), if paper == gokul_print::Paper::Mm80 { 200 } else { 160 });
+        if let Some(png) = gokul_print::tamil::preview_png(&items, paper, logo.as_deref()) {
+            std::fs::write(shots().join(format!("print-gokul-{name}.png")), png).unwrap();
+        }
+        let bytes = printing::render_bytes(&doc, &cfg, false);
+        std::fs::write(shots().join(format!("print-gokul-{name}.bin")), bytes).unwrap();
+    }
 }

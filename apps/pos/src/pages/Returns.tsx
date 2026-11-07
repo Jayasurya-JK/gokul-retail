@@ -6,6 +6,7 @@ import {
   type Bill, type BillDetail, type CreditNote, type RefundMode,
 } from '@gokul/data';
 import { printWithToast } from '../printing';
+import { beepError, useScanHandler } from '../scanner';
 import { Badge, Button, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, useSession } from '../store';
@@ -113,6 +114,21 @@ export function Returns() {
     if (!l) return;
     setQty(i, (picks[i] ?? 0) + dir * (isDecimalUnit(l.unit) ? 500 : 1000));
   };
+  /* A scanned bill barcode finds the bill. With a bill open, a scanned item ticks one more unit of its line. */
+  useScanHandler((raw) => {
+    const c = raw.trim();
+    if (!c || made || dialog || pinAsk || busy || editing) return;
+    if (!bill) { setCode(c); void load(c); return; }
+    void api.findItemByCode(c).then(async (item) => {
+      const i = item ? bill.lines.findIndex((l, k) => l.itemId === item.id && returnable(k) > 0) : -1;
+      if (item && i >= 0) { setActive(i); step(i, 1); return; }
+      if (item) { toast.show({ tone: 'warning', title: `${item.name} has nothing left to return on this bill` }); return; }
+      const other = await api.findBillForReturn(c);
+      if (other) { void load(c); return; }
+      beepError();
+      toast.show({ tone: 'error', title: `Not found: ${c}`, detail: 'No item on this bill and no other bill has this code.' });
+    });
+  });
   const startEdit = (i: number) => {
     const l = bill?.lines[i];
     if (!l || returnable(i) <= 0) return;

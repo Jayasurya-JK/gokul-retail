@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Ban, ChevronLeft, ChevronRight, CornerUpLeft, Lock, Printer, Receipt, Search } from 'lucide-react';
 import { type Bill, type BillDetail, type CreditNote, type PayMode } from '@gokul/data';
 import { printWithToast } from '../printing';
+import { useScanHandler } from '../scanner';
+import { useReceiptConfig } from '../receiptConfig';
 import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -31,6 +33,7 @@ export function Sales() {
   const nav = useNavigate();
   const toast = useToast();
   const { user, settings } = useSession();
+  const receiptCfg = useReceiptConfig();
   const [date, setDate] = useState(() => dayKey(new Date()));
   const [query, setQuery] = useState('');
   const [allDays, setAllDays] = useState(false);
@@ -46,6 +49,13 @@ export function Sales() {
   const today = dayKey(new Date());
   /** Cashiers see today only; the owner and managers can open any day. Totals are visible to everyone. */
   const canBrowse = user?.role !== 'cashier';
+  /* A scanned bill barcode (the bill number) finds that bill. */
+  useScanHandler((raw) => {
+    const c = raw.trim();
+    if (!c || dialog) return;
+    setQuery(c);
+    if (canBrowse) setAllDays(true);
+  });
 
   /* list */
   useEffect(() => {
@@ -258,7 +268,7 @@ export function Sales() {
               </div>
               <div className="w-[356px] shrink-0 overflow-y-auto border-l border-line bg-surface-3 px-3 py-4">
                 <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted">Receipt preview - 80 mm</div>
-                <ReceiptPreview data={billReceipt(detail)} settings={settings} />
+                <ReceiptPreview data={billReceipt(detail, receiptCfg)} settings={settings} shop={receiptCfg} />
               </div>
             </div>
           ) : (

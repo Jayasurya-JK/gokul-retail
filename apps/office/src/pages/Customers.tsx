@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MessageCircle, Pencil, Phone, Plus, Users, Wallet } from 'lucide-react';
-import { formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow, type PointsEntry } from '@gokul/data';
+import { formatPoints, formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow, type PointsEntry } from '@gokul/data';
 import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Tabs, TabPanel, useToast, type ColumnDef } from '@gokul/ui';
 import { api } from '../store';
 import { CustomerSheet } from '../components/crm/CustomerSheet';
@@ -51,11 +51,11 @@ function PointsHistory({ customerId }: { customerId: string }) {
   const label = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Taken back / given back', adjust: 'Opening balance' } as const;
   return (
     <>
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-sm"><span className="text-muted">Balance</span><b className="num text-ink">{rows.reduce((s, r) => s + r.points, 0)} points</b></div>
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-sm"><span className="text-muted">Balance</span><b className="num text-ink">{formatPoints(Math.round(rows.reduce((s, r) => s + r.points, 0) * 100) / 100)} points</b></div>
       {rows.map((r, i) => (
         <div key={i} className="flex items-center justify-between gap-3 border-b border-line/70 px-4 py-2 text-sm">
           <div className="min-w-0"><div className="font-medium text-ink">{label[r.kind]}{r.bill ? ` · ${r.bill}` : ''}</div><div className="truncate text-xs text-muted">{fmtDateTime(r.at)} · {r.note}</div></div>
-          <b className={`num shrink-0 ${r.points >= 0 ? 'text-success' : 'text-danger'}`}>{r.points > 0 ? '+' : ''}{r.points}</b>
+          <b className={`num shrink-0 ${r.points >= 0 ? 'text-success' : 'text-danger'}`}>{r.points > 0 ? '+' : ''}{formatPoints(r.points)}</b>
         </div>
       ))}
     </>
@@ -123,7 +123,7 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
             <PropRow k="Address">{c.address ?? '-'}</PropRow>
             <PropRow k="Email">{c.email ?? '-'}</PropRow>
             <PropRow k="Customer since">{fmtDate(c.since)}</PropRow>
-            <PropRow k="Loyalty points"><span className="num">{c.loyaltyPoints}</span></PropRow>
+            <PropRow k="Loyalty points"><span className="num">{formatPoints(c.loyaltyPoints)}</span></PropRow>
           </dl>
 
           <SectionLabel>Favourite items</SectionLabel>

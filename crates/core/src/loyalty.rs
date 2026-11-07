@@ -1,7 +1,9 @@
 //! Loyalty points and store credit.
 //!
 //! - Earn: 1 point per `rupeesPerPoint` (default Rs 100) of the bill value that was paid with money: the net total after discount,
-//!   minus the part paid with credit notes or points. Rounded down.
+//!   minus the part paid with credit notes or points. Two decimals (Rs 460 earns 4.60 points); only a fraction of a hundredth is dropped.
+//! - Units: the ledger and `customers.loyalty_points` hold HUNDREDTHS of a point (4.60 points = 460). The API shows points as a number
+//!   with two decimals (`from_hundredths`). Redeeming stays in whole points.
 //! - Redeem: a payment method "points" worth `pointValue` paise each (default Rs 1), at least `minRedeem` points, at most `maxPct`
 //!   percent of the bill. Stored as a payment row of mode credit_note with ref `PTS` (bill_payments only knows five modes and is
 //!   immutable), and as a negative row in `points_ledger`.
@@ -18,6 +20,16 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
 pub const POINTS_REF: &str = "PTS";
+
+/// Hundredths of a point (what the database holds) as points with two decimals (what screens and bills show).
+pub fn from_hundredths(h: i64) -> f64 {
+    h as f64 / 100.0
+}
+
+/// "4.60", "-0.25".
+pub fn fmt_points(h: i64) -> String {
+    format!("{}{}.{:02}", if h < 0 { "-" } else { "" }, h.abs() / 100, h.abs() % 100)
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rules {
@@ -65,6 +77,7 @@ pub fn save_rules(conn: &Connection, v: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The customer's balance in HUNDREDTHS of a point (see `from_hundredths`).
 pub fn balance(conn: &Connection, customer_id: &str) -> Result<i64> {
     Ok(conn.query_row("SELECT COALESCE(SUM(points),0) FROM points_ledger WHERE customer_id=?1", [customer_id], |r| r.get(0))?)
 }
@@ -108,15 +121,15 @@ pub fn redeem_for_bill(tx: &Connection, customer_id: Option<&str>, payments: &[P
     if used * 100 > grand * r.max_pct {
         return invalid(format!("Points can pay at most {}% of a bill.", r.max_pct));
     }
-    if pts > balance(tx, cid)? {
+    if pts * 100 > balance(tx, cid)? {
         return invalid("The customer does not have that many points.");
     }
-    post(tx, cid, "redeem", -pts, Some(bill_id), &format!("Paid on {number}"), by)?;
+    post(tx, cid, "redeem", -pts * 100, Some(bill_id), &format!("Paid on {number}"), by)?;
     audit(tx, Local::now(), by, "redeem", "points", number, &format!("{pts} points = {used} paise"))?;
     Ok(pts)
 }
 
-/// Books the points a finished bill earns (after payments are known). Returns the points earned.
+/// Books the points a finished bill earns (after payments are known). Returns the points earned in hundredths.
 pub fn earn_for_bill(tx: &Connection, customer_id: Option<&str>, payments: &[Payment], grand: i64, bill_id: i64, number: &str, by: &str) -> Result<i64> {
     let Some(cid) = customer_id else { return Ok(0) };
     let non_money: i64 = payments.iter().filter(|p| p.mode == "credit_note" || p.mode == "points").map(|p| p.amount).sum();
@@ -125,7 +138,8 @@ pub fn earn_for_bill(tx: &Connection, customer_id: Option<&str>, payments: &[Pay
     if !r.enabled {
         return Ok(0);
     }
-    let pts = base / (r.rupees_per_point * 100);
+    // paise / rupees-per-point = hundredths of a point (46000 paise at Rs 100 per point = 460 = 4.60 points)
+    let pts = base / r.rupees_per_point;
     post(tx, cid, "earn", pts, Some(bill_id), &format!("Bill {number}"), by)?;
     Ok(pts)
 }
@@ -198,7 +212,7 @@ pub fn wallet(conn: &Connection, customer_id: &str) -> Result<Value> {
     let store_credit: i64 = notes.iter().map(|n| n["balance"].as_i64().unwrap_or(0)).sum();
     let r = rules(conn);
     let pts = balance(conn, customer_id)?;
-    Ok(json!({ "points": pts, "pointsValue": pts * r.point_value, "storeCredit": store_credit, "creditNotes": notes, "rules": rules_json(conn) }))
+    Ok(json!({ "points": from_hundredths(pts), "pointsValue": pts * r.point_value / 100, "storeCredit": store_credit, "creditNotes": notes, "rules": rules_json(conn) }))
 }
 
 pub fn history(conn: &Connection, customer_id: &str, limit: i64) -> Result<Vec<Value>> {
@@ -206,7 +220,7 @@ pub fn history(conn: &Connection, customer_id: &str, limit: i64) -> Result<Vec<V
         "SELECT l.at,l.kind,l.points,l.note,l.by_name,b.number FROM points_ledger l LEFT JOIN bills b ON b.id=l.bill_id WHERE l.customer_id=?1 ORDER BY l.id DESC LIMIT ?2",
     )?;
     let rows = st.query_map(params![customer_id, limit.clamp(1, 500)], |r| {
-        Ok(json!({ "at": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?, "points": r.get::<_, i64>(2)?, "note": r.get::<_, String>(3)?,
+        Ok(json!({ "at": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?, "points": from_hundredths(r.get::<_, i64>(2)?), "note": r.get::<_, String>(3)?,
                    "by": r.get::<_, String>(4)?, "bill": r.get::<_, Option<String>>(5)? }))
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

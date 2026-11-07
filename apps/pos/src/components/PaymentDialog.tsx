@@ -52,7 +52,7 @@ export function PaymentDialog({ open, total, customer, wallet, onClose, onComple
   const spentPoints = payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
   const pv = rules?.pointValue ?? 100;
   const pointsCap = rules && wallet && rules.enabled
-    ? Math.min(wallet.points * pv - spentPoints, Math.floor((total * rules.maxPct) / 100) - spentPoints, remaining)
+    ? Math.min(Math.floor(wallet.points) * pv - spentPoints, Math.floor((total * rules.maxPct) / 100) - spentPoints, remaining)
     : 0;
   const pointsAvail = Math.max(0, Math.floor(pointsCap / pv) * pv);
 

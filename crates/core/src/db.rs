@@ -14,6 +14,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (3, include_str!("../migrations/003_security.sql")),
     (4, include_str!("../migrations/004_money_mill.sql")),
     (5, include_str!("../migrations/005_loyalty_credit.sql")),
+    (6, include_str!("../migrations/006_points_hundredths.sql")),
 ];
 
 pub struct Db {
@@ -158,6 +159,15 @@ pub fn peek_seq(conn: &Connection, series: &str, fy: &str) -> Result<i64> {
 /// Document number such as GK-26-000123 (prefix, financial-year digits, six-digit sequence; at most 16 characters).
 pub fn doc_number(prefix: &str, fy: &str, seq: i64) -> String {
     format!("{}-{}-{:06}", prefix, fy_short(fy), seq)
+}
+
+/// A printed bill number "26/00123" back to the internal "GK-26-000123" (so a scanned or typed printed number finds the bill).
+pub fn internal_bill_number(prefix: &str, shown: &str) -> Option<String> {
+    let (yy, seq) = shown.trim().split_once('/')?;
+    if yy.len() != 2 || !yy.chars().all(|c| c.is_ascii_digit()) || seq.is_empty() || !seq.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("{}-{}-{:06}", prefix, yy, seq.parse::<i64>().ok()?))
 }
 
 // ---------- settings ----------
