@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MessageCircle, Pencil, Phone, Plus, Users, Wallet } from 'lucide-react';
-import { formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow } from '@gokul/data';
+import { formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow, type PointsEntry } from '@gokul/data';
 import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Tabs, TabPanel, useToast, type ColumnDef } from '@gokul/ui';
 import { api } from '../store';
 import { CustomerSheet } from '../components/crm/CustomerSheet';
@@ -43,11 +43,30 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+function PointsHistory({ customerId }: { customerId: string }) {
+  const [rows, setRows] = useState<PointsEntry[] | null>(null);
+  useEffect(() => { let live = true; setRows(null); api.listPointsHistory(customerId, 200).then((r) => live && setRows(r)).catch(() => live && setRows([])); return () => { live = false; }; }, [customerId]);
+  if (rows === null) return <div className="p-4 text-sm text-muted">Loading</div>;
+  if (rows.length === 0) return <EmptyState title="No points yet" hint="Points are earned on every bill and show here, one line each." />;
+  const label = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Taken back / given back', adjust: 'Opening balance' } as const;
+  return (
+    <>
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-sm"><span className="text-muted">Balance</span><b className="num text-ink">{rows.reduce((s, r) => s + r.points, 0)} points</b></div>
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 border-b border-line/70 px-4 py-2 text-sm">
+          <div className="min-w-0"><div className="font-medium text-ink">{label[r.kind]}{r.bill ? ` · ${r.bill}` : ''}</div><div className="truncate text-xs text-muted">{fmtDateTime(r.at)} · {r.note}</div></div>
+          <b className={`num shrink-0 ${r.points >= 0 ? 'text-success' : 'text-danger'}`}>{r.points > 0 ? '+' : ''}{r.points}</b>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEdit: () => void; onCollect: () => void }) {
   const { customer: c, favourites, bills } = profile;
   const toast = useToast();
   const [tab, setTab] = useState('overview');
-  const used = c.creditLimit ? Math.min(100, (c.outstanding / c.creditLimit) * 100) : 0;
+  const used = c.creditLimit > 0 ? Math.min(100, (c.outstanding / c.creditLimit) * 100) : 0;
   const maxFav = Math.max(1, ...favourites.map((f) => f.amount));
   return (
     <DetailPane width={420}>
@@ -59,14 +78,14 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
             <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted num"><Phone size={13} /> {c.phone}</div>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {c.type === 'b2b' ? <Badge tone="info"><Building2 size={11} /> Business</Badge> : <Badge>Retail</Badge>}
-              {c.creditLimit > 0 && <Badge tone="primary">Credit customer</Badge>}
+              {c.creditLimit !== 0 && <Badge tone="primary">Credit customer</Badge>}
               {c.outstanding > 0 && <Badge tone="warning">Owes money</Badge>}
             </div>
           </div>
           <Button size="sm" icon={<Pencil size={13} />} onClick={onEdit}>Edit</Button>
         </div>
       </div>
-      <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1" tabs={[{ value: 'overview', label: 'Overview' }, { value: 'history', label: 'Purchase history', count: bills.length }]}>
+      <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1" tabs={[{ value: 'overview', label: 'Overview' }, { value: 'history', label: 'Purchase history', count: bills.length }, { value: 'points', label: 'Points' }]}>
         <TabPanel value="overview" className="min-h-0 flex-1 overflow-auto p-4 outline-none">
           <div className="mb-4 grid grid-cols-2 gap-2">
             <Stat label="Total spend (30 days)"><Money paise={c.totalSpend} decimals={false} /></Stat>
@@ -80,11 +99,11 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
               <SectionLabel>Credit account</SectionLabel>
               {c.outstanding > 0 && <Button size="sm" variant="primary" icon={<Wallet size={13} />} onClick={onCollect}>Collect</Button>}
             </div>
-            {c.creditLimit > 0 ? (
+            {c.creditLimit !== 0 ? (
               <>
                 <div className="flex items-end justify-between">
                   <div><div className="text-xs text-muted">Outstanding</div><div className={`text-lg font-semibold num ${c.outstanding > 0 ? 'text-warning' : 'text-ink'}`}><Money paise={c.outstanding} /></div></div>
-                  <div className="text-right"><div className="text-xs text-muted">Credit limit</div><div className="text-base font-medium num"><Money paise={c.creditLimit} decimals={false} /></div></div>
+                  <div className="text-right"><div className="text-xs text-muted">Credit limit</div><div className="text-base font-medium num">{c.creditLimit < 0 ? 'No limit' : <Money paise={c.creditLimit} decimals={false} />}</div></div>
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
                   <div className={used > 85 ? 'h-full bg-danger' : used > 60 ? 'h-full bg-warning' : 'h-full bg-primary'} style={{ width: `${used}%` }} />
@@ -92,7 +111,7 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
                 <div className="mt-1 text-xs text-subtle">{Math.round(used)}% of limit used</div>
               </>
             ) : (
-              <div className="text-sm text-muted">No credit given. Set a credit limit with Edit to allow Pay later at the counter.</div>
+              <div className="text-sm text-muted">Credit not allowed. Set a credit limit with Edit to allow Pay later at the counter.</div>
             )}
           </div>
 
@@ -129,6 +148,9 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
           >
             Send offer on WhatsApp
           </Button>
+        </TabPanel>
+        <TabPanel value="points" className="min-h-0 flex-1 overflow-auto outline-none">
+          <PointsHistory customerId={c.id} />
         </TabPanel>
         <TabPanel value="history" className="min-h-0 flex-1 overflow-auto outline-none">
           {bills.length === 0 ? (
@@ -177,7 +199,7 @@ export function Customers() {
   }, []);
 
   const shown = useMemo(() => {
-    const base = rows.filter((r) => (view === 'credit' ? r.creditLimit > 0 : view === 'dues' ? r.outstanding > 0 : view === 'b2b' ? r.type === 'b2b' : true));
+    const base = rows.filter((r) => (view === 'credit' ? r.creditLimit !== 0 : view === 'dues' ? r.outstanding > 0 : view === 'b2b' ? r.type === 'b2b' : true));
     return fuzzyFilter(base, q, (r) => [r.name, r.phone.replace(' ', ''), r.business ?? '', r.area], 500);
   }, [rows, q, view]);
 

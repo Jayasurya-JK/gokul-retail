@@ -224,18 +224,24 @@ export interface BillFormatSettings {
   showHsn: boolean;
   showGstSummary: boolean;
   showQr: boolean;
+  /** UPI id for the pay QR on the bill (e.g. shop@bank); empty prints the bill number as the QR */
+  upiId: string;
   language: 'en' | 'ta';
   copies: number;
   paper: '80mm' | '58mm';
 }
 
 export interface PrinterSettings {
+  /** 'escpos' sends raw ESC/POS to a thermal printer; 'driver' prints through the normal Windows driver (laser, inkjet, PDF) */
+  mode: 'escpos' | 'driver';
+  printLogo: boolean;
   billPrinter: string;
   labelPrinter: string;
   autoPrint: boolean;
   openDrawerOnCash: boolean;
   cutter: boolean;
-  detected: { name: string; kind: 'thermal' | 'label' | 'other'; ready: boolean }[];
+  /** Read-only: the printers Windows reports right now */
+  detected: { name: string; kind: 'thermal' | 'label' | 'other'; ready: boolean; state?: string; port?: string; driver?: string; isDefault?: boolean; note?: string }[];
 }
 
 export interface BackupEntry { id: string; at: string; sizeMb: number; kind: 'auto' | 'manual' | 'day-close'; ok: boolean }
@@ -288,7 +294,46 @@ export interface MillSettings {
   serviceGstRate: 0 | 5 | 12 | 18;
 }
 
+export interface LoyaltySettings {
+  enabled: boolean;
+  /** Rupees of bill value that earn one point */
+  rupeesPerPoint: number;
+  /** What one point is worth when redeemed, in paise (confirm with the owner) */
+  pointValue: Paise;
+  minRedeem: number;
+  /** Points may pay at most this percent of a bill */
+  maxPct: number;
+}
+export interface CustomerWallet {
+  points: number;
+  pointsValue: Paise;
+  storeCredit: Paise;
+  creditNotes: { number: string; at: string; balance: Paise }[];
+  rules: LoyaltySettings;
+}
+export interface PointsEntry { at: string; kind: 'earn' | 'redeem' | 'reverse' | 'adjust'; points: number; note: string; by: string; bill: string | null }
+export type PrintKind = 'bill' | 'creditNote' | 'xreport' | 'zreport' | 'expense' | 'receipt' | 'drawer';
+export interface PrintOptions {
+  /** Reprint: the paper says DUPLICATE COPY and the drawer stays shut */
+  duplicate?: boolean;
+  /** Right after a sale: obeys "print bill automatically" and the drawer setting */
+  auto?: boolean;
+  /** Change given back (paise), printed under the payments */
+  change?: Paise;
+  /** The Z report that was just closed */
+  payload?: unknown;
+}
+export interface PrinterStatus {
+  configured: boolean;
+  ready: boolean;
+  state: 'ready' | 'offline' | 'paper_out' | 'paper_jam' | 'door_open' | 'error' | 'not_found' | 'none';
+  name: string;
+  mode: 'escpos' | 'driver';
+  message: string;
+}
+
 export interface SettingsBundle {
+  loyalty: LoyaltySettings;
   shop: ShopSettings;
   tax: TaxSettings;
   billFormat: BillFormatSettings;
@@ -307,6 +352,11 @@ export interface CrmApi {
   listCustomerRows(): Promise<CustomerRow[]>;
   getCustomerProfile(id: string): Promise<CustomerProfile | null>;
   saveCustomer(input: CustomerInput): Promise<CustomerRow>;
+  /** The one credit rule: limit 0 = credit not allowed, above 0 = allowed up to that amount, -1 (NO_CREDIT_LIMIT) = no limit. Needs a manager PIN for a cashier. */
+  setCustomerCredit(customerId: string, limit: Paise, managerPin?: string): Promise<CustomerRow>;
+  /** Points, store credit (open credit notes) and the loyalty rules for one customer */
+  getCustomerWallet(customerId: string): Promise<CustomerWallet>;
+  listPointsHistory(customerId: string, limit?: number): Promise<PointsEntry[]>;
   /* credit */
   listReceivables(): Promise<ReceivableRow[]>;
   getStatement(customerId: string): Promise<CustStatement | null>;
@@ -321,7 +371,11 @@ export interface CrmApi {
   /* settings */
   getSettingsBundle(): Promise<SettingsBundle>;
   saveSettingsBundle(next: SettingsBundle): Promise<SettingsBundle>;
-  testPrint(kind: 'bill' | 'label', printer: string): Promise<{ ok: boolean; message: string }>;
+  testPrint(kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean }): Promise<{ ok: boolean; message: string }>;
+  /** Prints a saved document. A printing problem is an answer ({ ok: false, message }), never an error: the record stays saved. */
+  printDocument(kind: PrintKind, id: string, opts?: PrintOptions): Promise<{ ok: boolean; message: string }>;
+  /** The real state of the bill printer: configured and reachable */
+  printerStatus(): Promise<PrinterStatus>;
   backupNow(): Promise<BackupEntry>;
   backupStatus(): Promise<BackupStatus>;
   restoreBackup(id: string): Promise<{ ok: boolean; message: string }>;
@@ -383,6 +437,7 @@ function seedRoles(): RoleDef[] {
 function seedSettings(store: MockStore): SettingsBundle {
   const s = store.settings;
   return {
+    loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100 },
     shop: {
       name: s.shopName, legalName: 'Gokul Oils (Proprietor: Suresh Kumar)', address: '48, Mettupalayam Road, Gandhipuram',
       city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
@@ -398,10 +453,10 @@ function seedSettings(store: MockStore): SettingsBundle {
     },
     billFormat: {
       header: 'Cold pressed oils, made in front of you', footer: s.receiptFooter, showSavings: true, showHsn: true,
-      showGstSummary: true, showQr: false, language: 'en', copies: 1, paper: '80mm',
+      showGstSummary: true, showQr: false, upiId: '', language: 'en', copies: 1, paper: '80mm',
     },
     printers: {
-      billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
+      mode: 'escpos', printLogo: true, billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
       detected: [
         { name: s.printer, kind: 'thermal', ready: true },
         { name: 'TSC TE244', kind: 'label', ready: true },
@@ -582,6 +637,14 @@ export function createCrmMock(store: MockStore): CrmApi {
       const favourites = [...agg.values()].sort((a, b) => b.amount - a.amount).slice(0, 5);
       return delay({ customer: rowFor(c), favourites, bills: bills.slice(0, 40) });
     },
+    getCustomerWallet: () => delay({ points: 0, pointsValue: 0, storeCredit: 0, creditNotes: [], rules: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100 } }),
+    listPointsHistory: () => delay([]),
+    setCustomerCredit: (customerId, limit) => {
+      const c = store.customers.find((x) => x.id === customerId);
+      if (!c) return Promise.reject(new Error('Customer not found.'));
+      c.creditLimit = limit;
+      return delay(rowFor(c));
+    },
     saveCustomer: (input) => {
       const clean = { name: input.name.trim(), phone: input.phone.trim(), area: input.area.trim() };
       let c = input.id ? store.customers.find((x) => x.id === input.id) : undefined;
@@ -703,6 +766,12 @@ export function createCrmMock(store: MockStore): CrmApi {
       const p = bundle.printers.detected.find((d) => d.name === printer);
       if (!p || !p.ready) return delay({ ok: false, message: `${printer || 'Printer'} is not ready. Check the cable and that it has paper.` });
       return delay({ ok: true, message: kind === 'bill' ? `Test bill sent to ${printer}.` : `Test label sent to ${printer}.` });
+    },
+    printDocument: () => delay({ ok: true, message: 'Preview only: nothing is printed in the browser.' }),
+    printerStatus: () => {
+      const name = bundle.printers.billPrinter;
+      const p = bundle.printers.detected.find((d) => d.name === name);
+      return delay({ configured: !!name, ready: !!p?.ready, state: !name ? 'none' : p?.ready ? 'ready' : 'offline', name, mode: bundle.printers.mode, message: !name ? 'No printer chosen.' : p?.ready ? `${name} is ready` : `${name} is offline` });
     },
     backupNow: () => {
       seq += 1;

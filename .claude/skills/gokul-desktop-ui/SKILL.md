@@ -19,7 +19,7 @@ The bar: looks like a 2026 pro desktop product (Shopify POS, Square terminal, Li
 1. Use components from `packages/ui` (Button, DataTable, Dialog, Drawer, Money, Kbd, PageHeader, and so on). If something is missing, add it there, not inside the app.
 2. Colours, radius and type come only from tokens (`packages/ui/src/tokens.css` via the Tailwind preset). No hex codes in app code.
 3. Data comes only from the `Api` interface in `packages/data` (mockApi for now). Screens never compute GST or totals themselves; they call the shared helpers. Money is integer paise.
-4. Keyboard: every POS action has a key shown as a `<Kbd>` chip. Focus always lands somewhere useful. Esc closes the top dialog. Office has Ctrl+K command palette, and Enter / arrow keys work in every table.
+4. Keyboard-fast, never keyboard-only (owner rule). Every value and action also works by mouse or touch: grid cells are editable inline on click, rows have +/- and remove buttons, and every action has a visible button. Keyboard: every POS action has a key shown as a `<Kbd>` chip. Focus always lands somewhere useful. Esc closes the top dialog. Office has Ctrl+K command palette, and Enter / arrow keys work in every table.
 5. Write real Gokul Oils content (oils, loose kg/L, tins, punnakku, Indian names). Never use lorem ipsum.
 6. Show empty, loading, error and very-long-text states.
 

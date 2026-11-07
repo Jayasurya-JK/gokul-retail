@@ -47,7 +47,8 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
-        <RDialog.Overlay className="g-overlay fixed inset-0 z-50 bg-overlay/45" />
+        {/* Centred by a full-screen flex box (no percentage translate), so text always lands on whole pixels. */}
+        <RDialog.Overlay className="g-overlay fixed inset-0 z-50 flex items-center justify-center bg-overlay/45">
         <RDialog.Content
           ref={contentRef}
           onOpenAutoFocus={(e) => {
@@ -58,7 +59,7 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
           onCloseAutoFocus={onCloseAutoFocus}
           aria-describedby={undefined}
           className={cn(
-            'g-dialog fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-48px)] max-w-[calc(100vw-48px)]',
+            'g-dialog relative z-50 max-h-[calc(100vh-48px)] max-w-[calc(100vw-48px)] shrink-0',
             'flex flex-col overflow-hidden rounded-card bg-surface shadow-overlay', dialogSizes[size],
           )}
         >
@@ -74,6 +75,7 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
           <div className={cn('min-h-0 flex-1 overflow-auto', bodyClassName ?? 'p-5')}>{children}</div>
           {footer && <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-surface-2 px-5 py-3">{footer}</div>}
         </RDialog.Content>
+        </RDialog.Overlay>
       </RDialog.Portal>
     </RDialog.Root>
   );

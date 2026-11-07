@@ -22,7 +22,7 @@ export const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('en-IN',
 export const dateTimeOf = (iso: string) =>
   new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 
-export const modeLabel: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note' };
+export const modeLabel: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note', points: 'Points' };
 export const payLabel = (b: Bill) => {
   const modes = [...new Set(b.payments.map((p) => p.mode))];
   return modes.length > 1 ? 'Split' : modeLabel[modes[0]] ?? '';

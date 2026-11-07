@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { ScanBarcode } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Minus, Percent, Pencil, Plus, ScanBarcode, Tag, Trash2 } from 'lucide-react';
 import { formatQty, type BillLine } from '@gokul/data';
 import { EmptyState, Kbd, Money, cn } from '@gokul/ui';
 
@@ -14,7 +14,7 @@ export const GRID_COLS = '52px minmax(0,3.2fr) minmax(104px,1.15fr) minmax(46px,
 
 const unitLabel: Record<string, string> = { kg: 'kg', g: 'g', l: 'L', ml: 'ml', pc: 'pc', tin: 'tin', btl: 'btl', pkt: 'pkt' };
 
-export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCommit, onCancel, onReject }: {
+export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCommit, onCancel, onReject, onEdit, onStep, onRemove }: {
   lines: BillLine[];
   selected: number;
   edit: EditState | null;
@@ -25,7 +25,19 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
   onCancel: () => void;
   /** Called when a typed character is refused (e.g. `*` in the weight box). */
   onReject?: (message: string) => void;
+  /** Mouse or touch: click a Qty, Rate or Disc cell to edit it in place */
+  onEdit: (i: number, field: EditField) => void;
+  /** - / + buttons: change the quantity by one (1 kg or 1 unit) */
+  onStep: (i: number, delta: 1 | -1) => void;
+  onRemove: (i: number) => void;
 }) {
+  const [menu, setMenu] = useState<{ x: number; y: number; i: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('mousedown', close); window.addEventListener('keydown', close); window.addEventListener('blur', close);
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close); window.removeEventListener('blur', close); };
+  }, [menu]);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => { rowRefs.current[selected]?.scrollIntoView({ block: 'nearest' }); }, [selected, lines.length]);
 
@@ -91,7 +103,8 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
                 key={`${l.itemId}-${i}`}
                 ref={(el) => { rowRefs.current[i] = el; }}
                 onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('input')) onSelect(i); }}
-                className={cn('relative grid h-[46px] items-center border-b border-line/70 px-3 text-base min-[1700px]:h-[62px] min-[1700px]:text-[19px]', active ? 'bg-primary-soft' : i % 2 ? 'bg-surface-2/50' : 'bg-surface')}
+                onContextMenu={(e) => { e.preventDefault(); onSelect(i); setMenu({ x: e.clientX, y: e.clientY, i }); }}
+                className={cn('group relative grid h-[46px] items-center border-b border-line/70 px-3 text-base min-[1700px]:h-[62px] min-[1700px]:text-[19px]', active ? 'bg-primary-soft' : i % 2 ? 'bg-surface-2/50' : 'bg-surface')}
                 style={{ gridTemplateColumns: GRID_COLS }}
               >
                 {active && <span className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
@@ -100,23 +113,78 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
                   <div className="truncate font-medium text-ink">{l.name}</div>
                   <div className="flex items-center gap-1.5 text-xs text-subtle min-[1700px]:text-sm"><span className="num rounded bg-surface-3 px-1 text-[11px] font-medium text-muted min-[1700px]:text-xs">{l.code}</span>{isLoose && <span>Loose, by weight</span>}</div>
                 </div>
-                <div className="px-1.5 text-right num">
-                  {editing === 'qty' ? cellInput('qty', i, formatQty(l.qty, isLoose)) : <span className={cn('font-semibold', isLoose && 'text-primary')}>{formatQty(l.qty, isLoose)}</span>}
+                <div className="relative px-1.5 text-right num">
+                  {editing === 'qty' ? cellInput('qty', i, formatQty(l.qty, isLoose)) : (
+                    <>
+                      <span className={cn('absolute inset-y-0 left-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100', active && 'opacity-100')}>
+                        <StepBtn label="One less" disabled={l.qty <= 1000} onClick={() => onStep(i, -1)}><Minus size={12} /></StepBtn>
+                        <StepBtn label="One more" onClick={() => onStep(i, 1)}><Plus size={12} /></StepBtn>
+                      </span>
+                      <CellButton label="Change quantity" onClick={() => onEdit(i, 'qty')} className={cn('font-semibold', isLoose && 'text-primary')}>{formatQty(l.qty, isLoose)}</CellButton>
+                    </>
+                  )}
                 </div>
                 <div className="px-2 text-sm text-muted min-[1700px]:text-base">{unitLabel[l.unit]}</div>
                 <div className="px-1.5 text-right num">
-                  {editing === 'rate' ? cellInput('rate', i, (l.rate / 100).toFixed(2)) : <Money paise={l.rate} symbol={false} />}
+                  {editing === 'rate' ? cellInput('rate', i, (l.rate / 100).toFixed(2)) : <CellButton label="Change rate" onClick={() => onEdit(i, 'rate')}><Money paise={l.rate} symbol={false} /></CellButton>}
                 </div>
                 <div className="px-1.5 text-right num">
-                  {editing === 'disc' ? cellInput('disc', i, '0 or 5%') : l.discount ? <span className="text-success"><Money paise={-l.discount} symbol={false} /></span> : <span className="text-subtle">-</span>}
+                  {editing === 'disc' ? cellInput('disc', i, '0 or 5%') : <CellButton label="Add discount" onClick={() => onEdit(i, 'disc')}>{l.discount ? <span className="text-success"><Money paise={-l.discount} symbol={false} /></span> : <span className="text-subtle">-</span>}</CellButton>}
                 </div>
                 <div className="px-2 text-right text-sm text-muted num min-[1700px]:text-base">{l.gstRate}%</div>
-                <div className="px-2 text-right text-md font-semibold num min-[1700px]:text-xl"><Money paise={l.amount} symbol={false} /></div>
+                <div className="relative px-2 text-right text-md font-semibold num min-[1700px]:text-xl">
+                  <button
+                    type="button" tabIndex={-1} title="Remove this item (Del)" aria-label={`Remove ${l.name}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => onRemove(i)}
+                    className={cn('absolute left-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-subtle opacity-0 transition-opacity hover:bg-danger-soft hover:text-danger group-hover:opacity-100', active && 'opacity-100')}
+                  ><Trash2 size={14} /></button>
+                  <Money paise={l.amount} symbol={false} />
+                </div>
               </div>
             );
           })
         )}
       </div>
+      {menu && (
+        <div
+          role="menu" onMouseDown={(e) => e.stopPropagation()}
+          className="fixed z-[80] w-48 rounded-lg border border-line bg-surface p-1 text-sm shadow-pop"
+          style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 170) }}
+        >
+          <MenuItem icon={<Pencil size={14} />} label="Edit quantity" onClick={() => { onEdit(menu.i, 'qty'); setMenu(null); }} />
+          <MenuItem icon={<Tag size={14} />} label="Edit rate" onClick={() => { onEdit(menu.i, 'rate'); setMenu(null); }} />
+          <MenuItem icon={<Percent size={14} />} label="Discount" onClick={() => { onEdit(menu.i, 'disc'); setMenu(null); }} />
+          <div className="my-1 border-t border-line" />
+          <MenuItem icon={<Trash2 size={14} />} label="Remove" danger onClick={() => { onRemove(menu.i); setMenu(null); }} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** A number the cashier can click to edit; the hover state shows it is not plain text. */
+function CellButton({ children, onClick, label, className }: { children: React.ReactNode; onClick: () => void; label: string; className?: string }) {
+  return (
+    <button
+      type="button" tabIndex={-1} title={label} aria-label={label}
+      onMouseDown={(e) => e.stopPropagation()} onClick={onClick}
+      className={cn('-my-1 inline-block min-w-[2.5rem] rounded-md px-1.5 py-1 text-right transition-colors hover:bg-surface hover:ring-1 hover:ring-primary/40', className)}
+    >{children}</button>
+  );
+}
+
+function StepBtn({ children, onClick, label, disabled }: { children: React.ReactNode; onClick: () => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      type="button" tabIndex={-1} title={label} aria-label={label} disabled={disabled} onMouseDown={(e) => e.stopPropagation()} onClick={onClick}
+      className="flex h-6 w-6 items-center justify-center rounded-md border border-line bg-surface text-muted transition-colors hover:border-primary hover:text-primary disabled:opacity-35"
+    >{children}</button>
+  );
+}
+
+function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button type="button" role="menuitem" onClick={onClick} className={cn('flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left hover:bg-surface-3', danger ? 'text-danger' : 'text-ink')}>
+      <span className="text-muted">{icon}</span>{label}
+    </button>
   );
 }

@@ -73,7 +73,17 @@ export interface ShiftSummary {
   /** Expenses paid from the drawer during the shift (voided ones excluded); already taken off expectedCash */
   expensesCash: Paise;
   expensesCount: number;
-  /** opening + cash sales + cash in - cash out - cash expenses */
+  /** Part of cashIn: customer credit collections taken in cash */
+  collectionsCash?: Paise;
+  /** Part of cashOut: supplier payments paid from the drawer */
+  supplierCash?: Paise;
+  /** Cash given back on returns and cancels */
+  cashRefunds?: Paise;
+  /** Expenses paid by UPI or bank: they never touch the drawer */
+  expensesOther?: Paise;
+  expensesOtherCount?: number;
+  expenseLines?: { category: string; count: number; cash: Paise; other: Paise }[];
+  /** opening + cash sales + cash in - cash out - cash refunds - cash expenses */
   expectedCash: Paise;
 }
 

@@ -88,7 +88,7 @@ function daysBetween(from: string, to: string): string[] {
 
 const UQC: Record<UnitCode, string> = { kg: 'KGS', g: 'GMS', l: 'LTR', ml: 'MLT', pc: 'PCS', tin: 'NOS', btl: 'BTL', pkt: 'PAC' };
 const UNIT_LABEL: Record<UnitCode, string> = { kg: 'kg', g: 'g', l: 'L', ml: 'ml', pc: 'pc', tin: 'tin', btl: 'btl', pkt: 'pkt' };
-const MODE_LABEL: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note' };
+const MODE_LABEL: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note', points: 'Points' };
 const hourLabel = (h: number) => `${pad(h)}:00`;
 
 interface Ctx { store: MockStore; p: ReportParams; items: Map<string, Item>; bills: Bill[] }

@@ -214,6 +214,30 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         [s.id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
+    let (collections_cash, supplier_cash): (i64, i64) = conn.query_row(
+        "SELECT COALESCE(SUM(CASE WHEN kind='in' AND reason='Credit collection' THEN amount ELSE 0 END),0),
+                COALESCE(SUM(CASE WHEN kind='out' AND reason='Supplier payment' THEN amount ELSE 0 END),0)
+         FROM cash_movements WHERE shift_id=?1",
+        [s.id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let mut expense_lines: Vec<ExpenseLine> = vec![];
+    let (mut expenses_other, mut expenses_other_count) = (0i64, 0i64);
+    if s.id > 0 {
+        let mut st = conn.prepare_cached(
+            "SELECT category_name, COUNT(*), COALESCE(SUM(CASE WHEN paid_from='cash' THEN amount ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN paid_from!='cash' THEN amount ELSE 0 END),0),
+                    COALESCE(SUM(CASE WHEN paid_from!='cash' THEN 1 ELSE 0 END),0)
+             FROM expenses WHERE shift_id=?1 AND status='active' GROUP BY category_name ORDER BY category_name",
+        )?;
+        let rows = st.query_map([s.id], |r| Ok((ExpenseLine { category: r.get(0)?, count: r.get(1)?, cash: r.get(2)?, other: r.get(3)? }, r.get::<_, i64>(4)?)))?;
+        for row in rows {
+            let (l, other_n) = row?;
+            expenses_other += l.other;
+            expenses_other_count += other_n;
+            expense_lines.push(l);
+        }
+    }
     let (expenses_cash, expenses_count) = if s.id > 0 { crate::expenses::cash_expenses_of_shift(conn, s.id)? } else { (0, 0) };
     Ok(ShiftSummary {
         at: iso(Local::now()),
@@ -237,6 +261,12 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         slabs,
         expenses_cash,
         expenses_count,
+        collections_cash,
+        supplier_cash,
+        cash_refunds: cash_refunds + cash_cancel_refunds,
+        expenses_other,
+        expenses_other_count,
+        expense_lines,
         expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds - expenses_cash,
         by_mode,
     })

@@ -60,7 +60,7 @@ export function Login() {
           <p className="mt-1 text-sm text-muted">Owner and manager accounts only.</p>
           <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
             <Select label="User" value={uid} onChange={(e) => setUid(e.target.value)} options={users.map((u) => ({ value: u.id, label: `${u.name} (${u.role})` }))} />
-            <Input label="Password" type="password" autoFocus disabled={locked} icon={<Lock size={14} />} value={pw} onChange={(e) => { setPw(e.target.value); setError(''); }} error={locked ? `Too many wrong passwords. Try again in ${countdownText(left)}.` : error} placeholder="Demo: 1111 (owner), 2222 (manager)" />
+            <Input label="Password" type="password" autoFocus disabled={locked} icon={<Lock size={14} />} value={pw} onChange={(e) => { setPw(e.target.value); setError(''); }} error={locked ? `Too many wrong passwords. Try again in ${countdownText(left)}.` : error} placeholder="PIN" />
             <Button type="submit" variant="primary" size="lg" block kbd="Enter" disabled={locked}>{locked ? `Locked ${countdownText(left)}` : 'Sign in'}</Button>
           </form>
           <div className="mt-6 flex items-center gap-1.5 text-xs text-subtle"><Kbd>Ctrl+K</Kbd> opens search once you are in.</div>

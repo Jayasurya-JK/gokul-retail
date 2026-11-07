@@ -109,3 +109,14 @@ export function computeTotals(lines: BillLine[], billDiscount: Paise = 0, roundT
     grand,
   };
 }
+
+/**
+ * One credit rule everywhere: a customer's credit limit is 0 (credit NOT allowed), above 0 (allowed up to that amount)
+ * or NO_CREDIT_LIMIT (-1, "no limit", only when the owner chooses it).
+ */
+export const NO_CREDIT_LIMIT = -1;
+export const creditAllowed = (limit: Paise) => limit !== 0;
+export const creditUnlimited = (limit: Paise) => limit < 0;
+/** What a customer can still take on credit; null when there is no limit, 0 when credit is not allowed. */
+export const creditLeft = (c: { creditLimit: Paise; outstanding: Paise }): Paise | null =>
+  c.creditLimit < 0 ? null : c.creditLimit === 0 ? 0 : Math.max(0, c.creditLimit - c.outstanding);

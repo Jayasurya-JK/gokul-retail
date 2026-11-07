@@ -74,11 +74,21 @@ export function ReportPreview({ data, settings }: { data: ReportData; settings: 
       ))}
       <Line k="Total GST" v={rs(s.cgst + s.sgst)} bold />
 
+      <Head>EXPENSES</Head>
+      {(s.expenseLines ?? []).length === 0 && <Line k="None" v={rs(0)} />}
+      {(s.expenseLines ?? []).map((e) => <Line key={e.category} k={`${e.category} x${e.count}`} v={rs(e.cash)} />)}
+      <Line k={`Paid from drawer (${s.expensesCount})`} v={rs(s.expensesCash)} />
+      <Line k={`Paid by UPI/bank (${s.expensesOtherCount ?? 0}), not in drawer`} v={rs(s.expensesOther ?? 0)} />
+
       <Head>CASH DRAWER</Head>
       <Line k="Opening cash" v={rs(s.openingCash)} />
       <Line k="+ Cash sales" v={rs(s.byMode.cash)} />
-      <Line k="+ Cash in" v={rs(s.cashIn)} />
-      <Line k="- Cash out" v={rs(s.cashOut)} />
+      <Line k="+ Cash added" v={rs(s.cashIn - (s.collectionsCash ?? 0))} />
+      <Line k="+ Customer collections" v={rs(s.collectionsCash ?? 0)} />
+      <Line k="- Cash taken out" v={rs(s.cashOut - (s.supplierCash ?? 0))} />
+      <Line k="- Supplier payments" v={rs(s.supplierCash ?? 0)} />
+      <Line k="- Cash refunds" v={rs(s.cashRefunds ?? 0)} />
+      <Line k={`- Expenses (cash) (${s.expensesCount})`} v={rs(s.expensesCash)} />
       <Rule dashed={false} />
       <Line k="Expected cash" v={rs(s.expectedCash)} bold />
       {data.counted !== undefined && <Line k="Counted cash" v={rs(data.counted)} bold />}

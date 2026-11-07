@@ -192,7 +192,7 @@ export function Customers() {
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                 <div className="grid grid-cols-4 gap-3">
                   <Tile label="Outstanding" tone={sel.outstanding > 0 ? 'warn' : undefined}><Money paise={sel.outstanding} /></Tile>
-                  <Tile label="Credit limit"><Money paise={sel.creditLimit} decimals={false} /></Tile>
+                  <Tile label="Credit">{sel.creditLimit < 0 ? 'No limit' : sel.creditLimit === 0 ? 'Not allowed' : <Money paise={sel.creditLimit} decimals={false} />}</Tile>
                   <Tile label="Total spend" hint={`${sel.visits} visits`}><Money paise={sel.totalSpend} decimals={false} /></Tile>
                   <Tile label="Average bill" hint={sel.lastBillAt ? `Last ${dateTimeOf(sel.lastBillAt)}` : 'No bills yet'}><Money paise={sel.avgBill} decimals={false} /></Tile>
                 </div>
@@ -281,7 +281,7 @@ function Tile({ label, hint, tone, children }: { label: string; hint?: string; t
 function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | CustomerRow; onClose: () => void; onSaved: (c: CustomerRow) => void }) {
   const open = target !== null;
   const existing = target && target !== 'new' ? target : null;
-  const [f, setF] = useState({ name: '', phone: '', address: '', area: '', gstin: '', limit: '', notes: '' });
+  const [f, setF] = useState({ name: '', phone: '', address: '', area: '', gstin: '', limit: '', unlimited: false, notes: '' });
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState('');
@@ -290,8 +290,8 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
     if (!open) return;
     setErr({}); setFail(''); setBusy(false);
     setF(existing
-      ? { name: existing.name, phone: existing.phone.replace(/\D/g, '').slice(-10), address: existing.address ?? '', area: existing.area, gstin: existing.gstin ?? '', limit: String(existing.creditLimit / 100), notes: existing.notes ?? '' }
-      : { name: '', phone: '', address: '', area: '', gstin: '', limit: '0', notes: '' });
+      ? { name: existing.name, phone: existing.phone.replace(/\D/g, '').slice(-10), address: existing.address ?? '', area: existing.area, gstin: existing.gstin ?? '', limit: existing.creditLimit > 0 ? String(existing.creditLimit / 100) : '0', unlimited: existing.creditLimit < 0, notes: existing.notes ?? '' }
+      : { name: '', phone: '', address: '', area: '', gstin: '', limit: '0', unlimited: false, notes: '' });
   }, [open, existing]);
 
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setF((p) => ({ ...p, [k]: e.target.value })); setErr((p) => ({ ...p, [k]: '' })); };
@@ -310,7 +310,7 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
       const gstin = f.gstin.trim().toUpperCase();
       const saved = await api.saveCustomer({
         id: existing?.id, name: f.name.trim(), phone: f.phone.trim(), area: f.area.trim() || 'Local', address: f.address.trim() || undefined,
-        gstin: gstin || undefined, type: gstin ? 'b2b' : 'retail', business: existing?.business, email: existing?.email, creditLimit: limit, notes: f.notes.trim(),
+        gstin: gstin || undefined, type: gstin ? 'b2b' : 'retail', business: existing?.business, email: existing?.email, creditLimit: f.unlimited ? -1 : limit, notes: f.notes.trim(),
       });
       onSaved(saved);
     } catch (x) { setFail(x instanceof Error ? x.message : 'Could not save the customer'); setBusy(false); }
@@ -325,7 +325,8 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
           <Input label="Address" value={f.address} onChange={set('address')} placeholder="Street, town" />
           <Input label="Area" value={f.area} onChange={set('area')} placeholder="e.g. Gandhipuram" />
           <Input label="GSTIN" value={f.gstin} onChange={(e) => set('gstin')({ target: { value: e.target.value.toUpperCase() } })} error={err.gstin} hint="Only for business customers who need a GST invoice" maxLength={15} />
-          <NumberInput label="Credit limit" prefix="₹" value={f.limit} onValueChange={(v) => set('limit')({ target: { value: v } })} error={err.limit} decimals={0} hint="0 means no credit sales" />
+          <NumberInput label="Credit limit" prefix="₹" value={f.unlimited ? '' : f.limit} disabled={f.unlimited} onValueChange={(v) => set('limit')({ target: { value: v } })} error={err.limit} decimals={0} hint="0 means credit is not allowed" />
+          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={f.unlimited} onChange={(e) => setF((p) => ({ ...p, unlimited: e.target.checked }))} /> No limit (only for customers you fully trust)</label>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-ink">Notes</span>
             <textarea value={f.notes} onChange={set('notes')} rows={3} placeholder="Delivery instructions, preferred oil, anything staff should know" className="w-full resize-none rounded-control border border-line-strong bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25" />

@@ -5,11 +5,13 @@ import { countdownText, lockedSeconds, type User } from '@gokul/data';
 import { Kbd, Logo, PosLayout, cn, useCountdown } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
+import { usePrinterStatus } from '../printing';
 
 const PIN_LEN = 4;
 
 export function Login() {
   const nav = useNavigate();
+  const printer = usePrinterStatus();
   const signIn = useSession((s) => s.signIn);
   const [users, setUsers] = useState<User[]>([]);
   const [sel, setSel] = useState(2);
@@ -124,7 +126,6 @@ export function Login() {
               <PadKey onClick={() => press('0')}>0</PadKey>
               <PadKey muted onClick={() => setPin((p) => p.slice(0, -1))}><Delete size={20} /></PadKey>
             </div>
-            <div className="mt-3 text-xs text-subtle">Demo PINs: Karthik 1234, Divya 4321</div>
           </div>
         </div>
       }
@@ -139,7 +140,7 @@ export function Login() {
           <div className="mt-2 text-md text-chrome-muted">Wood-pressed oils, ghee and groceries</div>
           <div className="mt-8 grid max-w-md grid-cols-2 gap-x-8 gap-y-3 text-sm">
             <Info k="Counter" v="Counter 1" />
-            <Info k="Printer" v="TVS RP 3160 Gold, ready" />
+            <Info k="Printer" v={printer.configured ? `${printer.name}${printer.ready ? ", ready" : ", not ready"}` : "Not set up yet"} />
             <Info k="Today" v={today} />
             <Info k="Data" v="Saved on this computer" />
           </div>

@@ -1,0 +1,12 @@
+[package]
+name = "gokul-print"
+version = "0.1.0"
+edition = "2021"
+description = "Gokul Retail printing: ESC/POS builder, Windows spooler (RAW) and Windows-driver (GDI) printing. No database, no Tauri."
+
+[dependencies]
+png = "0.18"
+qrcode = { version = "0.14", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Printing", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_Security"] }

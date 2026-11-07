@@ -1,0 +1,33 @@
+[image 160x128]
+[image 160x32]
+   GOKUL OILS
+12 Mill Road, Coimbatore 641001
+        Ph: 98420 12345
+     GSTIN: 33AAKFG4821M1ZQ
+--------------------------------
+           TEST PRINT
+    58 mm paper, 32 columns
+--------------------------------
+Item                      Amount
+Wood Pressed Groundnut Oil 1
+Litre Pet Bottle Premium
+  2 x 340.00 (5%)         680.00
+Sesame Oil
+  0.5 L x 520.00 (5%)     260.00
+  Discount                -10.00
+--------------------------------
+TOTAL  Rs 930.00
+--------------------------------
+ Printer is working. Tamil item
+ names print in English on this
+            printer.
+[qr GOKUL-TEST]
+
+[barcode TEST123456]
+
+           TEST123456
+
+
+
+
+[cut]

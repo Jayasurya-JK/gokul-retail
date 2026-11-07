@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Api } from '../api';
 import type {
   Bill, BillDraft, BillFilter, Category, Customer, DashboardStats, HeldBill, Item, ProductionBatch, Purchase, Settings, Shift,
-  StockMovement, Supplier, TopItem, User,
+  StockMovement, Supplier, TopItem, User, Paise,
 } from '../types';
 import type {
   BillDetail, BillSearch, CancelRequest, CreditNote, ReturnRequest,
@@ -18,7 +18,7 @@ import type {
 } from '../areas/purchasing';
 import type {
   BackupEntry, CollectionInput, CustStatement, CustomerInput, CustomerProfile, CustomerRow, ReceivableRow, RoleDef, SalesBill,
-  BackupStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
+  BackupStatus, CustomerWallet, PointsEntry, PrintKind, PrintOptions, PrinterStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
 } from '../areas/crm';
 import type { ReportId, ReportParams, ReportResult } from '../areas/reports';
 import type {
@@ -57,9 +57,9 @@ export const REAL_METHODS = [
   'searchPurchasable', 'listGrns', 'getGrn', 'createGrn', 'listSupplierSummaries', 'getSupplierLedger', 'saveSupplier', 'recordSupplierPayment',
   'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
   'listPackRuns', 'createPackRun',
-  'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'listReceivables', 'getStatement',
+  'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'setCustomerCredit', 'getCustomerWallet', 'listPointsHistory', 'listReceivables', 'getStatement',
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
-  'saveSettingsBundle', 'testPrint', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
+  'saveSettingsBundle', 'testPrint', 'printDocument', 'printerStatus', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
   'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref',
 ] as const;
@@ -172,6 +172,9 @@ export function createTauriApi(): Api {
     listCustomerRows: () => call<CustomerRow[]>('listCustomerRows'),
     getCustomerProfile: (id: string) => call<CustomerProfile | null>('getCustomerProfile', id),
     saveCustomer: (input: CustomerInput) => call<CustomerRow>('saveCustomer', input),
+    getCustomerWallet: (customerId: string) => call<CustomerWallet>('getCustomerWallet', customerId),
+    listPointsHistory: (customerId: string, limit?: number) => call<PointsEntry[]>('listPointsHistory', customerId, limit ?? 100),
+    setCustomerCredit: (customerId: string, limit: Paise, managerPin?: string) => call<CustomerRow>('setCustomerCredit', customerId, limit, managerPin ?? ''),
     listReceivables: () => call<ReceivableRow[]>('listReceivables'),
     getStatement: (customerId: string) => call<CustStatement | null>('getStatement', customerId),
     recordCollection: (input: CollectionInput) => call<CustStatement>('recordCollection', input),
@@ -183,7 +186,9 @@ export function createTauriApi(): Api {
     resetUserPin: (userId: string) => call<{ pin: string }>('resetUserPin', userId),
     getSettingsBundle: () => call<SettingsBundle>('getSettingsBundle'),
     saveSettingsBundle: (next: SettingsBundle) => call<SettingsBundle>('saveSettingsBundle', next),
-    testPrint: (kind: 'bill' | 'label', printer: string) => call<{ ok: boolean; message: string }>('testPrint', kind, printer),
+    testPrint: (kind: 'bill' | 'label', printer: string, opts?: { paper?: string; mode?: string; printLogo?: boolean }) => call<{ ok: boolean; message: string }>('testPrint', kind, printer, opts ?? {}),
+    printDocument: (kind: PrintKind, id: string, opts?: PrintOptions) => call<{ ok: boolean; message: string }>('printDocument', kind, id, opts ?? {}),
+    printerStatus: () => call<PrinterStatus>('printerStatus'),
     backupNow: () => call<BackupEntry>('backupNow'),
     backupStatus: () => call<BackupStatus>('backupStatus'),
     restoreBackup: (id: string) => call<{ ok: boolean; message: string }>('restoreBackup', id),

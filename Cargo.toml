@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/import", "apps/pos/src-tauri", "apps/office/src-tauri"]
+members = ["crates/print", "crates/core", "crates/import", "apps/pos/src-tauri", "apps/office/src-tauri"]
 
 [profile.release]
 opt-level = "s"

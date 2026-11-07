@@ -45,7 +45,8 @@ export interface Customer {
   lastVisit: string;
 }
 
-export type PayMode = 'cash' | 'upi' | 'card' | 'credit' | 'credit_note';
+/** credit_note = store credit (a credit note spent in parts); points = loyalty points redeemed */
+export type PayMode = 'cash' | 'upi' | 'card' | 'credit' | 'credit_note' | 'points';
 export interface Payment { mode: PayMode; amount: Paise; ref?: string }
 
 export interface BillLine {

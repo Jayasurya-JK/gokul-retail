@@ -54,7 +54,7 @@ function Statement({ row, st, onPay, onRemind }: { row: ReceivableRow; st: CustS
             <div className="text-2xl font-semibold num text-ink"><Money paise={st.balance} /></div>
           </div>
           <div className="text-right text-xs text-muted">
-            <div>Limit <b className="text-ink num"><Money paise={row.creditLimit} decimals={false} /></b></div>
+            <div>Limit <b className="text-ink num">{row.creditLimit < 0 ? 'No limit' : row.creditLimit === 0 ? 'Not allowed' : <Money paise={row.creditLimit} decimals={false} />}</b></div>
             {over && <Badge tone="danger" className="mt-1">Over limit</Badge>}
           </div>
         </div>
@@ -179,6 +179,8 @@ export function Collections() {
           setPay(false);
           setSt(next);
           await reload();
+          const printed = await api.printDocument('receipt', `latest:${sel!.customerId}`, {}).catch(() => ({ ok: false, message: 'the printer could not be reached' }));
+          if (!printed.ok) toast.show({ tone: 'warning', title: `Payment saved. Receipt not printed: ${printed.message}`, duration: 8000 });
           toast.show({ tone: 'success', title: `Received ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v.amount / 100)}`, detail: `${sel!.name} · ${v.mode === 'cash' ? 'Cash' : 'UPI'}. Receipt printed.` });
         }}
       />

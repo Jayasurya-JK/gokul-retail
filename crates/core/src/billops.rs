@@ -236,10 +236,11 @@ pub fn cancel_bill(conn: &mut Connection, req: &CancelRequest) -> Result<BillDet
     }
     // Exchange credit that paid for this bill becomes usable again.
     for p in bill.payments.iter().filter(|p| p.mode == "credit_note") {
-        if let Some(r) = &p.r#ref {
-            tx.execute("UPDATE credit_notes SET consumed=0 WHERE number=?1", [r])?;
+        if let Some(r) = p.r#ref.as_deref().filter(|r| *r != crate::loyalty::POINTS_REF) {
+            crate::loyalty::unspend_credit_note(&tx, r, p.amount)?;
         }
     }
+    crate::loyalty::reverse_cancel(&tx, bid, &bill.number, &req.by)?;
     audit(&tx, now, &req.by, "cancel", "bill", &bill.number, &format!("{} (approved by {})", req.reason, approver))?;
     let updated = get_bill(&tx, &req.bill_id)?.ok_or_else(|| db::internal("Bill vanished"))?;
     let detail = detail_of(&tx, updated)?;
@@ -336,6 +337,7 @@ pub fn create_return(conn: &mut Connection, req: &ReturnRequest) -> Result<Credi
     if bill.lines.iter().enumerate().all(|(i, l)| done[i] >= l.qty) {
         tx.execute("UPDATE bills SET status='returned' WHERE id=?1", [bid])?;
     }
+    crate::loyalty::reverse_return(&tx, bid, &bill.number, totals.grand, bill.totals.grand, &req.by)?;
     if has_credit && req.refund_mode == "credit_note" {
         if let Some(cid) = &bill.customer_id {
             tx.execute("UPDATE customers SET outstanding = MAX(0, outstanding - ?1) WHERE id=?2", params![totals.grand, cid])?;

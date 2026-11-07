@@ -315,7 +315,34 @@ pub struct ShiftSummary {
     pub expenses_cash: i64,
     #[serde(default)]
     pub expenses_count: i64,
+    /// Part of `cash_in`: customer credit collections taken in cash.
+    #[serde(default)]
+    pub collections_cash: i64,
+    /// Part of `cash_out`: supplier payments paid from the drawer.
+    #[serde(default)]
+    pub supplier_cash: i64,
+    /// Cash given back: cash refunds on returns plus cash paid back for bills cancelled from an earlier shift.
+    #[serde(default)]
+    pub cash_refunds: i64,
+    /// Expenses paid by UPI or bank (they never touch the drawer) and how many.
+    #[serde(default)]
+    pub expenses_other: i64,
+    #[serde(default)]
+    pub expenses_other_count: i64,
+    /// Expenses by category: how many, paid from the drawer, paid another way.
+    #[serde(default)]
+    pub expense_lines: Vec<ExpenseLine>,
+    /// Opening + cash sales + cash in - cash out - cash refunds - cash expenses.
     pub expected_cash: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpenseLine {
+    pub category: String,
+    pub count: i64,
+    pub cash: i64,
+    pub other: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

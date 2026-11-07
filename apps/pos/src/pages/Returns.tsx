@@ -5,6 +5,7 @@ import {
   RETURN_REASONS, billHasCredit, formatQty, formatRupees, isDecimalUnit, parseQty, quoteReturn,
   type Bill, type BillDetail, type CreditNote, type RefundMode,
 } from '@gokul/data';
+import { printWithToast } from '../printing';
 import { Badge, Button, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, useSession } from '../store';
@@ -494,7 +495,7 @@ export function Returns() {
           />
           <CreditNoteDialog
             open={dialog === 'done'} note={made} settings={settings} onClose={finish}
-            onPrint={() => toast.show({ tone: 'success', title: `Printing ${made?.number}`, detail: `Sent to ${settings.printer}.` })}
+            onPrint={() => { if (made) void printWithToast('creditNote', made.id, {}, toast, `Printed ${made.number}`); }}
             primary={{ label: made?.refundMode === 'exchange' ? 'New bill with credit' : 'Done', onClick: finish }}
           />
         </>

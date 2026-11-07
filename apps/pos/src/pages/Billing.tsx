@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ScanBarcode } from 'lucide-react';
 import {
   computeTotals, formatQty, formatRupees, lineGross, parsePaise, parseQty,
-  type BillLine, type CreditNote, type Customer, type HeldBill, type Item, type Payment,
+  type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
 import { ManagerPinDialog, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
@@ -14,6 +14,7 @@ import { BillGrid, type EditField, type EditState } from '../components/BillGrid
 import { SummaryPanel } from '../components/SummaryPanel';
 import { ConfirmDialog, CustomerDialog, HeldDialog, ItemSearchDialog, PromptDialog } from '../components/Dialogs';
 import { PaymentDialog } from '../components/PaymentDialog';
+import { printBillAfterSave, printWithToast } from '../printing';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
 
 type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx';
@@ -35,7 +36,9 @@ export function Billing() {
   const [held, setHeld] = useState<HeldBill[]>([]);
   const [saving, setSaving] = useState(false);
   const [lastBill, setLastBill] = useState<{ number: string; total: number } | null>(null);
-  const [lastItem, setLastItem] = useState<Item | null>(null);
+  const lastBillId = useRef<string | null>(null);
+  const [wallet, setWallet] = useState<CustomerWallet | null>(null);
+  const customerId = customer?.id;
   const [billNo, setBillNo] = useState('');
   const [exchange, setExchange] = useState<CreditNote | null>(null);
   const [sugg, setSugg] = useState<Item[]>([]);
@@ -60,19 +63,14 @@ export function Billing() {
 
   useEffect(() => { api.listItems().then(setItems); }, []);
   useEffect(() => { api.getPendingExchange().then(setExchange); }, []);
+  // store credit and loyalty points of the attached customer (refreshed after every bill)
+  useEffect(() => {
+    let live = true;
+    if (!customerId) { setWallet(null); return; }
+    api.getCustomerWallet(customerId).then((w) => live && setWallet(w)).catch(() => live && setWallet(null));
+    return () => { live = false; };
+  }, [customerId, lastBill]);
   useEffect(() => { api.peekNextBillNumber().then(setBillNo); }, [lastBill]);
-
-  /* Right-panel extras: last scanned item (with stock left after this bill) and savings against MRP. */
-  const lastScanned = useMemo(() => {
-    if (!lastItem) return null;
-    const fresh = byId.get(lastItem.id) ?? lastItem;
-    const onBill = lines.filter((l) => l.itemId === fresh.id).reduce((s, l) => s + l.qty, 0);
-    return { item: fresh, onBill, left: fresh.stock - onBill };
-  }, [lastItem, byId, lines]);
-  const savings = useMemo(() => lines.reduce((s, l) => {
-    const mrp = byId.get(l.itemId)?.mrp ?? 0;
-    return s + Math.max(0, lineGross(mrp, l.qty) - lineGross(l.rate, l.qty) + l.discount);
-  }, 0) + billDiscount, [lines, byId, billDiscount]);
 
   /* Focus: the scan box owns the keyboard unless a dialog or cell editor is open. */
   const focusScan = useCallback(() => requestAnimationFrame(() => scanRef.current?.focus()), []);
@@ -161,7 +159,6 @@ export function Billing() {
   /* ---------- adding items ---------- */
   const addItem = useCallback((item: Item, qty?: number) => {
     const idx = B.addItem(item, qty ?? 1000);
-    setLastItem(item);
     if (item.stock <= 0) toast.show({ tone: 'warning', title: `${item.name} shows no stock`, detail: 'Billing allowed. Check the shelf.' });
     if (item.loose && qty === undefined) startEdit('qty', idx, '');
   }, [B, startEdit, toast]);
@@ -233,7 +230,10 @@ export function Billing() {
       const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin });
       if (exchange) { await api.clearPendingExchange(); setExchange(null); }
       B.clear();
+      lastBillId.current = bill.id;
       setLastBill({ number: bill.number, total: bill.totals.grand });
+      // The bill is committed. Printing starts now but never makes the counter wait.
+      printBillAfterSave(bill.id, { change }, toast);
       setPinAsk(null);
       setDialog(null);
       toast.show({
@@ -286,6 +286,14 @@ export function Billing() {
     // printable key goes to the scan box so type-ahead and scanning keep working.
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && (document.activeElement === document.body || !document.activeElement) && scanRef.current) scanRef.current.focus();
     if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); nav('/day-close'); return; }
+    if (e.ctrlKey && e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      const id = lastBillId.current;
+      if (!id) { toast.show({ tone: 'info', title: 'No bill to reprint yet', detail: 'Open Sales (F8) to reprint an older bill.' }); return; }
+      void api.recordReprint(id, user?.name ?? '').catch(() => undefined);
+      void printWithToast('bill', id, { duplicate: true }, toast, 'Duplicate copy printed');
+      return;
+    }
     const prevent = () => e.preventDefault();
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
       prevent();
@@ -344,7 +352,7 @@ export function Billing() {
     <PosLayout
       topBar={<TopBar onHeld={() => void openHeld()} onLock={lock} onCloseDay={() => nav('/day-close')} />}
       keys={keys}
-      side={<SummaryPanel totals={totals} customer={customer} onCustomer={() => setDialog('customer')} onPay={openPay} lastBill={lastBill} exchange={exchange} due={due} billNo={billNo} last={lastScanned} savings={savings} />}
+      side={<SummaryPanel totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay} onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} due={due} billNo={billNo} />}
     >
       {/* Scan bar */}
       <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
@@ -384,12 +392,15 @@ export function Billing() {
         onCommit={commitEdit}
         onCancel={() => { setEditNow(null); scanRef.current?.focus(); }}
         onReject={(m) => toast.show({ tone: 'error', title: 'Numbers only here', detail: m })}
+        onEdit={(i, f) => startEdit(f, i)}
+        onStep={(i, d) => { const l = useBilling.getState().lines[i]; if (l && (d > 0 || l.qty > 1000)) { B.setQty(i, l.qty + d * 1000); scanRef.current?.focus(); } }}
+        onRemove={(i) => { B.select(i); removeSelected(); scanRef.current?.focus(); }}
       />
 
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
-      <PaymentDialog open={dialog === 'pay'} total={due} customer={customer} busy={saving} onClose={() => setDialog(null)} onComplete={(p, c) => void complete(p, c)} />
+      <PaymentDialog open={dialog === 'pay'} total={due} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)} onComplete={(p, c) => void complete(p, c)} onCustomerUpdate={(c) => B.setCustomer(c)} />
       <ManagerPinDialog
         open={voidAsk !== null} title="Manager approval to remove a line" message={voidAsk?.message ?? ''} confirmLabel="Approve and remove"
         onClose={() => setVoidAsk(null)}
@@ -424,6 +435,13 @@ export function Billing() {
       <PromptDialog
         open={dialog === 'billDisc'} title="Discount on whole bill" label="Discount amount or percent" hint="Type 50 for 50 rupees off, or 5% for five percent off."
         initial={billDiscount ? (billDiscount / 100).toFixed(2) : ''}
+        preview={(typed) => {
+          const net = lines.reduce((x, l) => x + l.amount, 0);
+          const t = typed.trim();
+          const d = t === '' ? 0 : t.endsWith('%') ? Math.round((net * Number(t.slice(0, -1) || 0)) / 100) : parsePaise(t) ?? 0;
+          const after = computeTotals(lines, Math.min(d, net), settings?.roundToRupee ?? true);
+          return <span className="flex items-center justify-between"><span>Discount <b className="num">{formatRupees(Math.min(d, net))}</b></span><span>New total <b className="num text-md">{formatRupees(after.grand)}</b></span></span>;
+        }}
         onClose={() => setDialog(null)}
         onSubmit={(v) => {
           const net = lines.reduce((s, l) => s + l.amount, 0);

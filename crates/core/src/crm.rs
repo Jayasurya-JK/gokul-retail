@@ -217,13 +217,29 @@ pub struct CustomerInput {
     pub notes: Option<String>,
 }
 
+/// The one credit rule: 0 = credit not allowed, positive = credit up to that amount (paise), -1 = no limit (explicit).
+pub fn set_customer_credit(conn: &mut Connection, customer_id: &str, limit: i64, approver: &str) -> Result<Value> {
+    if limit < -1 {
+        return invalid("Credit limit cannot be negative.");
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let old: Option<i64> = tx.query_row("SELECT credit_limit FROM customers WHERE id=?1", [customer_id], |r| r.get(0)).optional()?;
+    let Some(old) = old else { return invalid("Customer not found.") };
+    tx.execute("UPDATE customers SET credit_limit=?1 WHERE id=?2", params![limit, customer_id])?;
+    let by = if approver.is_empty() { String::new() } else { format!(" approved by {approver}") };
+    audit(&tx, Local::now(), OFFICE, "credit_limit", "customer", customer_id, &format!("{old} -> {limit}{by}"))?;
+    tx.commit()?;
+    let row = one_customer(conn, customer_id)?.ok_or_else(|| db::internal("Customer vanished"))?;
+    Ok(row)
+}
+
 pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> {
     let name = i.name.trim();
     if name.is_empty() {
         return invalid("Enter the customer name.");
     }
-    if i.credit_limit < 0 {
-        return invalid("Credit limit cannot be negative.");
+    if i.credit_limit < -1 {
+        return invalid("Credit limit cannot be negative. Use 0 for no credit, or choose No limit.");
     }
     let b2b = i.kind == "b2b";
     let gstin = if b2b { i.gstin.clone().unwrap_or_default().trim().to_uppercase() } else { String::new() };
@@ -694,11 +710,18 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
         json!({ "header": "", "footer": g("receiptFooter"), "showSavings": true, "showHsn": true, "showGstSummary": true, "showQr": false,
                 "language": "en", "copies": 1, "paper": "80mm" })
     });
-    let printers = blob(conn, "bundle.printers")?.unwrap_or_else(|| {
+    let mut printers = blob(conn, "bundle.printers")?.unwrap_or_else(|| {
         let p = g("printer");
-        json!({ "billPrinter": p, "labelPrinter": "", "autoPrint": true, "openDrawerOnCash": true, "cutter": true,
-                "detected": if p.is_empty() { json!([]) } else { json!([{ "name": p, "kind": "thermal", "ready": true }]) } })
+        json!({ "billPrinter": p, "labelPrinter": "", "autoPrint": true, "openDrawerOnCash": true, "cutter": true, "mode": "escpos", "printLogo": true })
     });
+    // The real printers installed on this computer (Windows spooler), never a made-up list.
+    printers["detected"] = json!(crate::printing::detected_printers());
+    if printers["mode"].is_null() {
+        printers["mode"] = json!("escpos");
+    }
+    if printers["printLogo"].is_null() {
+        printers["printLogo"] = json!(true);
+    }
     let mut backup = blob(conn, "bundle.backup")?.unwrap_or_else(|| {
         json!({ "schedule": "daily", "time": "02:00", "location": "", "keep": 30, "copyToUsb": false })
     });
@@ -711,8 +734,9 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
                            "voidLineNeedsPin": get_setting(conn, "security.voidLineNeedsPin").ok().flatten().as_deref() == Some("1") });
     let expenses = json!({ "limit": crate::expenses::expense_limit(conn) });
     let mill = blob(conn, "bundle.mill")?.unwrap_or_else(crate::mill::default_mill_bundle);
+    let loyalty = crate::loyalty::rules_json(conn);
     Ok(json!({ "shop": shop, "tax": tax, "billFormat": bill_format, "printers": printers, "backup": backup,
-               "security": security, "expenses": expenses, "mill": mill }))
+               "security": security, "expenses": expenses, "mill": mill, "loyalty": loyalty }))
 }
 
 pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value> {
@@ -781,7 +805,14 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     set_setting(&tx, "bundle.shop", &shop_v.to_string())?;
     set_setting(&tx, "bundle.tax", &next["tax"].to_string())?;
     set_setting(&tx, "bundle.billFormat", &next["billFormat"].to_string())?;
-    set_setting(&tx, "bundle.printers", &next["printers"].to_string())?;
+    if next["loyalty"].is_object() {
+        crate::loyalty::save_rules(&tx, &next["loyalty"])?;
+    }
+    let mut printers_v = next["printers"].clone();
+    if let Some(o) = printers_v.as_object_mut() {
+        o.remove("detected"); // read-only: always the live list from Windows
+    }
+    set_setting(&tx, "bundle.printers", &printers_v.to_string())?;
     let mut backup = next["backup"].clone();
     if let Some(o) = backup.as_object_mut() {
         o.remove("history");
@@ -802,11 +833,6 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     get_settings_bundle(conn)
 }
 
-pub fn test_print(kind: &str, printer: &str) -> Value {
-    let what = if kind == "bill" { "test bill" } else { "test label" };
-    let p = if printer.is_empty() { "the printer".to_string() } else { printer.to_string() };
-    json!({ "ok": false, "message": format!("Printing is not connected yet, so the {what} was not sent to {p}. Receipt and label printing arrives in the printing step.") })
-}
 
 fn backup_history(conn: &Connection) -> Result<Vec<Value>> {
     let mut st = conn.prepare("SELECT id,at,size_b,kind,ok FROM backup_log ORDER BY id DESC LIMIT 60")?;

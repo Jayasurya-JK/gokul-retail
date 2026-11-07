@@ -1,21 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, CreditCard, HandCoins, QrCode, X } from 'lucide-react';
-import { formatPaise, formatRupees, parsePaise, type Customer, type PayMode, type Payment } from '@gokul/data';
-import { Button, Dialog, Kbd, Money, cn } from '@gokul/ui';
+import { Banknote, CreditCard, HandCoins, QrCode, Receipt, Star, X } from 'lucide-react';
+import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
+import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
+import { api } from '../store';
 
 const MODES: { mode: PayMode; label: string; key: string; icon: React.ReactNode }[] = [
   { mode: 'cash', label: 'Cash', key: 'F1', icon: <Banknote size={20} /> },
   { mode: 'upi', label: 'UPI', key: 'F2', icon: <QrCode size={20} /> },
   { mode: 'card', label: 'Card', key: 'F3', icon: <CreditCard size={20} /> },
   { mode: 'credit', label: 'Credit', key: 'F4', icon: <HandCoins size={20} /> },
+  { mode: 'credit_note', label: 'Store credit', key: 'F5', icon: <Receipt size={20} /> },
+  { mode: 'points', label: 'Points', key: 'F6', icon: <Star size={20} /> },
 ];
-const modeLabel = (m: PayMode) => MODES.find((x) => x.mode === m)!.label;
+const modeLabel = (m: PayMode) => MODES.find((x) => x.mode === m)?.label ?? m;
 
 const toField = (paise: number) => (paise % 100 === 0 ? String(paise / 100) : (paise / 100).toFixed(2));
 const ceilTo = (paise: number, step: number) => Math.ceil(paise / step) * step;
 
-export function PaymentDialog({ open, total, customer, onClose, onComplete, busy }: {
-  open: boolean; total: number; customer: Customer | null; onClose: () => void; busy: boolean;
+export function PaymentDialog({ open, total, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
+  open: boolean; total: number; customer: Customer | null; wallet?: CustomerWallet | null; onClose: () => void; busy: boolean;
+  onCustomerUpdate?: (c: Customer) => void;
   onComplete: (payments: Payment[], change: number) => void;
 }) {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -41,7 +45,27 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
     return [...set].filter((x) => x >= remaining && x > 0).slice(0, 5);
   }, [remaining]);
 
-  const choose = (m: PayMode) => { setMode(m); setField(toField(remaining)); setError(''); selectField(); };
+  /* Store credit (credit notes spent in parts) and loyalty points: offered only when the customer has some. */
+  const spentCredit = payments.filter((p) => p.mode === 'credit_note').reduce((s, p) => s + p.amount, 0);
+  const creditAvail = Math.max(0, (wallet?.storeCredit ?? 0) - spentCredit);
+  const rules = wallet?.rules;
+  const spentPoints = payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
+  const pv = rules?.pointValue ?? 100;
+  const pointsCap = rules && wallet && rules.enabled
+    ? Math.min(wallet.points * pv - spentPoints, Math.floor((total * rules.maxPct) / 100) - spentPoints, remaining)
+    : 0;
+  const pointsAvail = Math.max(0, Math.floor(pointsCap / pv) * pv);
+
+  const visibleModes = MODES.filter((m) => (m.mode === 'credit_note' ? creditAvail > 0 : m.mode === 'points' ? !!customer && !!wallet && wallet.points > 0 : true));
+  const availFor = (m: PayMode) => (m === 'credit_note' ? Math.min(remaining, creditAvail) : m === 'points' ? Math.min(remaining, pointsAvail) : remaining);
+  const choose = (m: PayMode) => { setMode(m); setField(toField(availFor(m))); setError(''); selectField(); };
+
+  const [allowOpen, setAllowOpen] = useState(false);
+  const [limitText, setLimitText] = useState('');
+  const [unlimited, setUnlimited] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const noCredit = mode === 'credit' && !!customer && customer.creditLimit === 0;
+  const newLimit = unlimited ? NO_CREDIT_LIMIT : parsePaise(limitText) ?? 0;
 
   const apply = () => {
     if (busy) return;
@@ -52,13 +76,34 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
       const limit = customer.creditLimit;
       const use = Math.min(amt, remaining);
       if (limit > 0 && customer.outstanding + use > limit) {
-        setError(`Over credit limit. ${customer.name} can take ${formatRupees(Math.max(0, limit - customer.outstanding), { decimals: false })} more.`);
+        setError(`Over credit limit. ${customer.name} can take ${formatRupees(creditLeft(customer) ?? 0, { decimals: false })} more.`);
         return;
       }
-      if (limit === 0) { setError(`${customer.name} has no credit account.`); return; }
+      // Credit not allowed: Enter continues as a one-time manager override (the backend asks for the PIN and audits it).
     }
-    const use = Math.min(amt, remaining);
-    const next: Payment[] = [...payments, { mode, amount: use }];
+    let use = Math.min(amt, remaining);
+    let added: Payment[] = [{ mode, amount: use }];
+    if (mode === 'credit_note') {
+      use = Math.min(use, creditAvail);
+      if (use <= 0) { setError('This customer has no store credit left.'); return; }
+      // oldest credit note first, each note only for what is left on it
+      const taken: Record<string, number> = {};
+      payments.filter((p) => p.mode === 'credit_note' && p.ref).forEach((p) => { taken[p.ref!] = (taken[p.ref!] ?? 0) + p.amount; });
+      let need = use;
+      added = [];
+      for (const n of wallet?.creditNotes ?? []) {
+        const room = n.balance - (taken[n.number] ?? 0);
+        const part = Math.min(room, need);
+        if (part > 0) { added.push({ mode, amount: part, ref: n.number }); need -= part; }
+        if (need <= 0) break;
+      }
+    } else if (mode === 'points') {
+      const pts = Math.floor(Math.min(use, pointsAvail) / pv);
+      if (!rules || pts < rules.minRedeem) { setError(`At least ${rules?.minRedeem ?? 100} points are needed to redeem. This customer can use ${Math.floor(pointsAvail / pv)} now.`); return; }
+      use = pts * pv;
+      added = [{ mode, amount: use }];
+    }
+    const next: Payment[] = [...payments, ...added];
     const left = remaining - use;
     if (left <= 0) { onComplete(next, mode === 'cash' ? Math.max(0, amt - remaining) : 0); return; }
     setPayments(next);
@@ -68,12 +113,13 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const idx = ['F1', 'F2', 'F3', 'F4'].indexOf(e.key);
-    if (idx >= 0) { e.preventDefault(); e.stopPropagation(); choose(MODES[idx].mode); }
+    const hit = MODES.find((m) => m.key === e.key && visibleModes.some((v) => v.mode === m.mode));
+    if (hit) { e.preventDefault(); e.stopPropagation(); choose(hit.mode); }
     else if (e.key === 'z' && e.ctrlKey && payments.length) { e.preventDefault(); const last = payments[payments.length - 1]; setPayments(payments.slice(0, -1)); setMode(last.mode); setField(toField(remaining + last.amount)); }
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Payment" size="lg" hideHeader bodyClassName="p-0">
       <div onKeyDown={onKeyDown}>
         {/* Due band */}
@@ -90,8 +136,8 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
 
         <div className="grid grid-cols-[1fr_260px]">
           <div className="border-r border-line p-5">
-            <div className="grid grid-cols-4 gap-2">
-              {MODES.map((m) => (
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleModes.length}, minmax(0, 1fr))` }}>
+              {visibleModes.map((m) => (
                 <button
                   key={m.mode} tabIndex={-1} onClick={() => choose(m.mode)}
                   className={cn(
@@ -106,7 +152,7 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
             </div>
 
             <label className="mt-5 block text-xs font-semibold uppercase tracking-wider text-muted">
-              {mode === 'cash' ? 'Cash received' : mode === 'credit' ? 'Put on credit' : `${modeLabel(mode)} amount`}
+              {mode === 'cash' ? 'Cash received' : mode === 'credit' ? 'Put on credit' : mode === 'points' ? 'Points to use (value in rupees)' : `${modeLabel(mode)} amount`}
             </label>
             <div className="relative mt-1.5">
               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl text-subtle">{'₹'}</span>
@@ -146,9 +192,19 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
                 <div className="rounded-lg bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
                   Short by {formatRupees(remaining - amount)}. Press Enter to take this part and pay the rest another way.
                 </div>
+              ) : noCredit && customer ? (
+                <div className="space-y-2 rounded-lg bg-warning-soft px-3 py-2.5">
+                  <div className="text-sm font-semibold text-warning">Credit is not allowed for {customer.name}.</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={() => { setLimitText(''); setUnlimited(false); setAllowOpen(true); }}>Allow credit for this customer</Button>
+                    <Button size="sm" kbd="Enter" onClick={apply}>One-time manager override for this bill</Button>
+                  </div>
+                  <div className="text-xs text-muted">Both need a manager or owner PIN and are logged.</div>
+                </div>
               ) : mode === 'credit' && customer ? (
                 <div className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">
-                  {customer.name} owes {formatRupees(customer.outstanding, { decimals: false })}. Limit {formatRupees(customer.creditLimit, { decimals: false })}.
+                  {customer.name} owes {formatRupees(customer.outstanding, { decimals: false })}.{' '}
+                  {customer.creditLimit < 0 ? 'No credit limit.' : <>Can take {formatRupees(creditLeft(customer) ?? 0, { decimals: false })} more (limit {formatRupees(customer.creditLimit, { decimals: false })}).</>}
                 </div>
               ) : null}
             </div>
@@ -178,7 +234,7 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
 
         <div className="flex items-center justify-between border-t border-line bg-surface px-5 py-3">
           <div className="flex items-center gap-3 text-xs text-muted">
-            <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>F4</Kbd> method</span>
+            <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>F{visibleModes.length}</Kbd> method</span>
             <span className="flex items-center gap-1"><Kbd>Ctrl+Z</Kbd> undo split</span>
           </div>
           <div className="flex gap-2">
@@ -190,5 +246,29 @@ export function PaymentDialog({ open, total, customer, onClose, onComplete, busy
         </div>
       </div>
     </Dialog>
+    <Dialog
+      open={open && allowOpen} onOpenChange={(o) => !o && setAllowOpen(false)} size="sm" title="Allow credit"
+      description={customer ? `Set how much ${customer.name} can owe.` : undefined}
+      footer={<><Button onClick={() => setAllowOpen(false)} kbd="Esc">Cancel</Button><Button variant="primary" kbd="Enter" disabled={!unlimited && newLimit <= 0} onClick={() => setPinOpen(true)}>Next: manager PIN</Button></>}
+    >
+      <div className="space-y-3" onKeyDown={(e) => { if (e.key === 'Enter' && (unlimited || newLimit > 0)) { e.preventDefault(); setPinOpen(true); } }}>
+        <Field label="Credit limit (Rs)"><Input data-autofocus inputMode="decimal" value={unlimited ? '' : limitText} disabled={unlimited} placeholder="e.g. 5000" onChange={(e) => setLimitText(e.target.value.replace(/[^0-9.]/g, ''))} /></Field>
+        <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} /> No limit (only for customers you fully trust)</label>
+      </div>
+    </Dialog>
+    <ManagerPinDialog
+      open={open && allowOpen && pinOpen} title="Allow credit" confirmLabel="Allow credit" onClose={() => setPinOpen(false)}
+      message={customer ? `Allow credit for ${customer.name}: ${unlimited ? 'no limit' : 'up to ' + formatRupees(newLimit, { decimals: false })}.` : ''}
+      onSubmit={async (pin) => {
+        if (!customer) return 'No customer';
+        try {
+          await api.setCustomerCredit(customer.id, newLimit, pin);
+          onCustomerUpdate?.({ ...customer, creditLimit: newLimit });
+          setPinOpen(false); setAllowOpen(false); setError('');
+          return null;
+        } catch (e) { return e instanceof Error ? e.message : 'Could not change the credit limit'; }
+      }}
+    />
+    </>
   );
 }

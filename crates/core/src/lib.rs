@@ -12,9 +12,11 @@ pub mod db;
 pub mod dispatch;
 pub mod error;
 pub mod expenses;
+pub mod loyalty;
 pub mod mill;
 pub mod money;
 pub mod native;
+pub mod printing;
 pub mod purchasing;
 pub mod reports;
 pub mod seed_demo; // DEMO DATA: remove this line (and the file) when the demo shop is no longer wanted

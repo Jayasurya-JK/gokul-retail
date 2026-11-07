@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft, PackageSearch, Search, UserPlus } from 'lucide-react';
-import { formatQty, formatRupees, type Customer, type HeldBill, type Item } from '@gokul/data';
+import { creditLeft, formatQty, formatRupees, type Customer, type HeldBill, type Item } from '@gokul/data';
 import { Badge, Button, Dialog, Kbd, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 import { plural } from '../plural';
@@ -211,7 +211,7 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
                 );
               }
               const c = r.c;
-              const left = c.creditLimit ? c.creditLimit - c.outstanding : null;
+              const left = c.creditLimit > 0 ? creditLeft(c) : null;
               return (
                 <li key={c.id} className={cls} {...common}>
                   {bar}
@@ -339,8 +339,10 @@ export function ConfirmDialog({ open, title, message, confirmLabel, onConfirm, o
   );
 }
 
-export function PromptDialog({ open, title, label, hint, initial, onSubmit, onClose }: {
+export function PromptDialog({ open, title, label, hint, initial, onSubmit, onClose, preview }: {
   open: boolean; title: string; label: string; hint?: string; initial?: string; onSubmit: (v: string) => void; onClose: () => void;
+  /** Live line under the box, e.g. the new bill total, from what has been typed so far */
+  preview?: (typed: string) => React.ReactNode;
 }) {
   const [v, setV] = useState('');
   useEffect(() => { if (open) setV(initial ?? ''); }, [open, initial]);
@@ -356,6 +358,7 @@ export function PromptDialog({ open, title, label, hint, initial, onSubmit, onCl
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSubmit(v); } }}
         className="num mt-1.5 h-12 w-full rounded-control border border-line-strong bg-surface px-3 text-right text-xl font-semibold text-ink focus:border-primary focus:ring-2 focus:ring-primary/25"
       />
+      {preview && <div className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink">{preview(v)}</div>}
       {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
     </Dialog>
   );

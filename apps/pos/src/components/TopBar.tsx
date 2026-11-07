@@ -6,6 +6,7 @@ import {
 import { Kbd, Logo, Tooltip, cn } from '@gokul/ui';
 import { useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
+import { usePrinterStatus } from '../printing';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -19,6 +20,7 @@ const MENU = [
 ] as const;
 
 export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () => void; onCloseDay?: () => void; minimal?: boolean }) {
+  const printer = usePrinterStatus();
   const { user, shift, settings, heldCount, signOut } = useSession();
   const nav = useNavigate();
   const { pathname } = useLocation();
@@ -131,8 +133,8 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       </button>
 
       <div className="mx-1 flex items-center gap-0.5">
-        <Tooltip label="Printer ready">
-          <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><Printer size={15} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-chrome" /></span>
+        <Tooltip label={printer.ready ? `Printer ready: ${printer.name}` : printer.message}>
+          <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><Printer size={15} /><span className={cn('absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-chrome', printer.ready ? 'bg-success' : printer.configured ? 'bg-danger' : 'bg-warning')} /></span>
         </Tooltip>
         <Tooltip label="All bills saved on this computer">
           <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><ShieldCheck size={15} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-chrome" /></span>

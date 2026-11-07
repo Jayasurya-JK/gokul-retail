@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom';
 import { Ban, ChevronLeft, ChevronRight, CornerUpLeft, Lock, Printer, Receipt, Search } from 'lucide-react';
 import { type Bill, type BillDetail, type CreditNote, type PayMode } from '@gokul/data';
+import { printWithToast } from '../printing';
 import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -84,10 +85,10 @@ export function Sales() {
 
   const reprint = useCallback(async () => {
     if (!detail || detail.bill.status === 'cancelled') { toast.show({ tone: 'info', title: 'Cancelled bills cannot be printed' }); return; }
-    const n = await api.recordReprint(detail.bill.id, user?.name ?? '');
+    await api.recordReprint(detail.bill.id, user?.name ?? '');
     setVersion((v) => v + 1);
-    toast.show({ tone: 'success', title: `Printing ${detail.bill.number}`, detail: `Duplicate copy ${n} sent to ${settings?.printer ?? 'the printer'}.` });
-  }, [detail, settings, toast, user]);
+    await printWithToast('bill', detail.bill.id, { duplicate: true }, toast, `Printed ${detail.bill.number}`);
+  }, [detail, toast, user]);
 
   const startReturn = useCallback(() => {
     if (!detail) return;
@@ -270,7 +271,7 @@ export function Sales() {
       {settings && (
         <CreditNoteDialog
           open={dialog === 'note'} note={note} settings={settings} onClose={closeDialog}
-          onPrint={() => toast.show({ tone: 'success', title: `Printing ${note?.number}` })}
+          onPrint={() => { if (note) void printWithToast('creditNote', note.id, { duplicate: true }, toast, `Printed ${note.number}`); }}
         />
       )}
     </PosLayout>
@@ -278,7 +279,7 @@ export function Sales() {
 }
 
 const MODE_ORDER: PayMode[] = ['cash', 'upi', 'card', 'credit', 'credit_note'];
-const MODE_BAR: Record<PayMode, string> = { cash: 'bg-primary', upi: 'bg-info', card: 'bg-accent', credit: 'bg-warning', credit_note: 'bg-subtle' };
+const MODE_BAR: Record<PayMode, string> = { cash: 'bg-primary', upi: 'bg-info', card: 'bg-accent', credit: 'bg-warning', credit_note: 'bg-subtle', points: 'bg-subtle' };
 
 interface Totals { live: number; cancelled: number; total: number; avg: number; returns: number; returned: number; byMode: Partial<Record<PayMode, number>> }
 

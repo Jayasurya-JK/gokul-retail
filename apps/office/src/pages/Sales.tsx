@@ -45,7 +45,7 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
             <div className="text-xs text-muted">Bill total</div>
             <div className="text-2xl font-semibold num"><Money paise={t.grand} /></div>
           </div>
-          <Button size="sm" icon={<Printer size={14} />} onClick={() => toast.show({ tone: 'info', title: 'Reprint sent', detail: `${bill.number} printed as DUPLICATE COPY.` })}>Reprint</Button>
+          <Button size="sm" icon={<Printer size={14} />} onClick={() => void api.printDocument('bill', bill.id, { duplicate: true }).then((r) => toast.show(r.ok ? { tone: 'success', title: 'Reprint sent', detail: `${bill.number} printed as DUPLICATE COPY.` } : { tone: 'error', title: `Printing failed: ${r.message}` }))}>Reprint</Button>
         </div>
         {bill.reason && (
           <div className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-sm">

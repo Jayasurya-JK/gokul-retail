@@ -112,6 +112,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "createGrn" | "saveSupplier" | "recordSupplierPayment" | "saveSeedNorms" | "createPressingBatch" | "moveBatchToBarrel" | "createPackRun" => {
             Perm("canManageStock")
         }
+        "setCustomerCredit" => PermPin { perm: "canEditPrices", action: "allow_credit", pin_arg: 2, pin_key: None },
         "createAdjustment" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         "postStockTake" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 2, pin_key: None },
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
@@ -143,6 +144,7 @@ fn describe(method: &str) -> &'static str {
         "saveSeedNorms" | "createPressingBatch" | "moveBatchToBarrel" | "createPackRun" => "record production",
         "createAdjustment" | "postStockTake" => "adjust stock",
         "recordCollection" | "logReminder" => "collect credit",
+        "setCustomerCredit" => "allow credit for a customer",
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => "manage users",
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => "change settings or backups",
         "runReport" => "see reports",
@@ -336,13 +338,17 @@ fn check_bill(conn: &Connection, actor: &Actor, args: &[Value]) -> Result<Option
         reasons.push("change a price".into());
         perm = Some("canEditPrices");
     }
+    // One credit rule: limit 0 = credit not allowed, a positive limit = up to that much owed, -1 = no limit (owner's explicit choice).
     let credit: i64 = draft.payments.iter().filter(|p| p.mode == "credit").map(|p| p.amount).sum();
-    if credit > 0 && actor.pin_listed("credit_over_limit") {
+    if credit > 0 {
         if let Some(cid) = &draft.customer_id {
             let cur: Option<(i64, i64)> =
                 conn.query_row("SELECT credit_limit, outstanding FROM customers WHERE id=?1", [cid], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
             if let Some((limit, out)) = cur {
-                if limit > 0 && out + credit > limit {
+                if limit == 0 {
+                    // Everyone needs a manager's or owner's PIN here; the approval is audited as an override.
+                    reasons.push("sell on credit to a customer who has no credit account".into());
+                } else if limit > 0 && out + credit > limit && actor.pin_listed("credit_over_limit") {
                     reasons.push("sell on credit above the customer's limit".into());
                 }
             }

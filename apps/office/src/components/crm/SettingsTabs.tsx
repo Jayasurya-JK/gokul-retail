@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, DatabaseBackup, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
-import type { BackupSettings, BillFormatSettings, ExpenseSettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
+import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
 import { BillFormatPreview } from './BillFormatPreview';
@@ -147,10 +147,11 @@ export function BillFormatTab({ v, shop, set }: { v: BillFormatSettings; shop: S
           <Row title="Show customer savings" hint={'Prints "You saved" when the price is below MRP.'}><Switch checked={v.showSavings} onCheckedChange={(x) => up('showSavings', x)} /></Row>
           <Row title="Show HSN code per item"><Switch checked={v.showHsn} onCheckedChange={(x) => up('showHsn', x)} /></Row>
           <Row title="Show GST summary table" hint="Taxable value, CGST and SGST per slab."><Switch checked={v.showGstSummary} onCheckedChange={(x) => up('showGstSummary', x)} /></Row>
-          <Row title="UPI QR code at the bottom"><Switch checked={v.showQr} onCheckedChange={(x) => up('showQr', x)} /></Row>
+          <Row title="QR code at the bottom" hint="A UPI pay QR when a UPI id is set below, otherwise the bill number."><Switch checked={v.showQr} onCheckedChange={(x) => up('showQr', x)} /></Row>
+          {v.showQr && <div className="px-1 pb-2"><Input label="UPI id for the QR (e.g. gokuloils@okaxis)" value={v.upiId ?? ''} onChange={(e) => up('upiId', e.target.value.trim())} /></div>}
         </Card>
         <Card title="Language and paper">
-          <Row title="Bill language" hint="Item names print in Tamil when a Tamil name exists."><Segmented value={v.language} onChange={(x) => up('language', x)} options={[{ value: 'en', label: 'English' }, { value: 'ta', label: 'Tamil' }]} /></Row>
+          <Row title="Bill language" hint="Screens show Tamil names. Thermal paper has no Tamil letters, so printed bills always use the English item name."><Segmented value={v.language} onChange={(x) => up('language', x)} options={[{ value: 'en', label: 'English' }, { value: 'ta', label: 'Tamil' }]} /></Row>
           <Row title="Paper width"><Segmented value={v.paper} onChange={(x) => up('paper', x)} options={[{ value: '80mm', label: '80 mm' }, { value: '58mm', label: '58 mm' }]} /></Row>
           <Row title="Copies per bill"><div className="w-20"><NumberInput value={String(v.copies)} decimals={0} size="sm" onValueChange={(x) => up('copies', Math.min(3, Math.max(1, Number(x || 1))))} /></div></Row>
         </Card>
@@ -176,21 +177,29 @@ function TestResult({ r }: { r: { ok: boolean; message: string } | null }) {
   );
 }
 
-export function PrintersTab({ v, set }: { v: PrinterSettings; set: (n: PrinterSettings) => void }) {
+export function PrintersTab({ v, set, paper = '80mm' }: { v: PrinterSettings; set: (n: PrinterSettings) => void; paper?: string }) {
+  const cur = v.detected.find((d) => d.name === v.billPrinter);
   const up = <K extends keyof PrinterSettings>(k: K, val: PrinterSettings[K]) => set({ ...v, [k]: val });
   const [billRes, setBillRes] = useState<{ ok: boolean; message: string } | null>(null);
   const [labelRes, setLabelRes] = useState<{ ok: boolean; message: string } | null>(null);
   const opts = (kinds: string[]) => v.detected.filter((d) => kinds.includes(d.kind)).map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (offline)` }));
   return (
     <div className="grid grid-cols-2 gap-4">
-      <Card title="Bill printer" actions={<Badge tone="success">80 mm thermal</Badge>}>
-        <Select label="Printer" value={v.billPrinter} onChange={(e) => { up('billPrinter', e.target.value); setBillRes(null); }} options={opts(['thermal', 'other'])} />
+      <Card title="Bill printer" actions={<Badge tone={cur ? (cur.ready ? 'success' : 'danger') : 'warning'}>{cur ? (cur.ready ? 'Ready' : cur.note || 'Not ready') : v.billPrinter ? 'Not installed' : 'Not chosen'}</Badge>}>
+        <Select label="Printer" value={v.billPrinter} onChange={(e) => { up('billPrinter', e.target.value); setBillRes(null); }}
+          options={[{ value: '', label: 'Choose a printer' }, ...v.detected.filter((d) => d.kind !== 'label').map((d) => ({ value: d.name, label: d.ready ? d.name : `${d.name} (${d.note || 'not ready'})` }))]} />
+        {cur && <p className="mt-1.5 text-xs text-muted">Port {cur.port || '-'} - driver {cur.driver || '-'}</p>}
         <div className="mt-2">
-          <Row title="Print bill automatically" hint="Prints as soon as the bill is saved."><Switch checked={v.autoPrint} onCheckedChange={(x) => up('autoPrint', x)} /></Row>
-          <Row title="Open cash drawer on cash sale"><Switch checked={v.openDrawerOnCash} onCheckedChange={(x) => up('openDrawerOnCash', x)} /></Row>
+          <Row title="How to print" hint={v.mode === 'escpos' ? 'Fast raw receipt commands for thermal printers (TVS, Epson, Posiflex, Retsol ...).' : 'Uses the normal Windows driver. For laser, inkjet or PDF printers.'}>
+            <Segmented value={v.mode} onChange={(x) => up('mode', x)} options={[{ value: 'escpos', label: 'Thermal (ESC/POS)' }, { value: 'driver', label: 'Windows driver' }]} />
+          </Row>
+          <Row title="Paper width" hint="Set in Bill format. 80 mm prints 48 columns, 58 mm prints 32."><span className="text-sm font-medium text-ink">{paper}</span></Row>
+          <Row title="Print bill automatically" hint="Prints as soon as the bill is saved. Bills are always saved first."><Switch checked={v.autoPrint} onCheckedChange={(x) => up('autoPrint', x)} /></Row>
+          <Row title="Print the shop logo"><Switch checked={v.printLogo} onCheckedChange={(x) => up('printLogo', x)} /></Row>
+          <Row title="Open cash drawer on cash sale" hint="Needs a drawer plugged into the printer (RJ11)."><Switch checked={v.openDrawerOnCash} onCheckedChange={(x) => up('openDrawerOnCash', x)} /></Row>
           <Row title="Cut paper after each bill"><Switch checked={v.cutter} onCheckedChange={(x) => up('cutter', x)} /></Row>
         </div>
-        <Button className="mt-2" icon={<Printer size={14} />} onClick={async () => setBillRes(await api.testPrint('bill', v.billPrinter))}>Print test bill</Button>
+        <Button className="mt-2" icon={<Printer size={14} />} onClick={async () => setBillRes(await api.testPrint('bill', v.billPrinter, { paper, mode: v.mode, printLogo: v.printLogo }))}>Print test bill</Button>
         <TestResult r={billRes} />
       </Card>
       <Card title="Barcode label printer" actions={<Badge tone="info">TSPL label</Badge>}>
@@ -205,7 +214,7 @@ export function PrintersTab({ v, set }: { v: PrinterSettings; set: (n: PrinterSe
             <StatusDot tone={d.ready ? 'success' : 'danger'} />
             <span className="flex-1 font-medium text-ink">{d.name}</span>
             <Badge>{d.kind === 'thermal' ? 'Receipt printer' : d.kind === 'label' ? 'Label printer' : 'Other'}</Badge>
-            <span className={cn('w-20 text-right text-xs', d.ready ? 'text-muted' : 'text-danger')}>{d.ready ? 'Ready' : 'Offline'}</span>
+            <span className={cn('w-44 truncate text-right text-xs', d.ready ? 'text-muted' : 'text-danger')} title={d.port}>{d.ready ? `Ready${d.isDefault ? ' (Windows default)' : ''}` : d.note || 'Offline'}</span>
           </div>
         ))}
       </Card>
@@ -339,6 +348,34 @@ export function MillTab({ v, set }: { v: MillSettings; set: (n: MillSettings) =>
           <Select label="GST on aravai (verify)" value={String(v.serviceGstRate)} onChange={(e) => up('serviceGstRate', Number(e.target.value) as MillSettings['serviceGstRate'])} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: `${r}%` }))} />
         </div>
         <p className="mt-3 text-xs text-subtle">The charge goes on the customer&apos;s account as a bill with the service item &quot;Aravai Job Work&quot;. It can also be sold at the counter as that item.</p>
+      </Card>
+    </div>
+  );
+}
+
+
+/* ------------------------------ Loyalty ------------------------------ */
+export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySettings) => void }) {
+  const up = <K extends keyof LoyaltySettings>(k: K, val: LoyaltySettings[K]) => set({ ...v, [k]: val });
+  const num = (x: string, min: number, max: number) => Math.min(max, Math.max(min, Number(x || min)));
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <Card title="Loyalty points">
+        <Row title="Points on" hint="Customers earn points on every bill and can use them to pay."><Switch checked={v.enabled} onCheckedChange={(x) => up('enabled', x)} /></Row>
+        <Row title="Rupees for one point" hint="1 point for every this many rupees of the bill after discount. The part paid with a credit note or points earns nothing.">
+          <div className="w-28"><NumberInput value={String(v.rupeesPerPoint)} decimals={0} prefix={'₹'} size="sm" onValueChange={(x) => up('rupeesPerPoint', num(x, 1, 100000))} /></div>
+        </Row>
+      </Card>
+      <Card title="Using points to pay">
+        <Row title="Value of one point (confirm with the owner)" hint="What 1 point is worth at the counter.">
+          <div className="w-28"><NumberInput value={String(v.pointValue / 100)} decimals={0} prefix={'₹'} size="sm" onValueChange={(x) => up('pointValue', num(x, 1, 1000) * 100)} /></div>
+        </Row>
+        <Row title="Fewest points to use" hint="A customer needs at least this many points to pay with them.">
+          <div className="w-28"><NumberInput value={String(v.minRedeem)} decimals={0} size="sm" onValueChange={(x) => up('minRedeem', num(x, 1, 1000000))} /></div>
+        </Row>
+        <Row title="Most of a bill points can pay" hint="Percent of the bill total.">
+          <div className="w-28"><NumberInput value={String(v.maxPct)} decimals={0} size="sm" onValueChange={(x) => up('maxPct', num(x, 1, 100))} /></div>
+        </Row>
       </Card>
     </div>
   );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, MoonStar, Printer, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { countedTotal, formatRupees, type DenomCounts, type ShiftSummary, type ZReport } from '@gokul/data';
+import { printDoc, printWithToast } from '../printing';
 import { Badge, Button, Dialog, Kbd, Money, PosLayout, cn, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -94,7 +95,7 @@ export function DayClose() {
       <Dialog
         open={dlg === 'xreport'} onOpenChange={(o) => !o && setDlg(null)} size="sm" title="X report (interim)"
         description="Prints the day so far. The day stays open."
-        footer={<><Button onClick={() => setDlg(null)} kbd="Esc">Close</Button><Button data-autofocus variant="primary" icon={<Printer size={15} />} kbd="Enter" onClick={() => { setDlg(null); toast.show({ tone: 'success', title: 'X report sent to printer' }); }}>Print</Button></>}
+        footer={<><Button onClick={() => setDlg(null)} kbd="Esc">Close</Button><Button data-autofocus variant="primary" icon={<Printer size={15} />} kbd="Enter" onClick={() => { setDlg(null); void printWithToast('xreport', 'x', {}, toast, 'X report printed'); }}>Print</Button></>}
         bodyClassName="bg-surface-3 p-5"
       >
         {summary && <ReportPreview settings={settings} data={{ kind: 'X', summary, cashier: user?.name ?? '', counted: hasCount ? counted : undefined, difference: hasCount ? diff : undefined }} />}
@@ -105,7 +106,7 @@ export function DayClose() {
         onLocked={() => { signOut(); nav('/login', { replace: true }); }}
         onApprove={async (pin) => {
           const r = await api.closeDay({ userId: user?.id ?? '', counts, managerPin: pin });
-          if (r) { setReport(r); setDlg('zreport'); }
+          if (r) { setReport(r); setDlg('zreport'); void printDoc('zreport', r.number, { payload: r }).then((p) => { if (!p.ok) toast.show({ tone: 'error', title: `Day closed. Z report not printed: ${p.message}`, detail: 'Use Print again.' }); }); }
           return !!r;
         }}
       />
@@ -114,7 +115,7 @@ export function DayClose() {
         open={dlg === 'zreport'} onOpenChange={(o) => !o && finish()} size="sm"
         title={<span className="flex items-center gap-2"><CheckCircle2 size={18} className="text-success" /> Day closed</span>}
         description={report ? `Z report ${report.number}. Approved by ${report.approvedBy}.` : undefined}
-        footer={<><Button icon={<Printer size={15} />} onClick={() => toast.show({ tone: 'success', title: 'Z report sent to printer' })}>Print again</Button><Button data-autofocus variant="primary" onClick={finish} kbd="Enter">Finish and sign out</Button></>}
+        footer={<><Button icon={<Printer size={15} />} onClick={() => { if (report) void printWithToast('zreport', report.number, { payload: report, duplicate: true }, toast, 'Z report printed'); }}>Print again</Button><Button data-autofocus variant="primary" onClick={finish} kbd="Enter">Finish and sign out</Button></>}
         bodyClassName="bg-surface-3 p-5"
       >
         {report && <ReportPreview settings={settings} data={{ kind: 'Z', number: report.number, summary: report.summary, counted: report.counted, difference: report.difference, cashier: report.closedBy, approvedBy: report.approvedBy }} />}
@@ -140,8 +141,12 @@ function Compare({ summary, counted, diff, hasCount }: { summary: ShiftSummary |
         <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted">
           <span className="flex justify-between"><span>Opening</span><b className="num text-ink"><Money paise={summary?.openingCash ?? 0} decimals={false} symbol={false} /></b></span>
           <span className="flex justify-between"><span>Cash sales</span><b className="num text-ink"><Money paise={summary?.byMode.cash ?? 0} decimals={false} symbol={false} /></b></span>
-          <span className="flex justify-between"><span>+ Cash in</span><b className="num text-success"><Money paise={summary?.cashIn ?? 0} decimals={false} symbol={false} /></b></span>
-          <span className="flex justify-between"><span>- Cash out</span><b className="num text-danger"><Money paise={summary?.cashOut ?? 0} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>+ Cash added</span><b className="num text-success"><Money paise={(summary?.cashIn ?? 0) - (summary?.collectionsCash ?? 0)} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>+ Collections</span><b className="num text-success"><Money paise={summary?.collectionsCash ?? 0} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>- Cash taken out</span><b className="num text-danger"><Money paise={(summary?.cashOut ?? 0) - (summary?.supplierCash ?? 0)} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>- Supplier pay</span><b className="num text-danger"><Money paise={summary?.supplierCash ?? 0} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>- Refunds</span><b className="num text-danger"><Money paise={summary?.cashRefunds ?? 0} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>- Expenses (cash)</span><b className="num text-danger"><Money paise={summary?.expensesCash ?? 0} decimals={false} symbol={false} /></b></span>
         </div>
       </div>
       <div className="rounded-card border border-line bg-surface px-4 py-3">
@@ -213,8 +218,21 @@ function XSummary({ s, onPrint }: { s: ShiftSummary; onPrint: () => void }) {
         <Sec>Drawer movements</Sec>
         <div className="divide-y divide-line/70">
           <Row k="Opening cash" v={<Money paise={s.openingCash} decimals={false} />} />
-          <Row k="Cash in" v={<span className="text-success"><Money paise={s.cashIn} decimals={false} sign /></span>} />
-          <Row k="Cash out" v={<span className="text-danger"><Money paise={-s.cashOut} decimals={false} /></span>} />
+          <Row k="+ Cash sales" v={<Money paise={s.byMode.cash} decimals={false} />} />
+          <Row k="+ Cash added" v={<span className="text-success"><Money paise={s.cashIn - (s.collectionsCash ?? 0)} decimals={false} /></span>} />
+          <Row k="+ Customer collections (cash)" v={<span className="text-success"><Money paise={s.collectionsCash ?? 0} decimals={false} /></span>} />
+          <Row k="- Cash taken out" v={<span className="text-danger"><Money paise={-(s.cashOut - (s.supplierCash ?? 0))} decimals={false} /></span>} />
+          <Row k="- Supplier payments" v={<span className="text-danger"><Money paise={-(s.supplierCash ?? 0)} decimals={false} /></span>} />
+          <Row k="- Cash refunds" v={<span className="text-danger"><Money paise={-(s.cashRefunds ?? 0)} decimals={false} /></span>} />
+          <Row k={`- Expenses paid in cash (${s.expensesCount})`} v={<span className="text-danger"><Money paise={-s.expensesCash} decimals={false} /></span>} />
+          <Row k="= Expected cash" v={<b><Money paise={s.expectedCash} decimals={false} /></b>} />
+        </div>
+
+        <Sec>Expenses</Sec>
+        <div className="divide-y divide-line/70">
+          {(s.expenseLines ?? []).length === 0 && <Row k="No expenses" v="-" />}
+          {(s.expenseLines ?? []).map((e) => <Row key={e.category} k={`${e.category} (${e.count})`} v={<Money paise={e.cash + e.other} decimals={false} />} />)}
+          {(s.expensesOtherCount ?? 0) > 0 && <Row k={`Paid by UPI or bank (${s.expensesOtherCount}), not from the drawer`} v={<Money paise={s.expensesOther ?? 0} decimals={false} />} />}
         </div>
 
         <Sec>GST collected</Sec>
@@ -290,7 +308,6 @@ function PinDialog({ open, diff, counted, expected, onClose, onApprove, onLocked
       />
       <div className="mt-3 min-h-4 text-center text-xs font-medium text-danger">{error ?? ''}</div>
       <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-subtle"><Kbd>0-9</Kbd> type the PIN, it checks by itself</div>
-      <div className="mt-1 text-center text-xs text-subtle">Demo PINs: Lakshmi (manager) 2222, Suresh (owner) 1111</div>
     </Dialog>
   );
 }

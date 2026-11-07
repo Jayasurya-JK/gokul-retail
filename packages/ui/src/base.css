@@ -34,10 +34,10 @@ input[type='number']::-webkit-inner-spin-button { display: none; }
 /* Dropdowns, popovers, tooltips and the dialog backdrop: a quick fade */
 .g-overlay { animation: g-fade 90ms ease-out; }
 .g-overlay[data-state='closed'] { animation: g-fade-out 100ms ease-in forwards; }
-/* Dialogs sit in the centre with the separate `translate` property, so the scale animation never moves them */
-.g-dialog { translate: -50% -50%; animation: g-pop 130ms ease-out; will-change: transform, opacity; }
-.g-dialog[data-state='closed'] { animation: g-pop-out 100ms ease-in forwards; }
-.g-drawer { animation: g-slide 180ms ease-out; will-change: transform, opacity; }
+/* Dialogs: opacity only, no transform and no will-change, so the text is never left on a blurry, half-pixel layer */
+.g-dialog { animation: g-fade 110ms ease-out; }
+.g-dialog[data-state='closed'] { animation: g-fade-out 90ms ease-in forwards; }
+.g-drawer { animation: g-slide 180ms ease-out; }
 .g-drawer[data-state='closed'] { animation: g-slide-out 120ms ease-in forwards; }
 .g-toast { animation: g-toast 140ms ease-out; }
 @media (prefers-reduced-motion: reduce) {

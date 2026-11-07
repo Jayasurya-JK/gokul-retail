@@ -6,14 +6,14 @@ import { paiseToRupees, rupeesToPaise, Segmented } from './common';
 const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 interface Draft {
-  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; email: string; address: string; limit: string;
+  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; email: string; address: string; limit: string; unlimited: boolean;
 }
 
-const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', email: '', address: '', limit: '0' };
+const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', email: '', address: '', limit: '0', unlimited: false };
 
 const fromRow = (c: CustomerRow): Draft => ({
   name: c.name, phone: c.phone, area: c.area, type: c.type, business: c.business ?? '', gstin: c.gstin ?? '', email: c.email ?? '',
-  address: c.address ?? '', limit: paiseToRupees(c.creditLimit),
+  address: c.address ?? '', limit: c.creditLimit > 0 ? paiseToRupees(c.creditLimit) : '0', unlimited: c.creditLimit < 0,
 });
 
 /** Add / edit customer side sheet. Ctrl+S saves. */
@@ -44,7 +44,7 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
     try {
       await onSave({
         id: customer?.id, name: d.name, phone: d.phone, area: d.area, type: d.type, business: d.business, gstin: d.gstin,
-        email: d.email, address: d.address, creditLimit: rupeesToPaise(d.limit),
+        email: d.email, address: d.address, creditLimit: d.unlimited ? -1 : rupeesToPaise(d.limit),
       });
     } finally { setBusy(false); }
   };
@@ -86,9 +86,10 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
         <Input label="Address (optional)" value={d.address} onChange={(e) => set('address', e.target.value)} />
         <div className="rounded-card border border-line bg-surface-2 p-3">
           <div className="mb-2 text-sm font-semibold text-ink">Credit</div>
-          <Field label="Credit limit" hint={d.limit === '0' || d.limit === '' ? 'Zero means no credit. The counter will not allow Pay later.' : 'Counter blocks Pay later above this limit unless a manager enters their PIN.'}>
-            <NumberInput value={d.limit} onValueChange={(v) => set('limit', v)} decimals={0} prefix={'₹'} />
+          <Field label="Credit limit" hint={d.unlimited ? 'No limit: Pay later is never blocked for this customer.' : d.limit === '0' || d.limit === '' ? 'Zero means credit is not allowed. The counter needs a manager PIN for Pay later.' : 'Counter blocks Pay later above this limit unless a manager enters their PIN.'}>
+            <NumberInput value={d.unlimited ? '' : d.limit} disabled={d.unlimited} onValueChange={(v) => set('limit', v)} decimals={0} prefix={'₹'} />
           </Field>
+          <label className="mt-2 flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={d.unlimited} onChange={(e) => set('unlimited', e.target.checked)} /> No limit (only for customers you fully trust)</label>
           {customer && customer.outstanding > 0 && (
             <div className="mt-2 text-xs text-warning">Currently owes {'₹'}{paiseToRupees(customer.outstanding)}. Lowering the limit below this does not erase the dues.</div>
           )}

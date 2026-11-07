@@ -124,17 +124,22 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     }
     hit(fault, Fault::AfterLines)?;
 
+    // Points are redeemed first (checks the balance, minimum and maximum share of the bill), inside this same transaction.
+    crate::loyalty::redeem_for_bill(tx, draft.customer_id.as_deref(), &draft.payments, totals.grand, bill_id, &number, &cashier)?;
     {
         let mut ins = tx.prepare_cached("INSERT INTO bill_payments(bill_id,mode,amount,ref) VALUES(?1,?2,?3,?4)")?;
         for p in &draft.payments {
-            ins.execute(params![bill_id, p.mode, p.amount, p.r#ref]).map_err(|_| ApiError::Invalid(format!("Unknown payment mode '{}'", p.mode)))?;
-            if p.mode == "credit_note" {
+            // bill_payments only knows five modes and cannot be altered: points are stored as a credit_note payment with ref PTS
+            let (mode, rf) = if p.mode == "points" { ("credit_note", Some(crate::loyalty::POINTS_REF.to_string())) } else { (p.mode.as_str(), p.r#ref.clone()) };
+            ins.execute(params![bill_id, mode, p.amount, rf]).map_err(|_| ApiError::Invalid(format!("Unknown payment mode '{}'", p.mode)))?;
+            if mode == "credit_note" && p.mode != "points" {
                 if let Some(r) = &p.r#ref {
-                    tx.execute("UPDATE credit_notes SET consumed=1 WHERE number=?1", [r])?;
+                    crate::loyalty::spend_credit_note(tx, r, p.amount)?;
                 }
             }
         }
     }
+    crate::loyalty::earn_for_bill(tx, draft.customer_id.as_deref(), &draft.payments, totals.grand, bill_id, &number, &cashier)?;
     hit(fault, Fault::AfterPayments)?;
 
     {

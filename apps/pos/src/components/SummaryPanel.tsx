@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, PackageSearch, Receipt, UserRound } from 'lucide-react';
-import type { BillTotals, CreditNote, Customer, Item, Milli } from '@gokul/data';
-import { formatPaise, formatQty, formatRupees } from '@gokul/data';
+import { ChevronRight, Receipt, UserRound, X } from 'lucide-react';
+import type { BillTotals, CreditNote, Customer, CustomerWallet } from '@gokul/data';
+import { creditLeft, formatPaise, formatQty, formatRupees } from '@gokul/data';
 import { Button, Kbd, Money, cn } from '@gokul/ui';
 import { plural } from '../plural';
 
@@ -22,8 +22,6 @@ function Row({ label, hint, children, tone }: { label: string; hint?: string; ch
     </div>
   );
 }
-
-export interface LastScanned { item: Item; onBill: Milli; left: Milli }
 
 function BillStrip({ billNo }: { billNo: string }) {
   const [now, setNow] = useState(new Date());
@@ -48,40 +46,16 @@ function BillStrip({ billNo }: { billNo: string }) {
   );
 }
 
-function LastItemCard({ last }: { last: LastScanned | null }) {
-  if (!last) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-3 py-2.5 text-sm text-subtle">
-        <PackageSearch size={18} /> The last scanned item shows here with its stock.
-      </div>
-    );
-  }
-  const { item, left } = last;
-  const low = left <= item.reorderLevel;
-  const unit = item.loose ? (item.unit === 'l' ? 'L' : 'kg') : item.packSize ?? item.unit;
-  return (
-    <div className="rounded-xl border border-line bg-surface-2 px-3 py-2.5">
-      <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-subtle">
-        <span>Last scanned</span><span className="num normal-case tracking-normal">Code {item.code}</span>
-      </div>
-      <div className="mt-0.5 truncate text-md font-semibold text-ink">{item.name}</div>
-      <div className="mt-1 flex items-end justify-between text-sm">
-        <span className="text-muted">Rate <b className="num text-ink">{formatRupees(item.price, { decimals: false })}</b>{item.loose ? ` / ${unit}` : ''}{item.mrp > item.price && <span className="num ml-1.5 text-xs text-subtle line-through">{formatRupees(item.mrp, { decimals: false })}</span>}</span>
-        <span className={cn('num font-semibold', left <= 0 ? 'text-danger' : low ? 'text-warning' : 'text-success')}>
-          {left <= 0 ? 'No stock left' : `${formatQty(left, item.loose)} ${item.loose ? unit : ''} left`}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-export function SummaryPanel({ totals, customer, onCustomer, onPay, lastBill, billNo, last, savings, exchange, due }: {
-  totals: BillTotals; customer: Customer | null; onCustomer: () => void; onPay: () => void;
-  lastBill: { number: string; total: number } | null; billNo: string; last: LastScanned | null; savings: number;
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, lastBill, billNo, exchange, due }: {
+  totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
+  /** Opens the whole-bill discount box (Shift+F5 does the same) */
+  onDiscount: () => void; onClearDiscount: () => void;
+  lastBill: { number: string; total: number } | null; billNo: string;
   exchange: CreditNote | null; due: number;
 }) {
+  const pct = totals.gross > 0 && totals.discount > 0 ? Math.round((totals.discount / totals.gross) * 1000) / 10 : 0;
   const empty = totals.itemCount === 0;
-  const avail = customer && customer.creditLimit ? customer.creditLimit - customer.outstanding : null;
+  const creditText = !customer ? '' : customer.creditLimit === 0 ? 'Not allowed' : customer.creditLimit < 0 ? 'No limit' : formatRupees(creditLeft(customer) ?? 0, { decimals: false });
   return (
     <>
       <BillStrip billNo={billNo} />
@@ -105,8 +79,13 @@ export function SummaryPanel({ totals, customer, onCustomer, onPay, lastBill, bi
         {customer && (
           <span className="mt-2 grid w-full grid-cols-3 gap-1.5 border-t border-line pt-2 text-center">
             <CustStat k="Owes" v={formatRupees(customer.outstanding, { decimals: false })} tone={customer.outstanding ? 'warning' : undefined} />
-            <CustStat k="Credit left" v={avail !== null ? formatRupees(Math.max(0, avail), { decimals: false }) : 'No limit'} />
-            <CustStat k="Points" v={String(customer.loyaltyPoints)} />
+            <CustStat k={customer.creditLimit === 0 ? 'Credit' : 'Credit left'} v={creditText} />
+            <CustStat k="Points" v={String(wallet?.points ?? customer.loyaltyPoints)} />
+          </span>
+        )}
+        {customer && (wallet?.storeCredit ?? 0) > 0 && (
+          <span className="mt-1.5 flex w-full items-center justify-between rounded-md bg-success-soft px-2 py-1 text-xs font-medium text-success">
+            <span>Credit available</span><b className="num">{formatRupees(wallet!.storeCredit, { decimals: false })}</b>
           </span>
         )}
       </button>
@@ -118,7 +97,20 @@ export function SummaryPanel({ totals, customer, onCustomer, onPay, lastBill, bi
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-2">
         <Row label="Subtotal"><Money paise={totals.gross} /></Row>
-        <Row label="Discount" hint="F5" tone={totals.discount ? 'success' : 'muted'}>{totals.discount ? <Money paise={-totals.discount} /> : <Money paise={0} />}</Row>
+        <div className="group flex items-center justify-between py-[3px] text-base">
+          <button
+            type="button" tabIndex={-1} onClick={onDiscount} title="Discount on the whole bill (Shift+F5)"
+            className={cn('-mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-primary-soft hover:text-primary', totals.discount ? 'text-success' : 'text-muted')}
+          >
+            {totals.discount ? `Discount ${pct}%` : 'Add discount'} <Kbd>Shift+F5</Kbd>
+          </button>
+          <span className={cn('num flex items-center gap-1.5 font-medium', totals.discount ? 'text-success' : 'text-muted')}>
+            <Money paise={-totals.discount} />
+            {totals.discount > 0 && (
+              <button type="button" tabIndex={-1} onClick={onClearDiscount} title="Remove the discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
+            )}
+          </span>
+        </div>
         <div className="my-2 rounded-lg border border-line bg-surface-2 px-3 py-2">
           <div className="mb-1 grid grid-cols-[44px_1fr_1fr_1fr] gap-x-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
             <span>GST</span><span className="text-right">Taxable</span><span className="text-right">CGST</span><span className="text-right">SGST</span>
@@ -148,15 +140,6 @@ export function SummaryPanel({ totals, customer, onCustomer, onPay, lastBill, bi
           </div>
         )}
 
-        <div className="mt-auto flex flex-col gap-2 pt-3">
-          {savings > 0 && (
-            <div className="flex items-center justify-between rounded-lg bg-success-soft px-3 py-1.5 text-sm text-success">
-              <span>Customer saves against MRP</span>
-              <b className="num"><Money paise={savings} decimals={false} /></b>
-            </div>
-          )}
-          <LastItemCard last={last} />
-        </div>
       </div>
 
       <div className="shrink-0 px-3 pb-3">

@@ -5,6 +5,7 @@ import {
   CASH_REASONS, PAID_FROM_LABEL, formatRupees, needsManagerPin, parsePaise,
   type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom,
 } from '@gokul/data';
+import { printDoc } from '../printing';
 import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, cn, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -82,7 +83,9 @@ export function Expenses() {
     setSaving(true);
     try {
       if (mode === 'expense') {
-        await api.addExpense({ categoryId: cat!.id, paidFrom, amount: paise, paidTo: paidTo.trim(), note: note.trim(), by: user?.name ?? 'Cashier', managerPin: pin });
+        const saved = await api.addExpense({ categoryId: cat!.id, paidFrom, amount: paise, paidTo: paidTo.trim(), note: note.trim(), by: user?.name ?? 'Cashier', managerPin: pin });
+        const no = (saved as { number?: string } | undefined)?.number;
+        if (no) void printDoc('expense', no).then((p) => { if (!p.ok) toast.show({ tone: 'warning', title: `Expense saved. Voucher not printed: ${p.message}` }); });
         toast.show({
           tone: 'success', title: 'Expense saved',
           detail: `${formatRupees(paise, { decimals: false })} - ${cat!.name}${paidFrom === 'cash' ? '. Taken off the drawer total.' : `, paid by ${PAID_FROM_LABEL[paidFrom]}.`}`,

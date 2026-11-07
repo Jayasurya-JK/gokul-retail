@@ -28,7 +28,7 @@ fn ok<T: Serialize>(v: T) -> Result<Value> {
 /// - Day close (Z) starts a background backup when it succeeds.
 pub fn dispatch_session(db: &Db, session: &Session, method: &str, mut args: Vec<Value>) -> Result<Value> {
     match method {
-        "getSettings" | "listUsers" => return dispatch(db, method, args),
+        "getSettings" | "listUsers" | "printerStatus" => return dispatch(db, method, args),
         "logout" => {
             session.clear();
             return Ok(Value::Null);
@@ -97,6 +97,20 @@ pub fn dispatch_session(db: &Db, session: &Session, method: &str, mut args: Vec<
 /// Direct call with no session and no permission checks: for tests and internal jobs only. The apps never use this.
 pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
     let a = &args[..];
+    // Printing talks to the spooler, so it must NOT run inside the database lock below: it takes the lock only to build the
+    // paper. A printing problem is an answer ({ ok, message }), never an error: the bill it belongs to is already saved.
+    match method {
+        "printDocument" => {
+            let opts = a.get(2).cloned().unwrap_or(Value::Null);
+            return ok(crate::printing::print_document(db, &arg::<String>(a, 0, "kind")?, &arg::<String>(a, 1, "id")?, &opts));
+        }
+        "printerStatus" => return ok(crate::printing::printer_status(db)),
+        "testPrint" => {
+            let opts = a.get(2).cloned().unwrap_or(Value::Null);
+            return ok(crate::printing::test_print(db, &arg::<String>(a, 0, "kind")?, &arg::<String>(a, 1, "printer")?, &opts));
+        }
+        _ => {}
+    }
     db.with(|c| match method {
         // ----- CoreApi -----
         "getSettings" => ok(store::get_settings(c)?),
@@ -241,6 +255,9 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "salesFilterOptions" => ok(crm::sales_filter_options(c)?),
         "listCustomerRows" => ok(crm::list_customer_rows(c)?),
         "getCustomerProfile" => ok(crm::get_customer_profile(c, &arg::<String>(a, 0, "id")?)?),
+        "getCustomerWallet" => ok(crate::loyalty::wallet(c, &arg::<String>(a, 0, "customerId")?)?),
+        "listPointsHistory" => ok(crate::loyalty::history(c, &arg::<String>(a, 0, "customerId")?, arg::<Option<i64>>(a, 1, "limit")?.unwrap_or(100))?),
+        "setCustomerCredit" => ok(crm::set_customer_credit(c, &arg::<String>(a, 0, "customerId")?, arg::<i64>(a, 1, "limit")?, "")?),
         "saveCustomer" => ok(crm::save_customer(c, &arg::<crm::CustomerInput>(a, 0, "input")?)?),
         "listReceivables" => ok(crm::list_receivables(c)?),
         "getStatement" => ok(crm::get_statement(c, &arg::<String>(a, 0, "customerId")?)?),
@@ -256,7 +273,6 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "resetUserPin" => ok(crm::reset_user_pin(c, &arg::<String>(a, 0, "userId")?)?),
         "getSettingsBundle" => ok(crm::get_settings_bundle(c)?),
         "saveSettingsBundle" => ok(crm::save_settings_bundle(c, &arg::<Value>(a, 0, "next")?)?),
-        "testPrint" => ok(crm::test_print(&arg::<String>(a, 0, "kind")?, &arg::<String>(a, 1, "printer")?)),
         "backupNow" => ok(crm::backup_now(c)?),
         "backupStatus" => ok(crate::backup::status(c)?),
         "logout" => Ok(Value::Null), // the session lives outside the database; see dispatch_session
@@ -312,9 +328,9 @@ pub const METHODS: &[&str] = &[
     "searchPurchasable", "listGrns", "getGrn", "createGrn", "listSupplierSummaries", "getSupplierLedger", "saveSupplier", "recordSupplierPayment",
     "listSeedProfiles", "saveSeedNorms", "listPressingBatches", "createPressingBatch", "moveBatchToBarrel", "listBarrels", "listPackTargets",
     "listPackRuns", "createPackRun",
-    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "listReceivables", "getStatement",
+    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "listReceivables", "getStatement",
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
-    "saveSettingsBundle", "testPrint", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
+    "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
     "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref",
 ];

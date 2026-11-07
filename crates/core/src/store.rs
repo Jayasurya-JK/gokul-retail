@@ -300,8 +300,7 @@ pub fn quick_add_customer(conn: &mut Connection, name: &str, phone: &str) -> Res
     }
     let now = Local::now();
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    let n = db::next_seq(&tx, "CUSTOMER", "-")?;
-    let id = format!("c{n}");
+    let id = db::fresh_id(&tx, "customers", "c", "CUSTOMER")?;
     tx.execute(
         "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at,created_at)
          VALUES(?1,?2,?3,'Coimbatore',0,0,0,?4,?4)",
