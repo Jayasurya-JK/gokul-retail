@@ -5,6 +5,8 @@
 //!   cargo run -p gokul-import --release -- [items] [--csv <file>] [--db <file>]
 //!   cargo run -p gokul-import --release -- customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run]
 //!   cargo run -p gokul-import --release -- suppliers [--csv <file>] [--db <file>] [--dry-run]
+//!   cargo run -p gokul-import --release -- points [--csv <file>] [--db <file>] [--dry-run]
+//!   cargo run -p gokul-import --release -- credit [--csv <file>] [--db <file>] [--dry-run]
 //! Defaults: the CSVs in `data/import/clean/` (items_stock, customers + outstanding, suppliers) and the normal
 //! database, `%APPDATA%\GokulRetail\gokul.db`. No subcommand means `items`.
 //!
@@ -56,10 +58,10 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    const USAGE: &str = "Usage: gokul-import [items] [--csv <file>] [--db <file>] | customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run] | suppliers [--csv <file>] [--db <file>] [--dry-run]";
+    const USAGE: &str = "Usage: gokul-import [items] [--csv <file>] [--db <file>] | customers [--no-outstanding] [--csv <file>] [--outstanding <file>] [--db <file>] [--dry-run] | suppliers [--csv <file>] [--db <file>] [--dry-run] | points [--csv <file>] [--db <file>] [--dry-run] | credit [--csv <file>] [--db <file>] [--dry-run]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = match args.first().map(String::as_str) {
-        Some(w @ ("items" | "customers" | "suppliers")) => {
+        Some(w @ ("items" | "customers" | "suppliers" | "points" | "credit")) => {
             let w = w.to_string();
             args.remove(0);
             w
@@ -84,7 +86,8 @@ fn run() -> Result<(), String> {
     }
     let clean = |file: &str| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("data").join("import").join("clean").join(file);
     if cmd != "items" {
-        return run_people(&cmd, csv_path.unwrap_or_else(|| clean(&format!("{cmd}.csv"))), outstanding_path.unwrap_or_else(|| clean("outstanding.csv")), db_path.unwrap_or_else(db::default_db_path), dry_run, no_outstanding);
+        let default_csv = if cmd == "credit" { "credit_outstanding.csv".to_string() } else { format!("{cmd}.csv") };
+        return run_people(&cmd, csv_path.unwrap_or_else(|| clean(&default_csv)), outstanding_path.unwrap_or_else(|| clean("outstanding.csv")), db_path.unwrap_or_else(db::default_db_path), dry_run, no_outstanding);
     }
     let csv_path = csv_path.unwrap_or_else(|| clean("items_stock.csv"));
     let db_path = db_path.unwrap_or_else(db::default_db_path);
@@ -127,10 +130,11 @@ fn run_people(cmd: &str, csv_path: PathBuf, outstanding_path: PathBuf, db_path: 
     let db = Db::open(&db_path).map_err(|e| e.to_string())?;
     let report = db
         .with(|c| {
-            Ok(if cmd == "customers" {
-                people::customers(c, &csv_text, &out_text, &file_name(&csv_path), &file_name(&outstanding_path), dry_run, no_outstanding)
-            } else {
-                people::suppliers(c, &csv_text, &file_name(&csv_path), dry_run)
+            Ok(match cmd {
+                "customers" => people::customers(c, &csv_text, &out_text, &file_name(&csv_path), &file_name(&outstanding_path), dry_run, no_outstanding),
+                "points" => people::points(c, &csv_text, &file_name(&csv_path), dry_run),
+                "credit" => people::credit(c, &csv_text, &file_name(&csv_path), dry_run),
+                _ => people::suppliers(c, &csv_text, &file_name(&csv_path), dry_run),
             })
         })
         .map_err(|e| e.to_string())??;

@@ -4,7 +4,7 @@
 use crate::{fixed, inr, parse_csv, IMPORT_BY};
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone};
 use gokul_core::db::{audit, iso};
-use rusqlite::{params, Connection, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashMap, HashSet};
 
 const EXPECTED_CUSTOMERS: i64 = 5827; // 5776 posbean + 51 placeholders
@@ -598,4 +598,279 @@ pub fn suppliers(c: &mut Connection, csv_text: &str, csv_name: &str, dry_run: bo
         skipped.len(),
     );
     Ok(Report { notes, summary })
+}
+
+// ---------- points and credit (the POSBean exports of 07-Nov-2026) ----------
+
+/// The points report: every POSBean customer (suppliers are left out of the clean file).
+const POINTS_FILE_CUSTOMERS: i64 = 5776;
+const POINTS_FILE_HUNDREDTHS: i64 = 11_638_398; // Rs 116,383.98 in points
+const POINTS_COLUMNS: &[&str] = &["customer_code", "customer_name", "points_hundredths"];
+const CREDIT_COLUMNS: &[&str] = &["customer_code", "customer_name", "amount_to_load", "bills", "oldest_credit_bill_date", "report_names"];
+const REPORT_DATE: (i32, u32, u32) = (2026, 11, 7);
+const POINTS_NOTE: &str = "Opening points from POSBean points report 07-Nov-2026";
+
+struct PointsRow {
+    line: usize,
+    code: String,
+    name: String,
+    hundredths: i64,
+}
+
+fn read_points(text: &str) -> Result<Vec<PointsRow>, String> {
+    let mut out = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for (line, m) in read_table(text, POINTS_COLUMNS)? {
+        let at = |e: String| format!("points CSV line {line}: {e}");
+        let code = m["customer_code"].clone();
+        if code.is_empty() {
+            return Err(at("customer_code is blank".into()));
+        }
+        if !seen.insert(code.clone()) {
+            return Err(at(format!("code {code} appears twice in the file")));
+        }
+        let hundredths = m["points_hundredths"]
+            .parse::<i64>()
+            .map_err(|_| at(format!("points_hundredths '{}' is not a whole number", m["points_hundredths"])))?;
+        out.push(PointsRow { line, code, name: m["customer_name"].clone(), hundredths });
+    }
+    Ok(out)
+}
+
+/// Opening points, one 'adjust' ledger row per customer, dated the report date (same pattern as `customers`).
+pub fn points(c: &mut Connection, csv_text: &str, csv_name: &str, dry_run: bool) -> Result<Report, String> {
+    let rows = read_points(csv_text)?;
+    let file_customers = rows.len() as i64;
+    let file_total: i64 = rows.iter().map(|r| r.hundredths).sum();
+    if file_customers != POINTS_FILE_CUSTOMERS || file_total != POINTS_FILE_HUNDREDTHS {
+        return Err(format!(
+            "points CSV has {file_customers} customers totalling {}, expected {POINTS_FILE_CUSTOMERS} totalling {}. Nothing was changed.",
+            fmt_hundredths(file_total),
+            fmt_hundredths(POINTS_FILE_HUNDREDTHS)
+        ));
+    }
+    let (ry, rm, rd) = REPORT_DATE;
+    let when = iso(local_midnight(NaiveDate::from_ymd_opt(ry, rm, rd).ok_or("bad report date")?)?);
+    let now = Local::now();
+    let loaded: Vec<&PointsRow> = rows.iter().filter(|r| r.hundredths != 0).collect();
+    let mut notes: Vec<String> = Vec::new();
+
+    let tx = c.transaction_with_behavior(TransactionBehavior::Immediate).map_err(e2s)?;
+    let done = q1(&tx, "SELECT COUNT(*) FROM audit_log WHERE action='import' AND entity='points'")?;
+    if done > 0 {
+        return Err("the points were imported before (the audit log has the import marker). Nothing was changed.".into());
+    }
+    for r in &rows {
+        let current: Option<i64> =
+            tx.query_row("SELECT loyalty_points FROM customers WHERE id=?1", [&r.code], |x| x.get(0)).optional().map_err(e2s)?;
+        match current {
+            None => return Err(format!("points CSV line {}: customer {} '{}' is not in the database. Nothing was changed.", r.line, r.code, r.name)),
+            Some(v) if v != 0 => {
+                return Err(format!("points CSV line {}: customer {} already has {} points. Nothing was changed.", r.line, r.code, fmt_hundredths(v)))
+            }
+            _ => {}
+        }
+    }
+    for r in &loaded {
+        tx.execute(
+            "INSERT INTO points_ledger(customer_id,at,kind,points,bill_id,note,by_name) VALUES(?1,?2,'adjust',?3,NULL,?4,?5)",
+            params![r.code, when, r.hundredths, POINTS_NOTE, IMPORT_BY],
+        )
+        .map_err(e2s)?;
+        tx.execute("UPDATE customers SET loyalty_points=loyalty_points+?2 WHERE id=?1", params![r.code, r.hundredths]).map_err(e2s)?;
+        if r.hundredths < 0 {
+            notes.push(format!("NEGATIVE opening points {} for {} '{}' (as POSBean has it; owner to confirm)", fmt_hundredths(r.hundredths), r.code, r.name));
+        }
+    }
+
+    // ---------- checks, inside the transaction ----------
+    let mut problems: Vec<String> = Vec::new();
+    tx.execute_batch("CREATE TEMP TABLE import_ids(id TEXT PRIMARY KEY)").map_err(e2s)?;
+    for r in &rows {
+        tx.execute("INSERT INTO import_ids(id) VALUES(?1)", [&r.code]).map_err(e2s)?;
+    }
+    let n_rows: i64 = tx
+        .query_row("SELECT COUNT(*) FROM points_ledger WHERE kind='adjust' AND note=?1", [POINTS_NOTE], |x| x.get(0))
+        .map_err(e2s)?;
+    let ledger_sum: i64 = tx
+        .query_row("SELECT COALESCE(SUM(points),0) FROM points_ledger WHERE kind='adjust' AND note=?1", [POINTS_NOTE], |x| x.get(0))
+        .map_err(e2s)?;
+    let cust_sum = q1(&tx, "SELECT COALESCE(SUM(loyalty_points),0) FROM customers WHERE id IN (SELECT id FROM import_ids)")?;
+    let mismatch = q1(
+        &tx,
+        "SELECT COUNT(*) FROM customers c WHERE c.id IN (SELECT id FROM import_ids)
+           AND c.loyalty_points <> (SELECT COALESCE(SUM(p.points),0) FROM points_ledger p WHERE p.customer_id=c.id)",
+    )?;
+    tx.execute_batch("DROP TABLE import_ids").map_err(e2s)?;
+    if n_rows != loaded.len() as i64 {
+        problems.push(format!("opening ledger rows {n_rows}, expected {}", loaded.len()));
+    }
+    if ledger_sum != file_total || cust_sum != file_total {
+        problems.push(format!(
+            "points: file {}, ledger {}, customers {}",
+            fmt_hundredths(file_total),
+            fmt_hundredths(ledger_sum),
+            fmt_hundredths(cust_sum)
+        ));
+    }
+    if mismatch != 0 {
+        problems.push(format!("{mismatch} customers whose loyalty_points differ from their ledger"));
+    }
+    if !problems.is_empty() {
+        return Err(format!("CHECKS FAILED, rolled back: {}", problems.join("; ")));
+    }
+    let detail = format!(
+        "{csv_name}: {} customers, {} with points loaded, total {} points; {} negative",
+        rows.len(),
+        loaded.len(),
+        fmt_hundredths(file_total),
+        rows.iter().filter(|r| r.hundredths < 0).count()
+    );
+    audit(&tx, now, IMPORT_BY, "import", "points", "points", &detail).map_err(|e| e.to_string())?;
+    let closing = finish(tx, dry_run)?;
+    let summary = format!(
+        "Checks (all passed):\n\
+         \x20 Customers in file:           {}\n\
+         \x20 Opening ledger rows:         {}  (zero-point customers get no row)\n\
+         \x20 Points total:                {}  (ledger equals customers' loyalty_points)\n\
+         {closing}",
+        rows.len(),
+        loaded.len(),
+        fmt_hundredths(ledger_sum),
+    );
+    Ok(Report { notes, summary })
+}
+
+struct CreditRow {
+    line: usize,
+    code: String,
+    paise: i64,
+    bills: String,
+    oldest: String,
+    report_names: String,
+}
+
+fn read_credit(text: &str) -> Result<Vec<CreditRow>, String> {
+    let mut out = Vec::new();
+    for (line, m) in read_table(text, CREDIT_COLUMNS)? {
+        let at = |e: String| format!("credit CSV line {line}: {e}");
+        let paise = fixed(&m["amount_to_load"], 2).map_err(at)?;
+        let code = m["customer_code"].clone();
+        if paise != 0 && code.is_empty() {
+            return Err(at(format!(
+                "'{}' (Rs {}) has no customer_code. Fill in the POSBean code, or set amount_to_load to 0.00. Nothing was changed.",
+                m["report_names"],
+                inr(paise)
+            )));
+        }
+        if paise != 0 {
+            parse_date(&m["oldest_credit_bill_date"]).map_err(at)?;
+        }
+        out.push(CreditRow {
+            line,
+            code,
+            paise,
+            bills: m["bills"].clone(),
+            oldest: m["oldest_credit_bill_date"].clone(),
+            report_names: m["report_names"].clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// Opening receivables from the paymode report's credit sales (net of credit returns). Sets customers.outstanding
+/// and writes one 'opening receivable' audit row per CSV line, dated the report date. No bills are created.
+pub fn credit(c: &mut Connection, csv_text: &str, csv_name: &str, dry_run: bool) -> Result<Report, String> {
+    let rows = read_credit(csv_text)?;
+    let file_total: i64 = rows.iter().map(|r| r.paise).sum();
+    let mut per: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
+    for r in rows.iter().filter(|r| r.paise != 0) {
+        *per.entry(r.code.clone()).or_default() += r.paise;
+    }
+    let (ry, rm, rd) = REPORT_DATE;
+    let report_day = NaiveDate::from_ymd_opt(ry, rm, rd).ok_or("bad report date")?;
+    let when = iso(local_midnight(report_day)?);
+    let now = Local::now();
+
+    let tx = c.transaction_with_behavior(TransactionBehavior::Immediate).map_err(e2s)?;
+    let done = q1(&tx, "SELECT COUNT(*) FROM audit_log WHERE action='import' AND entity='credit'")?;
+    if done > 0 {
+        return Err("the credit balances were imported before (the audit log has the import marker). Nothing was changed.".into());
+    }
+    for (code, &paise) in &per {
+        let found: Option<(String, i64)> = tx
+            .query_row("SELECT name,outstanding FROM customers WHERE id=?1", [code], |x| Ok((x.get(0)?, x.get(1)?)))
+            .optional()
+            .map_err(e2s)?;
+        let Some((name, owing)) = found else {
+            return Err(format!("customer code {code} is not in the database. Nothing was changed."));
+        };
+        if owing != 0 {
+            return Err(format!("customer {code} '{name}' already owes {}. Nothing was changed.", inr(owing)));
+        }
+        if paise < 0 {
+            return Err(format!("customer {code} would owe a negative amount {}. Nothing was changed.", inr(paise)));
+        }
+    }
+    for r in rows.iter().filter(|r| r.paise != 0) {
+        let detail = format!(
+            "credit sales to 07-Nov-2026 net of returns, CSV line {}: {} bill(s), oldest {}, POSBean name '{}', amount Rs {}; \
+             collections are not in the report, so this is the most that can be owed",
+            r.line,
+            r.bills,
+            r.oldest,
+            r.report_names,
+            inr(r.paise).replace(',', "")
+        );
+        audit(&tx, local_midnight(report_day)?, IMPORT_BY, "opening receivable", "customer", &r.code, &detail).map_err(|e| e.to_string())?;
+    }
+    for (code, &paise) in &per {
+        tx.execute("UPDATE customers SET outstanding=?2 WHERE id=?1", params![code, paise]).map_err(e2s)?;
+    }
+
+    // ---------- checks, inside the transaction ----------
+    let mut problems: Vec<String> = Vec::new();
+    let loaded_rows = rows.iter().filter(|r| r.paise != 0).count() as i64;
+    let audit_rows: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE action='opening receivable' AND entity='customer' AND at=?1",
+            [&when],
+            |x| x.get(0),
+        )
+        .map_err(e2s)?;
+    tx.execute_batch("CREATE TEMP TABLE import_ids(id TEXT PRIMARY KEY)").map_err(e2s)?;
+    for code in per.keys() {
+        tx.execute("INSERT INTO import_ids(id) VALUES(?1)", [code]).map_err(e2s)?;
+    }
+    let db_total = q1(&tx, "SELECT COALESCE(SUM(outstanding),0) FROM customers WHERE id IN (SELECT id FROM import_ids)")?;
+    let n_owing = q1(&tx, "SELECT COUNT(*) FROM customers WHERE id IN (SELECT id FROM import_ids) AND outstanding>0")?;
+    tx.execute_batch("DROP TABLE import_ids").map_err(e2s)?;
+    if audit_rows != loaded_rows {
+        problems.push(format!("opening receivable audit rows {audit_rows}, expected {loaded_rows}"));
+    }
+    if db_total != file_total {
+        problems.push(format!("receivables: file {}, database {}", inr(file_total), inr(db_total)));
+    }
+    if n_owing != per.len() as i64 {
+        problems.push(format!("customers with a balance {n_owing}, expected {}", per.len()));
+    }
+    if !problems.is_empty() {
+        return Err(format!("CHECKS FAILED, rolled back: {}", problems.join("; ")));
+    }
+    let detail = format!("{csv_name}: {loaded_rows} lines for {} customers, total Rs {}", per.len(), inr(file_total).replace(',', ""));
+    audit(&tx, now, IMPORT_BY, "import", "credit", "credit", &detail).map_err(|e| e.to_string())?;
+    let closing = finish(tx, dry_run)?;
+    let summary = format!(
+        "Checks (all passed):\n\
+         \x20 CSV lines with an amount:    {loaded_rows}\n\
+         \x20 Customers with a balance:    {}\n\
+         \x20 Total receivable loaded:     Rs {}  (CSV total Rs {})\n\
+         \x20 Audit rows dated {}:      {audit_rows}\n\
+         {closing}",
+        per.len(),
+        inr(db_total),
+        inr(file_total),
+        report_day.format("%d-%b-%Y"),
+    );
+    Ok(Report { notes: Vec::new(), summary })
 }
