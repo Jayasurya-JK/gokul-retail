@@ -3,6 +3,8 @@
 use gokul_core::{Db, Session};
 use serde_json::Value;
 use std::sync::Arc;
+use std::time::Duration;
+use tauri::Manager;
 
 /// The shared database (`%APPDATA%\GokulRetail\gokul.db`, same file for POS and Office) and the signed-in user of this
 /// app. The session lives here, in Rust: screens cannot say who they are.
@@ -57,6 +59,21 @@ fn main() {
     tauri::Builder::default()
         .manage(open_backend())
         .invoke_handler(tauri::generate_handler![gokul_call])
+        .setup(|app| {
+            // Safety net: the window starts hidden and the UI shows it once mounted. If that never happens
+            // (for example a JavaScript error on start), show it anyway after 3 s so the app is never invisible.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(3));
+                if let Some(win) = handle.get_webview_window("main") {
+                    if !win.is_visible().unwrap_or(true) {
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                }
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Gokul");
 }
