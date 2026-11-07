@@ -95,15 +95,15 @@ await step('billing: type-ahead "gr" + Enter adds the top suggestion', async () 
   await type(page, '1'); await press(page, 'Enter', 300); // top match is a loose item: it asks for the weight
 }, page);
 await step('billing: qty x code (3*103)', async () => { await scanTo('3*103'); expect(await has('Groundnut Oil 500 ml'), 'line missing'); }, page);
-await step('billing: F4 qty change then F5 line discount 10%', async () => {
+await step('billing: F4 qty change then Ctrl+D line discount 10%', async () => {
   await press(page, 'F4'); await sleep(100); await type(page, '4'); await press(page, 'Enter', 250);
-  await press(page, 'F5'); await sleep(100); await type(page, '10%'); await press(page, 'Enter', 250);
+  await press(page, 'Control+d'); await sleep(100); await type(page, '10%'); await press(page, 'Enter', 250);
   await shot(page, '03-billing-lines');
 }, page);
-await step('billing: F6 hold then F7 recall', async () => {
+await step('billing: F6 hold then Shift+F6 recall', async () => {
   await press(page, 'F6', 500); await waitText('Bill held');
   expect(q('SELECT COUNT(*) n FROM held_bills WHERE recalled_at IS NULL')[0].n === 1, 'held bill not saved');
-  await press(page, 'F7', 500); await waitText('Held bills'); await press(page, 'Enter', 600);
+  await press(page, 'Shift+F6', 500); await waitText('Held bills'); await press(page, 'Enter', 600);
   await waitText('Held bill restored');
   expect(q('SELECT COUNT(*) n FROM held_bills WHERE recalled_at IS NULL')[0].n === 0, 'held bill still open');
   expect(await has('Groundnut Oil 500 ml'), 'lines not back');
@@ -150,20 +150,20 @@ await shot(page, '06-after-billing');
 
 /* ---------------- restart: bills and stock survive ---------------- */
 const stockBefore = { 101: stockOf('101'), 102: stockOf('102'), 103: stockOf('103'), 104: stockOf('104'), 105: stockOf('105') };
-await step('restart: app closed and reopened, bills are still there (Sales, Alt+3) and stock stayed down', async () => {
+await step('restart: app closed and reopened, bills are still there (Bills, Alt+4) and stock stayed down', async () => {
   await sleep(500);
   killApps(); await sleep(1500);
   ({ page, errors } = await launch('pos')); await sleep(2000);
   expect(billCount() === seedBills + 2, 'bills lost on restart');
   await login('1234'); await waitRoute('billing');
-  await press(page, 'Alt+3', 800); await waitRoute('sales');
+  await press(page, 'Alt+4', 800); await waitRoute('sales');
   expect(await has(bill1.number) && await has(bill2.number), 'saved bills not listed on the Sales screen');
   await shot(page, '07-history');
   for (const c of Object.keys(stockBefore)) expect(stockOf(c) === stockBefore[c], 'stock changed over restart ' + c);
 }, page);
 await step('restart: stock numbers shown in item search match the database', async () => {
   await press(page, 'Escape', 500); await waitRoute('billing');
-  await press(page, 'F2', 500); await type(page, '103'); await sleep(400);
+  await press(page, 'Control+f', 500); await type(page, '103'); await sleep(400);
   const s = stockOf('103') / 1000;
   expect(await has(String(s)), `search does not show stock ${s}`);
   await shot(page, '08-search-stock');
@@ -172,7 +172,7 @@ await step('restart: stock numbers shown in item search match the database', asy
 
 /* ---------------- history: reprint, cancel ---------------- */
 await step('sales: Enter reprints (recorded), cancel with wrong then right manager PIN', async () => {
-  await press(page, 'Alt+3', 800); await waitRoute('sales');
+  await press(page, 'Alt+4', 800); await waitRoute('sales');
   await press(page, 'Enter', 500); await waitText('Duplicate copy');
   expect(q('SELECT COUNT(*) n FROM bill_reprints')[0].n === 1, 'reprint not recorded');
   await press(page, 'ArrowDown', 300); // newest first: the second row is bill 1
@@ -259,11 +259,11 @@ await step('exchange: return gives credit that is applied to a new bill', async 
 }, page);
 
 /* ---------------- Esc paths and lock ---------------- */
-await step('esc paths: F1 help, F2 search, F3 customer all close with Esc; Ctrl+L lock keeps the bill', async () => {
+await step('esc paths: F1 help, Ctrl+F search, F11 customer all close with Esc; Ctrl+L lock keeps the bill', async () => {
   await press(page, 'F1', 400); await waitText('Keyboard shortcuts'); await press(page, 'Escape', 400);
   expect(!(await has('Keyboard shortcuts')), 'help did not close');
-  await press(page, 'F2', 400); await press(page, 'Escape', 400); expect(on('billing'), 'left billing after F2 Esc');
-  await press(page, 'F3', 400); await press(page, 'Escape', 400); expect(on('billing'), 'left billing after F3 Esc');
+  await press(page, 'Control+f', 400); await press(page, 'Escape', 400); expect(on('billing'), 'left billing after Ctrl+F Esc');
+  await press(page, 'F11', 400); await press(page, 'Escape', 400); expect(on('billing'), 'left billing after F11 Esc');
   await scanTo('105'); // a line on the bill while locked
   await page.keyboard.press('Control+l'); await waitRoute('lock');
   await type(page, '0000'); await sleep(700); expect(on('lock'), 'wrong PIN unlocked');
@@ -274,16 +274,17 @@ await step('esc paths: F1 help, F2 search, F3 customer all close with Esc; Ctrl+
 }, page);
 
 /* ---------------- menu on every screen ---------------- */
-await step('menu: Alt+1..6 reach every screen, F1 opens the shortcuts sheet on each, Esc returns to billing', async () => {
-  const tabs = [['1', 'billing'], ['2', 'customers'], ['3', 'sales'], ['4', 'returns'], ['5', 'cash'], ['6', 'day-close']];
+await step('menu: Alt+1..8 reach every tab, F1 opens the shortcuts sheet on each, Esc returns to billing', async () => {
+  // Round 4 tabs: Point of Sale, POS1, POS2, Bills, Sales Report, Paymode Report, Stock, Customer Profile (Returns, Expenses, Day close: F10, F9, Ctrl+E)
+  const tabs = [['1', 'billing'], ['2', 'pos1'], ['3', 'pos2'], ['4', 'sales'], ['5', 'reports/sales'], ['6', 'reports/paymode'], ['7', 'reports/stock'], ['8', 'customers']];
   for (const [n, route] of tabs) {
     await press(page, 'Alt+' + n, 700); await waitRoute(route);
-    expect(await has('Billing') && await has('Customers') && await has('Expenses') && await has('Day close'), 'menu missing on ' + route);
+    expect(await has('Point of Sale') && await has('Sales Report') && await has('Paymode Report') && await has('Customer Profile'), 'menu missing on ' + route);
     await press(page, 'F1', 500); await waitText('Keyboard shortcuts');
-    if (route !== 'billing') expect(await has('On this screen'), 'no screen keys listed first on ' + route);
-    if (route === 'sales' || route === 'cash') await shot(page, 'nav-' + route);
+    if (!['billing', 'pos1', 'pos2'].includes(route)) expect(await has('On this screen'), 'no screen keys listed first on ' + route);
+    if (route === 'sales' || route === 'reports/sales') await shot(page, 'nav-' + route.replace('/', '-'));
     await press(page, 'Escape', 500); expect(!(await has('Keyboard shortcuts')), 'F1 sheet did not close on ' + route);
-    if (route !== 'billing') { await press(page, 'Escape', 700); await waitRoute('billing'); }
+    if (!['billing', 'pos1', 'pos2'].includes(route)) { await press(page, 'Escape', 700); await waitRoute('billing'); }
   }
   expect(errors.length === 0, 'console errors: ' + errors.join(' | '));
 }, page);
@@ -356,9 +357,9 @@ await step('after Z: signing in again asks to open a new day', async () => {
   await press(page, 'F3', 300); await press(page, 'F12', 700); await waitRoute('billing');
   expect(q('SELECT COUNT(*) n FROM shifts')[0].n === 2, 'second shift not created');
 }, page);
-await step('credit sale: customer picked with F3, paid on credit (F4), balance goes up', async () => {
+await step('credit sale: customer picked with F11, paid on credit (F4), balance goes up', async () => {
   const before = q("SELECT outstanding FROM customers WHERE id='c3'")[0].outstanding;
-  await press(page, 'F3', 500); await type(page, 'Geetha'); await sleep(500); await press(page, 'ArrowDown', 150); await press(page, 'Enter', 500);
+  await press(page, 'F11', 500); await type(page, 'Geetha'); await sleep(500); await press(page, 'ArrowDown', 150); await press(page, 'Enter', 500);
   await waitText('Geetha Subramanian');
   await scanTo('104'); await press(page, 'F12', 500);
   await press(page, 'F4', 300); await press(page, 'Enter', 900);
@@ -371,8 +372,8 @@ await step('credit sale: customer picked with F3, paid on credit (F4), balance g
   expect(after === before + pays[0].amount, `outstanding ${before} -> ${after}, expected +${pays[0].amount}`);
   expect(b.status === 'credit', 'bill status ' + b.status);
 }, page);
-await step('new customer from F3 (name + phone) is saved and attached', async () => {
-  await press(page, 'F3', 500); await type(page, 'Ravi Testkumar'); await sleep(500);
+await step('new customer from F11 (name + phone) is saved and attached', async () => {
+  await press(page, 'F11', 500); await type(page, 'Ravi Testkumar'); await sleep(500);
   for (let i = 0; i < 3; i++) await press(page, 'ArrowDown', 100); // walk-in, (no match), new
   await press(page, 'Enter', 500);
   await page.keyboard.press('Tab'); await type(page, '9876501234'); await press(page, 'Enter', 800);

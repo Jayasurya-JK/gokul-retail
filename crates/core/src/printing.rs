@@ -186,6 +186,7 @@ fn mode_label(m: &str) -> &'static str {
         "card" => "CARD",
         "credit" => "CREDIT (PAY LATER)",
         "credit_note" => "CREDIT NOTE",
+        "sodexo" => "SODEXO",
         "bank" => "BANK",
         _ => "OTHER",
     }

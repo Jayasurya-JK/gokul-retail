@@ -799,6 +799,7 @@ pub fn close_sheet(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
                 payments: vec![Payment { mode: "credit".into(), amount: total, r#ref: Some(format!("Aravai {day}")) }],
                 cashier: Some(who.clone()),
                 manager_pin: None,
+                extras: Default::default(),
             },
             at,
             None,

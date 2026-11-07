@@ -306,7 +306,7 @@ fn saving_an_item_keeps_its_shelf_life_and_the_migration_is_additive() {
         let r = gokul_core::catalog::save_item(c, &serde_json::from_value(input).unwrap())?;
         assert_eq!(r["ok"], true, "{r}");
         assert_eq!((r["item"]["shelfLife"].as_i64(), r["item"]["shelfLifeUnit"].as_str()), (Some(6), Some("months")));
-        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 7);
+        assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, 8);
         Ok(())
     })
     .unwrap();

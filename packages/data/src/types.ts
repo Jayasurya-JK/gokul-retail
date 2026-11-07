@@ -32,6 +32,8 @@ export interface Item {
   /** Selling price per unit, GST inclusive */
   price: Paise;
   cost: Paise;
+  /** Optional wholesale price per unit, GST inclusive: used when a bill is switched to wholesale mode */
+  wholesalePrice?: Paise;
   stock: Milli;
   reorderLevel: Milli;
   active: boolean;
@@ -49,7 +51,7 @@ export interface Customer {
 }
 
 /** credit_note = store credit (a credit note spent in parts); points = loyalty points redeemed */
-export type PayMode = 'cash' | 'upi' | 'card' | 'credit' | 'credit_note' | 'points';
+export type PayMode = 'cash' | 'upi' | 'card' | 'credit' | 'credit_note' | 'points' | 'sodexo';
 export interface Payment { mode: PayMode; amount: Paise; ref?: string }
 
 export interface BillLine {
@@ -81,7 +83,24 @@ export interface BillTotals {
   grand: Paise;
 }
 
-export interface Bill {
+/** Round 4: per-bill extras shared by a draft, a held bill and a saved bill. All optional. */
+export interface BillExtras {
+  /** Salesman / staff attached to the bill */
+  staff?: string;
+  deliveryAddress?: string;
+  deliveryLocality?: string;
+  /** Home delivery charge, paise: billed as a "Delivery charge" line (GST rate from settings.deliveryGstRate) */
+  deliveryCharge?: Paise;
+  /** Bill uses wholesale prices */
+  wholesale?: boolean;
+  /** Cash discount on the whole bill, percent x 100 (250 = 2.5%). Separate from item discounts. */
+  cashDiscBps?: number;
+  /** Saved cash discount in paise (already inside the bill-level discount) */
+  cashDisc?: Paise;
+  remarks?: string;
+}
+
+export interface Bill extends BillExtras {
   id: string;
   number: string;
   at: string; // ISO
@@ -95,7 +114,7 @@ export interface Bill {
   status: 'paid' | 'credit' | 'cancelled' | 'returned';
 }
 
-export interface BillDraft {
+export interface BillDraft extends BillExtras {
   customerId?: string;
   customerName?: string;
   lines: BillLine[];
@@ -106,7 +125,7 @@ export interface BillDraft {
   managerPin?: string;
 }
 
-export interface HeldBill {
+export interface HeldBill extends BillExtras {
   id: string;
   at: string;
   customerName: string;
@@ -147,6 +166,8 @@ export interface Settings {
   shopName: string; address: string; gstin: string; phone: string;
   counter: string; billPrefix: string; receiptFooter: string;
   printer: string; roundToRupee: boolean;
+  /** GST percent on a home-delivery charge (0 = delivery is not taxed) */
+  deliveryGstRate?: number;
 }
 
 export interface DaySummary { date: string; sales: Paise; bills: number }

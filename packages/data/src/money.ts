@@ -110,6 +110,35 @@ export function computeTotals(lines: BillLine[], billDiscount: Paise = 0, roundT
   };
 }
 
+/** Cash discount in paise: bps (percent x 100) of the item lines' net, rounded. Same as the Rust `cash_discount`. */
+export function cashDiscount(lines: BillLine[], bps: number): Paise {
+  if (!(bps > 0)) return 0;
+  return Math.round((lines.reduce((s, l) => s + l.amount, 0) * bps) / 10000);
+}
+
+/**
+ * Totals for item lines plus an optional home-delivery charge (a separate taxable amount at `deliveryGst` percent). The bill
+ * discount is spread over the item lines only. With no delivery charge this is exactly `computeTotals`. Same as the Rust side.
+ */
+export function computeTotalsWithDelivery(lines: BillLine[], billDiscount: Paise, roundToRupee: boolean, delivery: Paise, deliveryGst: number): BillTotals {
+  if (!(delivery > 0)) return computeTotals(lines, billDiscount, roundToRupee);
+  const t = computeTotals(lines, billDiscount, false);
+  const taxable = Math.round((delivery * 100) / (100 + deliveryGst));
+  const per = new Map<number, number[]>(t.slabs.map((s) => [s.rate, [s.taxable, s.cgst + s.sgst]]));
+  const cur = per.get(deliveryGst) ?? [0, 0];
+  per.set(deliveryGst, [cur[0] + taxable, cur[1] + delivery - taxable]);
+  const slabs: GstSlab[] = [...per.entries()].sort((a, b) => a[0] - b[0]).map(([rate, [tx, gst]]) => {
+    const cgst = Math.floor(gst / 2);
+    return { rate, taxable: tx, cgst, sgst: gst - cgst };
+  });
+  const beforeRound = t.beforeRound + delivery;
+  const grand = roundToRupee ? Math.round(beforeRound / 100) * 100 : beforeRound;
+  return {
+    ...t, gross: t.gross + delivery, slabs, beforeRound, grand, roundOff: grand - beforeRound,
+    taxable: slabs.reduce((s, x) => s + x.taxable, 0), gst: slabs.reduce((s, x) => s + x.cgst + x.sgst, 0),
+  };
+}
+
 /**
  * One credit rule everywhere: a customer's credit limit is 0 (credit NOT allowed), above 0 (allowed up to that amount)
  * or NO_CREDIT_LIMIT (-1, "no limit", only when the owner chooses it).

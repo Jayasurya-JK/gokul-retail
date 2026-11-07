@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { cn } from '../cn';
 import { Kbd } from '../components/Display';
 
@@ -68,10 +68,14 @@ export function FKeyBar({ keys }: { keys: FKey[] }) {
  * Billing-counter shell. Fills the window: top bar, work area (main + right panel),
  * and an optional F-key bar at the bottom (off unless the counter turns on "Show key bar"). Nothing here ever scrolls the page.
  */
+/** The app puts its status bar (user, counter, today's sales ...) here once; every PosLayout screen shows it at the bottom. */
+export const PosStatusContext = createContext<ReactNode>(null);
+
 export function PosLayout({ topBar, side, keys, children, sideWidth }: {
   topBar: ReactNode; side?: ReactNode; keys: FKey[]; children: ReactNode; sideWidth?: number;
 }) {
   const [showKeys] = useKeyBar();
+  const status = useContext(PosStatusContext);
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg text-ink">
       <header className="flex h-12 shrink-0 items-center gap-1 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">{topBar}</header>
@@ -87,6 +91,7 @@ export function PosLayout({ topBar, side, keys, children, sideWidth }: {
         )}
       </div>
       {showKeys && <FKeyBar keys={keys} />}
+      {status}
     </div>
   );
 }

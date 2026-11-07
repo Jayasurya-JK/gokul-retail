@@ -1,26 +1,37 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeftRight, ChevronDown, Keyboard, Lock, LogOut, Moon, Pause, Printer, Receipt, ShieldCheck, ShoppingCart, Undo2, UserRound, Users, Wallet,
+  ArrowLeftRight, BarChart3, ChevronDown, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, Receipt, ReceiptText, ShieldCheck, ShoppingCart, Undo2, UserRound, Users, Wallet,
 } from 'lucide-react';
 import { Kbd, Logo, Tooltip, cn } from '@gokul/ui';
-import { useSession } from '../store';
+import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
+import { DropMenu } from './BillToolbar';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/** The window's tabs: the three bills first, then the reports and the customer list. Returns, Expenses and Day close live under "More". */
 const MENU = [
-  { label: 'Billing', path: '/billing', icon: ShoppingCart, match: ['/billing'] },
-  { label: 'Customers', path: '/customers', icon: Users, match: ['/customers'] },
-  { label: 'Sales', path: '/sales', icon: Receipt, match: ['/sales', '/history'] },
-  { label: 'Returns', path: '/returns', icon: Undo2, match: ['/returns'] },
-  { label: 'Expenses', path: '/cash', icon: Wallet, match: ['/cash'] },
-  { label: 'Day close', path: '/day-close', icon: Moon, match: ['/day-close'] },
+  { label: 'Point of Sale', path: '/billing', icon: ShoppingCart, match: ['/billing'] },
+  { label: 'POS1', path: '/pos1', icon: ReceiptText, match: ['/pos1'] },
+  { label: 'POS2', path: '/pos2', icon: ReceiptText, match: ['/pos2'] },
+  { label: 'Bills', path: '/sales', icon: Receipt, match: ['/sales', '/history'] },
+  { label: 'Sales Report', path: '/reports/sales', icon: BarChart3, match: ['/reports/sales'] },
+  { label: 'Paymode Report', path: '/reports/paymode', icon: CreditCard, match: ['/reports/paymode'] },
+  { label: 'Stock', path: '/reports/stock', icon: Package, match: ['/reports/stock'] },
+  { label: 'Customer Profile', path: '/customers', icon: Users, match: ['/customers'] },
 ] as const;
+/** The three bill screens: Esc from any other screen comes back to the main one */
+export const BILL_PATHS = ['/billing', '/pos1', '/pos2'];
 
 export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () => void; onCloseDay?: () => void; minimal?: boolean }) {
   const printer = usePrinterStatus();
+  const openLines: Record<string, number> = {
+    '/billing': billingStores.pos((s) => s.lines.length),
+    '/pos1': billingStores.pos1((s) => s.lines.length),
+    '/pos2': billingStores.pos2((s) => s.lines.length),
+  };
   const { user, shift, settings, heldCount, signOut } = useSession();
   const nav = useNavigate();
   const { pathname } = useLocation();
@@ -40,10 +51,10 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     const h = (e: KeyboardEvent) => {
       if (e.key === 'F1') { e.preventDefault(); e.stopPropagation(); setKeys((o) => !o); return; }
       if (keys && e.key !== 'Escape' && e.key !== 'Tab' && e.key !== ' ' && e.key !== 'Enter') { e.stopPropagation(); return; } // the sheet is modal: nothing leaks to the screen behind
-      if (e.altKey && !e.ctrlKey && /^[1-6]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); nav(MENU[Number(e.key) - 1].path); }
+      if (e.altKey && !e.ctrlKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); nav(MENU[Number(e.key) - 1].path); }
       else if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'u') { e.preventDefault(); e.stopPropagation(); setMenu((o) => !o); }
       else if (menu && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false); }
-      else if (e.key === 'Escape' && !keys && pathname !== '/billing') {
+      else if (e.key === 'Escape' && !keys && !BILL_PATHS.includes(pathname)) {
         // Any other screen: Esc goes back to billing, unless the screen or a dialog used the Esc itself.
         window.setTimeout(() => { if (!e.defaultPrevented && !document.querySelector('[role="dialog"]')) nav('/billing'); }, 0);
       }
@@ -100,12 +111,13 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <button
                 onClick={() => nav(m.path)} tabIndex={-1}
                 className={cn(
-                  'relative flex shrink-0 items-center gap-2 whitespace-nowrap px-3 text-[13px] font-medium transition-colors',
+                  'relative flex shrink-0 items-center gap-2 whitespace-nowrap px-2.5 text-[13px] font-medium transition-colors min-[1450px]:px-3',
                   active ? 'text-white' : 'text-chrome-muted hover:bg-white/[0.06] hover:text-white',
                 )}
               >
-                <Icon size={15} className={active ? 'text-yellow' : ''} />
+                <Icon size={15} className={cn('hidden min-[1450px]:block', active && 'text-yellow')} />
                 {m.label}
+                {openLines[m.path] > 0 && <span className="num rounded-full bg-yellow px-1.5 text-[10px] font-bold leading-4 text-chrome" title="Items on this bill">{openLines[m.path]}</span>}
                 {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
               </button>
             </Tooltip>
@@ -115,10 +127,10 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
 
       <div className="flex-1" />
 
-      {pathname !== '/billing' && (
+      {!BILL_PATHS.includes(pathname) && (
         <Tooltip label="Back to billing" kbd="Esc">
-          <button onClick={() => nav('/billing')} tabIndex={-1} aria-label="Back to billing (Esc)" className="ml-3 flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/15 px-2 text-xs font-medium text-white hover:bg-white/10">
-            <ShoppingCart size={13} className="text-yellow" /> <span className="hidden min-[1500px]:inline">Back to billing</span> <Kbd tone="chrome">Esc</Kbd>
+          <button onClick={() => nav('/billing')} tabIndex={-1} aria-label="Back to billing (Esc)" className="ml-3 hidden h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/15 px-2 text-xs font-medium text-white hover:bg-white/10 min-[1450px]:flex">
+            <ShoppingCart size={13} className="text-yellow" /> <span className="hidden min-[1800px]:inline">Back to billing</span> <Kbd tone="chrome">Esc</Kbd>
           </button>
         </Tooltip>
       )}
@@ -129,8 +141,19 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       >
         <Pause size={13} />
         <span className="num font-semibold">{heldCount}</span><span>held</span>
-        <Kbd tone="chrome">F7</Kbd>
+        <Kbd tone="chrome">Shift+F6</Kbd>
       </button>
+
+      <DropMenu
+        label="More" icon={<ChevronDown size={14} />} variant="chrome"
+        items={[
+          { label: 'Returns and exchange', kbd: 'F10', icon: <Undo2 size={15} />, onClick: () => nav('/returns') },
+          { label: 'Expenses and cash', kbd: 'F9', icon: <Wallet size={15} />, onClick: () => nav('/cash') },
+          { label: 'Day close', kbd: 'Ctrl+E', icon: <Moon size={15} />, onClick: () => nav('/day-close') },
+          { label: 'Staff report', icon: <Users size={15} />, onClick: () => nav('/reports/staff') },
+          { label: 'Lock counter', kbd: 'Ctrl+L', icon: <Lock size={15} />, onClick: () => nav('/lock') },
+        ]}
+      />
 
       <div className="mx-1 flex items-center gap-0.5">
         <Tooltip label={printer.ready ? `Printer ready: ${printer.name}` : printer.message}>
@@ -151,7 +174,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
         <button onClick={() => setMenu((o) => !o)} tabIndex={-1} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-white/10">
           <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: user?.color }}>{user?.initials}</span>
           <span className="hidden text-left leading-tight min-[1500px]:block">
-            <span className="block text-xs font-semibold text-white">{user?.name}</span>
+            <span className="block whitespace-nowrap text-xs font-semibold text-white">{user?.name}</span>
             <span className="block text-[10px] capitalize text-chrome-muted">{user?.role}</span>
           </span>
           <ChevronDown size={13} className="text-chrome-muted" />

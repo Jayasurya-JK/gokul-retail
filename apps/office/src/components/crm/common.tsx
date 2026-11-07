@@ -22,8 +22,8 @@ export function StatusBadge({ status }: { status: Bill['status'] }) {
   return <Badge tone={statusTone[status]}>{statusLabel[status]}</Badge>;
 }
 
-export const modeLabel: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note', points: 'Points' };
-export const modeTone: Record<PayMode, Tone> = { cash: 'success', upi: 'info', card: 'neutral', credit: 'warning', credit_note: 'neutral', points: 'neutral' };
+export const modeLabel: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note', points: 'Points', sodexo: 'Sodexo' };
+export const modeTone: Record<PayMode, Tone> = { cash: 'success', upi: 'info', card: 'neutral', credit: 'warning', credit_note: 'neutral', points: 'neutral', sodexo: 'neutral' };
 export function billMode(b: Bill): string {
   return b.payments.length > 1 ? 'Split' : modeLabel[b.payments[0]?.mode ?? 'cash'];
 }

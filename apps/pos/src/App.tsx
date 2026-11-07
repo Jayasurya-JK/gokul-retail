@@ -1,5 +1,5 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ToastProvider, TooltipProvider, useDesktopGuards } from '@gokul/ui';
+import { PosStatusContext, ToastProvider, TooltipProvider, useDesktopGuards } from '@gokul/ui';
 import { useSession } from './store';
 import { Login } from './pages/Login';
 import { Billing } from './pages/Billing';
@@ -11,6 +11,8 @@ import { Expenses } from './pages/Expenses';
 import { DayClose } from './pages/DayClose';
 import { Lock } from './pages/Lock';
 import { ScanRouter } from './scanner';
+import { PaymodeReportPage, SalesReportPage, StaffReportPage, StockPage } from './pages/Reports';
+import { StatusBar } from './components/StatusBar';
 
 function Guard({ children }: { children: JSX.Element }) {
   const user = useSession((s) => s.user);
@@ -22,11 +24,18 @@ export function App() {
   return (
     <TooltipProvider>
       <ToastProvider>
+        <PosStatusContext.Provider value={<StatusBar />}>
         <HashRouter>
           <ScanRouter />
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/billing" element={<Guard><Billing /></Guard>} />
+            <Route path="/billing" element={<Guard><Billing slot="pos" /></Guard>} />
+            <Route path="/pos1" element={<Guard><Billing slot="pos1" /></Guard>} />
+            <Route path="/pos2" element={<Guard><Billing slot="pos2" /></Guard>} />
+            <Route path="/reports/sales" element={<Guard><SalesReportPage /></Guard>} />
+            <Route path="/reports/paymode" element={<Guard><PaymodeReportPage /></Guard>} />
+            <Route path="/reports/stock" element={<Guard><StockPage /></Guard>} />
+            <Route path="/reports/staff" element={<Guard><StaffReportPage /></Guard>} />
             <Route path="/day-open" element={<Guard><DayOpen /></Guard>} />
             <Route path="/sales" element={<Guard><Sales /></Guard>} />
             <Route path="/customers" element={<Guard><Customers /></Guard>} />
@@ -38,6 +47,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/billing" replace />} />
           </Routes>
         </HashRouter>
+        </PosStatusContext.Provider>
       </ToastProvider>
     </TooltipProvider>
   );

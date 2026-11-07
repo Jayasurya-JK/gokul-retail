@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Lock as LockIcon, LogOut, ShoppingBasket } from 'lucide-react';
 import { countdownText, lockedSeconds } from '@gokul/data';
 import { Kbd, Logo, StatusDot, cn, useCountdown } from '@gokul/ui';
-import { api, useBilling, useSession } from '../store';
+import { api, useOpenLines, useSession } from '../store';
 
 const PIN_LEN = 4;
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -12,7 +12,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export function Lock() {
   const nav = useNavigate();
   const { user, settings, heldCount, signOut } = useSession();
-  const lines = useBilling((s) => s.lines.length);
+  const lines = useOpenLines();
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);

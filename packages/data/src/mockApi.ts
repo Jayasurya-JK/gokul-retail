@@ -8,8 +8,9 @@ import { createCrmMock } from './areas/crm';
 import { createReportsMock } from './areas/reports';
 import { createExpensesMock } from './areas/expenses';
 import { createMillMock } from './areas/mill';
+import { createPosReportsMock } from './areas/posreports';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
-import { computeTotals } from './money';
+import { cashDiscount, computeTotalsWithDelivery } from './money';
 import { fuzzyFilter } from './fuzzy';
 import {
   buildBills, buildCustomers, buildItems, buildProduction, buildPurchases, buildSuppliers, categories, settings, users,
@@ -73,13 +74,21 @@ export function createMockApi(): Api {
     getBill: async (id) => bills.find((b) => b.id === id) ?? null,
     saveBill: async (draft: BillDraft) => {
       billSeq += 1;
-      const totals = computeTotals(draft.lines, draft.billDiscount, settings.roundToRupee);
+      const cashDisc = cashDiscount(draft.lines, draft.cashDiscBps ?? 0);
+      const delivery = draft.deliveryCharge ?? 0;
+      const dGst = settings.deliveryGstRate ?? 0;
+      const totals = computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDisc, settings.roundToRupee, delivery, dGst);
       const credit = draft.payments.some((p) => p.mode === 'credit');
+      const lines = delivery > 0
+        ? [...draft.lines, { itemId: '_delivery', code: 'DLV', name: 'Delivery charge', unit: 'pc' as const, qty: 1000, rate: delivery, discount: 0, gstRate: dGst, amount: delivery }]
+        : draft.lines;
       const bill: Bill = {
         id: `b${billSeq}`, number: `${settings.billPrefix}-${String(48200 + billSeq).padStart(6, '0')}`,
         at: new Date().toISOString(), cashier: draft.cashier ?? 'Cashier', counter: settings.counter,
         customerId: draft.customerId, customerName: draft.customerName ?? 'Walk-in',
-        lines: draft.lines, totals, payments: draft.payments, status: credit ? 'credit' : 'paid',
+        lines, totals, payments: draft.payments, status: credit ? 'credit' : 'paid',
+        staff: draft.staff ?? '', deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: delivery,
+        wholesale: !!draft.wholesale, cashDiscBps: draft.cashDiscBps ?? 0, cashDisc, remarks: draft.remarks ?? '',
       };
       bills.push(bill);
       for (const l of draft.lines) {
@@ -94,7 +103,9 @@ export function createMockApi(): Api {
       const h: HeldBill = {
         id: `h${heldSeq}`, at: new Date().toISOString(), customerName: draft.customerName ?? 'Walk-in',
         customerId: draft.customerId, lines: draft.lines, billDiscount: draft.billDiscount,
-        total: computeTotals(draft.lines, draft.billDiscount).grand,
+        total: computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDiscount(draft.lines, draft.cashDiscBps ?? 0), true, draft.deliveryCharge ?? 0, settings.deliveryGstRate ?? 0).grand,
+        staff: draft.staff, deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: draft.deliveryCharge,
+        wholesale: draft.wholesale, cashDiscBps: draft.cashDiscBps, remarks: draft.remarks,
       };
       held.push(h);
       return h;
@@ -168,6 +179,7 @@ export function createMockApi(): Api {
     ...createCrmMock(store),
     ...createExpensesMock(store),
     ...createMillMock(store),
+    ...createPosReportsMock(store),
     ...createReportsMock(store),
   };
   return api;

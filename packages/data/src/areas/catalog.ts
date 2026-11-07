@@ -30,6 +30,8 @@ export interface ItemInput {
   mrp: Paise;
   price: Paise;
   cost: Paise;
+  /** Optional wholesale price (GST inclusive); leave empty for none */
+  wholesalePrice?: Paise;
   reorderLevel: Milli;
   active: boolean;
 }
@@ -265,6 +267,7 @@ export function createCatalogMock(store: MockStore): CatalogApi {
         unit: input.unit, loose: input.loose, packSize: input.loose ? undefined : input.packSize.trim(),
         shelfLife: input.shelfLife && input.shelfLife > 0 ? input.shelfLife : undefined, shelfLifeUnit: input.shelfLife && input.shelfLife > 0 ? (input.shelfLifeUnit ?? 'months') : undefined,
         hsn: input.hsn.trim(), gstRate: input.gstRate, mrp: input.mrp, price: input.price, cost: input.cost,
+        wholesalePrice: input.wholesalePrice && input.wholesalePrice > 0 ? input.wholesalePrice : undefined,
         reorderLevel: input.reorderLevel, active: input.active,
       };
       let it: Item;

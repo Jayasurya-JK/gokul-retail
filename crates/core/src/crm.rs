@@ -109,7 +109,7 @@ pub fn sales_filter_options(conn: &Connection) -> Result<Value> {
 // Customers
 // =====================================================================
 
-const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes";
+const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes,c.father_name,c.dob,c.anniversary,c.pan,c.locality,c.route,c.credit_days,c.opening_balance";
 
 type Spend = (i64, i64, Option<String>);
 
@@ -138,6 +138,11 @@ fn customer_row(r: &rusqlite::Row, now: chrono::DateTime<Local>, spend: &HashMap
     if !notes.is_empty() {
         m.insert("notes".into(), json!(notes));
     }
+    for (k, i) in [("fatherName", 15), ("dob", 16), ("anniversary", 17), ("pan", 18), ("locality", 19), ("route", 20)] {
+        m.insert(k.into(), json!(r.get::<_, String>(i)?));
+    }
+    m.insert("creditDays".into(), json!(r.get::<_, i64>(21)?));
+    m.insert("openingBalance".into(), json!(r.get::<_, i64>(22)?));
     m.insert("totalSpend".into(), json!(total));
     m.insert("visits".into(), json!(visits));
     m.insert("avgBill".into(), json!(if visits > 0 { round_div(total, visits) } else { 0 }));
@@ -215,6 +220,23 @@ pub struct CustomerInput {
     pub credit_limit: i64,
     #[serde(default)]
     pub notes: Option<String>,
+    // Customer Profile (POS) fields
+    #[serde(default)]
+    pub father_name: Option<String>,
+    #[serde(default)]
+    pub dob: Option<String>,
+    #[serde(default)]
+    pub anniversary: Option<String>,
+    #[serde(default)]
+    pub pan: Option<String>,
+    #[serde(default)]
+    pub locality: Option<String>,
+    #[serde(default)]
+    pub route: Option<String>,
+    #[serde(default)]
+    pub credit_days: i64,
+    #[serde(default)]
+    pub opening_balance: i64,
 }
 
 /// The one credit rule: 0 = credit not allowed, positive = credit up to that amount (paise), -1 = no limit (explicit).
@@ -242,7 +264,7 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
         return invalid("Credit limit cannot be negative. Use 0 for no credit, or choose No limit.");
     }
     let b2b = i.kind == "b2b";
-    let gstin = if b2b { i.gstin.clone().unwrap_or_default().trim().to_uppercase() } else { String::new() };
+    let gstin = i.gstin.clone().unwrap_or_default().trim().to_uppercase();
     if !gstin.is_empty() && !is_valid_gstin(&gstin) {
         return invalid("GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1ZQ.");
     }
@@ -250,6 +272,19 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
     let email = i.email.clone().unwrap_or_default().trim().to_string();
     let address = i.address.clone().unwrap_or_default().trim().to_string();
     let notes = i.notes.clone().unwrap_or_default().trim().to_string();
+    if i.credit_days < 0 || i.opening_balance < 0 {
+        return invalid("Credit days and opening balance cannot be negative.");
+    }
+    let t = |o: &Option<String>| o.clone().unwrap_or_default().trim().to_string();
+    let (father, dob, anniv, pan, locality, route) = (t(&i.father_name), t(&i.dob), t(&i.anniversary), t(&i.pan).to_uppercase(), t(&i.locality), t(&i.route));
+    for (label, d) in [("Date of birth", &dob), ("Anniversary", &anniv)] {
+        if !d.is_empty() && chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_err() {
+            return invalid(format!("{label} must be a date like 1990-05-21."));
+        }
+    }
+    if !pan.is_empty() && !(pan.len() == 10 && pan.chars().all(|c| c.is_ascii_alphanumeric())) {
+        return invalid("PAN looks wrong. It has 10 letters and digits, e.g. ABCDE1234F.");
+    }
     let now = Local::now();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let id = match &i.id {
@@ -261,6 +296,10 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
             if n == 0 {
                 return invalid("Customer not found.");
             }
+            tx.execute(
+                "UPDATE customers SET father_name=?1,dob=?2,anniversary=?3,pan=?4,locality=?5,route=?6,credit_days=?7,opening_balance=?8 WHERE id=?9",
+                params![father, dob, anniv, pan, locality, route, i.credit_days, i.opening_balance, id],
+            )?;
             audit(&tx, now, OFFICE, "update", "customer", id, name)?;
             id.clone()
         }
@@ -270,6 +309,10 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
                 "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,created_at,type,business,gstin,email,address,notes)
                  VALUES(?1,?2,?3,?4,?5,0,0,?6,?7,?8,?9,?10,?11,?12)",
                 params![id, name, i.phone.trim(), i.area.trim(), i.credit_limit, iso(now), if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes],
+            )?;
+            tx.execute(
+                "UPDATE customers SET father_name=?1,dob=?2,anniversary=?3,pan=?4,locality=?5,route=?6,credit_days=?7,opening_balance=?8 WHERE id=?9",
+                params![father, dob, anniv, pan, locality, route, i.credit_days, i.opening_balance, id],
             )?;
             audit(&tx, now, OFFICE, "create", "customer", &id, name)?;
             id
@@ -745,7 +788,7 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
         json!({ "scheme": "regular", "compositionRatePct": 1,
                 "rates": [{"rate":0,"enabled":true,"label":"Exempt / nil"},{"rate":5,"enabled":true,"label":"Edible oils, ghee, pulses, cake"},
                           {"rate":12,"enabled":true,"label":"Lamp oil, packaged foods"},{"rate":18,"enabled":true,"label":"Other goods"}],
-                "pricesInclusive": true, "roundToRupee": round, "showHsn": true, "interState": false })
+                "pricesInclusive": true, "roundToRupee": round, "showHsn": true, "interState": false, "deliveryGstRate": g("deliveryGstRate").parse::<i64>().unwrap_or(0) })
     });
     let bill_format = blob(conn, "bundle.billFormat")?.unwrap_or_else(|| {
         json!({ "header": "", "footer": g("receiptFooter"), "showSavings": true, "showHsn": true, "showGstSummary": true, "showQr": false,
@@ -893,6 +936,8 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     set_setting(&tx, "receiptFooter", next["billFormat"]["footer"].as_str().unwrap_or(""))?;
     set_setting(&tx, "printer", next["printers"]["billPrinter"].as_str().unwrap_or(""))?;
     set_setting(&tx, "roundToRupee", if next["tax"]["roundToRupee"].as_bool().unwrap_or(true) { "1" } else { "0" })?;
+    let dgst = next["tax"]["deliveryGstRate"].as_i64().filter(|r| [0, 5, 12, 18].contains(r)).unwrap_or(0);
+    set_setting(&tx, "deliveryGstRate", &dgst.to_string())?;
     audit(&tx, Local::now(), OFFICE, "update", "settings", "bundle", "")?;
     tx.commit()?;
     get_settings_bundle(conn)

@@ -17,6 +17,7 @@ pub mod loyalty;
 pub mod mill;
 pub mod money;
 pub mod native;
+pub mod posreports;
 pub mod printing;
 pub mod purchasing;
 pub mod reports;

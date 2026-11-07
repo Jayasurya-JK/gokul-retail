@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ScanBarcode } from 'lucide-react';
+import { Keyboard, Lock, Moon, ScanBarcode, Undo2, Users, Wallet } from 'lucide-react';
 import {
-  computeTotals, formatQty, formatRupees, lineGross, parsePaise, parseQty,
+  cashDiscount, computeTotalsWithDelivery, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
 import { ManagerPinDialog, PosLayout, cn, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
-import { api, useBilling, useSession } from '../store';
+import { api, billingStores, refreshTodaySales, SLOT_LABEL, useSession, type BillSlot, type Delivery } from '../store';
 import { plural } from '../plural';
 import { TopBar } from '../components/TopBar';
+import { BillToolbar } from '../components/BillToolbar';
+import { DeliveryDialog, ManualItemDialog, RecentBillsDialog, StaffDialog } from '../components/BillDialogs';
 import { BillGrid, type EditField, type EditState } from '../components/BillGrid';
 import { SummaryPanel } from '../components/SummaryPanel';
 import { ConfirmDialog, CustomerDialog, HeldDialog, ItemSearchDialog, PromptDialog } from '../components/Dialogs';
@@ -18,15 +20,17 @@ import { printBillAfterSave, printWithToast } from '../printing';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
 import { beepError, useScanHandler } from '../scanner';
 
-type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx';
+type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx' | 'delivery' | 'staff' | 'recent' | 'manual' | 'cashDisc';
 const FIELD_ORDER: EditField[] = ['qty', 'rate', 'disc'];
 
-export function Billing() {
+export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const nav = useNavigate();
   const toast = useToast();
-  const { user, settings, setHeldCount } = useSession();
+  const { user, settings, heldCount, setHeldCount } = useSession();
+  /* Point of Sale, POS1 and POS2 are three separate bills: this screen shows the one for its tab, the others keep their state. */
+  const useBilling = billingStores[slot];
   const B = useBilling();
-  const { lines, selected, customer, billDiscount } = B;
+  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps } = B;
 
   const [items, setItems] = useState<Item[]>([]);
   const [scan, setScan] = useState('');
@@ -57,12 +61,28 @@ export function Billing() {
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const isLoose = useCallback((l: BillLine) => byId.get(l.itemId)?.loose ?? false, [byId]);
 
-  const totals = useMemo(() => computeTotals(lines, billDiscount, settings?.roundToRupee ?? true), [lines, billDiscount, settings]);
+  const deliveryGst = settings?.deliveryGstRate ?? 0;
+  const cashDisc = useMemo(() => cashDiscount(lines, cashDiscBps), [lines, cashDiscBps]);
+  const totals = useMemo(
+    () => computeTotalsWithDelivery(lines, billDiscount + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst),
+    [lines, billDiscount, cashDisc, settings, delivery.charge, deliveryGst],
+  );
+  /** What goes to the backend next to the lines */
+  const extras = () => ({
+    staff: staff || undefined, deliveryAddress: delivery.address || undefined, deliveryLocality: delivery.locality || undefined,
+    deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDiscBps: cashDiscBps || undefined,
+  });
   /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). */
   const exchangeUsed = exchange ? Math.min(exchange.totals.grand, totals.grand) : 0;
   const due = totals.grand - exchangeUsed;
 
   useEffect(() => { api.listItems().then(setItems); }, []);
+  const stockFor = useCallback((l: BillLine) => {
+    const it = byId.get(l.itemId);
+    if (!it) return null;
+    const left = it.stock - lines.filter((x) => x.itemId === l.itemId).reduce((s, x) => s + x.qty, 0);
+    return { text: formatQty(left, it.loose), low: left <= 0 };
+  }, [byId, lines]);
   useEffect(() => { api.getPendingExchange().then(setExchange); }, []);
   // store credit and loyalty points of the attached customer (refreshed after every bill)
   useEffect(() => {
@@ -116,7 +136,7 @@ export function Billing() {
     B.select(i);
     const init = field === 'qty' ? formatQty(l.qty, byId.get(l.itemId)?.loose ?? false) : field === 'rate' ? (l.rate / 100).toFixed(2) : l.discount ? (l.discount / 100).toFixed(2) : '';
     setEditNow({ i, field, draft: draft ?? init });
-  }, [B, byId]);
+  }, [B, byId, useBilling]);
 
   const editRef = useRef<EditState | null>(null);
   editRef.current = edit;
@@ -155,7 +175,7 @@ export function Billing() {
       const init = next === 'qty' ? formatQty(nl.qty, byId.get(nl.itemId)?.loose ?? false) : next === 'rate' ? (nl.rate / 100).toFixed(2) : nl.discount ? (nl.discount / 100).toFixed(2) : '';
       setEditNow({ i: cur.i, field: next, draft: init });
     } else { setEditNow(null); scanRef.current?.focus(); }
-  }, [byId, toast]);
+  }, [byId, toast, useBilling]);
 
   /* ---------- adding items ---------- */
   const addItem = useCallback((item: Item, qty?: number) => {
@@ -221,10 +241,10 @@ export function Billing() {
   /* ---------- actions ---------- */
   const doHold = async () => {
     if (!lines.length) { toast.show({ tone: 'info', title: 'Nothing to hold', detail: 'Add items to the bill first.' }); return; }
-    const h = await api.holdBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: [] });
+    const h = await api.holdBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: [], ...extras() });
     B.clear();
     setHeldCount((await api.listHeld()).length);
-    toast.show({ tone: 'success', title: 'Bill held', detail: `${plural(h.lines.length, 'item')}, ${formatRupees(h.total, { decimals: false })}. Press F7 to bring it back.` });
+    toast.show({ tone: 'success', title: 'Bill held', detail: `${plural(h.lines.length, 'item')}, ${formatRupees(h.total, { decimals: false })}. Press Shift+F6 to bring it back.` });
   };
   const openHeld = async () => {
     const list = await api.listHeld();
@@ -232,7 +252,7 @@ export function Billing() {
     setHeld(list); setDialog('held');
   };
   const recall = async (h: HeldBill) => {
-    if (lines.length) await api.holdBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: [] });
+    if (lines.length) await api.holdBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: [], ...extras() });
     await api.recallHeld(h.id);
     const cust = h.customerId ? (await api.listCustomers()).find((c) => c.id === h.customerId) ?? null : null;
     B.load(h, cust);
@@ -255,11 +275,12 @@ export function Billing() {
       const all: Payment[] = exchange && exchangeUsed > 0
         ? [{ mode: 'credit_note' as const, amount: exchangeUsed, ref: exchange.number }, ...payments]
         : payments;
-      const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin });
+      const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin, ...extras() });
       if (exchange) { await api.clearPendingExchange(); setExchange(null); }
       B.clear();
       lastBillId.current = bill.id;
       setLastBill({ number: bill.number, total: bill.totals.grand });
+      void refreshTodaySales();
       // The bill is committed. Printing starts now but never makes the counter wait.
       printBillAfterSave(bill.id, { change }, toast);
       setPinAsk(null);
@@ -304,6 +325,38 @@ export function Billing() {
   };
   const lock = () => nav('/lock');
 
+  /** F5: reload everything the screen reads, without touching the bill */
+  const refresh = async () => {
+    try {
+      const [list, held, cust] = await Promise.all([api.listItems(), api.listHeld(), customerId ? api.listCustomers() : Promise.resolve([] as Customer[])]);
+      setItems(list);
+      setHeldCount(held.length);
+      const fresh = customerId ? cust.find((c) => c.id === customerId) : undefined;
+      if (fresh) B.setCustomer(fresh);
+      setBillNo(await api.peekNextBillNumber());
+      void refreshTodaySales();
+      toast.show({ tone: 'success', title: 'Refreshed', detail: 'Items, stock, customer and today\'s total are up to date.' });
+    } catch { toast.show({ tone: 'error', title: 'Could not refresh', detail: 'Nothing on the bill changed. Try again.' }); }
+  };
+  const toggleWholesale = () => {
+    const on = !wholesale;
+    B.setWholesale(on, (id) => byId.get(id));
+    toast.show({ tone: 'info', title: on ? 'Wholesale prices on' : 'Wholesale prices off', detail: on ? 'Items without a wholesale price keep the normal price.' : 'Back to normal prices.' });
+  };
+  const setCashDiscount = (v: string) => {
+    const t = v.trim().replace('%', '');
+    const pct = t === '' ? 0 : Number(t);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Cash discount must be between 0% and 100%' }); return; }
+    B.setCashDisc(Math.round(pct * 100));
+    setDialog(null);
+  };
+  const reprintBill = (b: { id: string; number: string }) => {
+    void api.recordReprint(b.id, user?.name ?? '').catch(() => undefined);
+    void printWithToast('bill', b.id, { duplicate: true }, toast, `Duplicate of ${b.number} printed`);
+  };
+  const saveDelivery = (d: Delivery) => { B.setDelivery(d); setDialog(null); };
+  const showKeys = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true }));
+
   /* ---------- global keys (latest closure via ref) ---------- */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keyRef.current = (e) => {
@@ -314,6 +367,10 @@ export function Billing() {
     // printable key goes to the scan box so type-ahead and scanning keep working.
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && (document.activeElement === document.body || !document.activeElement) && scanRef.current) scanRef.current.focus();
     if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); nav('/day-close'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); if (selected >= 0) startEdit('disc'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setDialog('cashDisc'); return; }
+    if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'w') { e.preventDefault(); toggleWholesale(); return; }
     if (e.ctrlKey && e.key.toLowerCase() === 'p') {
       e.preventDefault();
       const id = lastBillId.current;
@@ -330,15 +387,16 @@ export function Billing() {
       return;
     }
     switch (e.key) {
-      case 'F2': prevent(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); break;
-      case 'F3': prevent(); setDialog('customer'); break;
+      case 'F2': prevent(); setDialog('delivery'); break;
+      case 'F3': prevent(); openPay(); break;
       case 'F4': prevent(); if (selected >= 0) startEdit('qty'); break;
-      case 'F5': prevent(); if (e.shiftKey) setDialog('billDisc'); else if (selected >= 0) startEdit('disc'); break;
-      case 'F6': prevent(); void doHold(); break;
-      case 'F7': prevent(); void openHeld(); break;
-      case 'F8': prevent(); nav('/history'); break;
+      case 'F5': prevent(); if (e.shiftKey) setDialog('billDisc'); else void refresh(); break;
+      case 'F6': prevent(); if (e.shiftKey) void openHeld(); else void doHold(); break;
+      case 'F7': prevent(); setDialog('staff'); break;
+      case 'F8': prevent(); setDialog('recent'); break;
       case 'F9': prevent(); nav('/cash'); break;
       case 'F10': prevent(); nav('/returns'); break;
+      case 'F11': prevent(); setDialog('customer'); break;
       case 'Delete': if (e.ctrlKey && exchange) { prevent(); setDialog('dropEx'); } else if (!scan) { prevent(); removeSelected(); } break;
       case 'F12': case 'End': prevent(); openPay(); break;
       case 'ArrowDown': prevent(); B.select(selected + 1); break;
@@ -363,15 +421,16 @@ export function Billing() {
 
   const keys: FKey[] = [
     { key: 'F1', label: 'Keys' },
-    { key: 'F2', label: 'Search', onClick: () => { setSearchSeed(''); setDialog('search'); } },
-    { key: 'F3', label: 'Customer', onClick: () => setDialog('customer') },
+    { key: 'F2', label: 'Delivery', onClick: () => setDialog('delivery') },
+    { key: 'F3', label: 'Pay mode', onClick: openPay },
     { key: 'F4', label: 'Qty', onClick: () => selected >= 0 && startEdit('qty') },
-    { key: 'F5', label: 'Discount', onClick: () => selected >= 0 && startEdit('disc') },
+    { key: 'F5', label: 'Refresh', onClick: () => void refresh() },
     { key: 'F6', label: 'Hold', onClick: () => void doHold() },
-    { key: 'F7', label: 'Recall', onClick: () => void openHeld() },
-    { key: 'F8', label: 'History', onClick: () => nav('/history') },
+    { key: 'F7', label: 'Staff', onClick: () => setDialog('staff') },
+    { key: 'F8', label: 'Recent', onClick: () => setDialog('recent') },
     { key: 'F9', label: 'Cash', onClick: () => nav('/cash') },
     { key: 'F10', label: 'Return', onClick: () => nav('/returns') },
+    { key: 'F11', label: 'Customer', onClick: () => setDialog('customer') },
     { key: 'F12', label: 'Pay', tone: 'primary', onClick: openPay },
     { key: 'Esc', label: 'Clear', onClick: () => (scan ? setScan('') : lines.length && setDialog('cancel')) },
   ];
@@ -380,8 +439,31 @@ export function Billing() {
     <PosLayout
       topBar={<TopBar onHeld={() => void openHeld()} onLock={lock} onCloseDay={() => nav('/day-close')} />}
       keys={keys}
-      side={<SummaryPanel totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay} onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} due={due} billNo={billNo} />}
+      side={
+        <SummaryPanel
+          totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay}
+          onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} due={due} billNo={billNo}
+          slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
+          onCashDisc={() => setDialog('cashDisc')} onClearCashDisc={() => B.setCashDisc(0)}
+          delivery={delivery} onDelivery={() => setDialog('delivery')} staff={staff} onStaff={() => setDialog('staff')}
+        />
+      }
     >
+      <BillToolbar
+        deliveryOn={delivery.charge > 0 || !!delivery.address} staff={staff} wholesale={wholesale} heldCount={heldCount}
+        onDelivery={() => setDialog('delivery')} onPay={openPay} onDelete={() => { removeSelected(); scanRef.current?.focus(); }}
+        onRefresh={() => void refresh()} onManual={() => setDialog('manual')} onStaff={() => setDialog('staff')} onRecent={() => setDialog('recent')}
+        onHold={() => void doHold()} onHeld={() => void openHeld()} onWholesale={toggleWholesale}
+        counterName={settings?.counter ?? 'Counter'}
+        tools={[
+          { label: 'Lock counter', kbd: 'Ctrl+L', icon: <Lock size={15} />, onClick: lock },
+          { label: 'Returns and exchange', kbd: 'F10', icon: <Undo2 size={15} />, onClick: () => nav('/returns') },
+          { label: 'Expenses and cash', kbd: 'F9', icon: <Wallet size={15} />, onClick: () => nav('/cash') },
+          { label: 'Day close', kbd: 'Ctrl+E', icon: <Moon size={15} />, onClick: () => nav('/day-close') },
+          { label: 'Staff report', icon: <Users size={15} />, onClick: () => nav('/reports/staff') },
+          { label: 'Keyboard shortcuts', kbd: 'F1', icon: <Keyboard size={15} />, onClick: showKeys },
+        ]}
+      />
       {/* Scan bar */}
       <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
         <div className="relative flex-1">
@@ -414,7 +496,7 @@ export function Billing() {
       </div>
 
       <BillGrid
-        lines={lines} selected={selected} edit={edit} loose={isLoose}
+        lines={lines} selected={selected} edit={edit} loose={isLoose} stock={stockFor}
         onSelect={B.select}
         onDraft={(v) => editRef.current && setEditNow({ ...editRef.current, draft: v })}
         onCommit={commitEdit}
@@ -425,6 +507,25 @@ export function Billing() {
         onRemove={(i) => { B.select(i); removeSelected(); scanRef.current?.focus(); }}
       />
 
+      <DeliveryDialog
+        open={dialog === 'delivery'} current={delivery} gstRate={deliveryGst} onClose={() => setDialog(null)} onSave={saveDelivery}
+        defaultLocality={customer?.area} defaultAddress=""
+      />
+      <StaffDialog open={dialog === 'staff'} current={staff} onClose={() => setDialog(null)} onPick={(n) => { B.setStaff(n); setDialog(null); }} />
+      <RecentBillsDialog open={dialog === 'recent'} onClose={() => setDialog(null)} onReprint={reprintBill} onOpenSales={() => { setDialog(null); nav('/sales'); }} />
+      <ManualItemDialog open={dialog === 'manual'} onClose={() => setDialog(null)} onAdd={(l) => { B.addLine(l); setDialog(null); }} />
+      <PromptDialog
+        open={dialog === 'cashDisc'} title="Cash discount" label="Percent off the whole bill" hint="Type 2 for two percent, or 2.5%. It is on top of item discounts; GST is worked out on the lower value."
+        initial={cashDiscBps ? String(cashDiscBps / 100) : ''}
+        preview={(typed) => {
+          const pct = Number(typed.trim().replace('%', '') || 0);
+          const bps = Number.isFinite(pct) ? Math.max(0, Math.min(10000, Math.round(pct * 100))) : 0;
+          const cd = cashDiscount(lines, bps);
+          const after = computeTotalsWithDelivery(lines, billDiscount + cd, settings?.roundToRupee ?? true, delivery.charge, deliveryGst);
+          return <span className="flex items-center justify-between"><span>Cash discount <b className="num">{formatRupees(cd)}</b></span><span>New total <b className="num text-md">{formatRupees(after.grand)}</b></span></span>;
+        }}
+        onClose={() => setDialog(null)} onSubmit={setCashDiscount}
+      />
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
@@ -467,7 +568,7 @@ export function Billing() {
           const net = lines.reduce((x, l) => x + l.amount, 0);
           const t = typed.trim();
           const d = t === '' ? 0 : t.endsWith('%') ? Math.round((net * Number(t.slice(0, -1) || 0)) / 100) : parsePaise(t) ?? 0;
-          const after = computeTotals(lines, Math.min(d, net), settings?.roundToRupee ?? true);
+          const after = computeTotalsWithDelivery(lines, Math.min(d, net) + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst);
           return <span className="flex items-center justify-between"><span>Discount <b className="num">{formatRupees(Math.min(d, net))}</b></span><span>New total <b className="num text-md">{formatRupees(after.grand)}</b></span></span>;
         }}
         onClose={() => setDialog(null)}

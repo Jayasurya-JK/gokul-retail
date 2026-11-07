@@ -41,6 +41,16 @@ export interface CustomerRow extends Customer {
   address?: string;
   /** Free text kept with the customer (shown at the counter) */
   notes?: string;
+  /** Customer Profile fields (POS) */
+  fatherName?: string;
+  /** yyyy-mm-dd */
+  dob?: string;
+  anniversary?: string;
+  pan?: string;
+  locality?: string;
+  route?: string;
+  creditDays?: number;
+  openingBalance?: Paise;
   /** Customer since, ISO date */
   since: string;
   totalSpend: Paise;
@@ -69,6 +79,14 @@ export interface CustomerInput {
   address?: string;
   notes?: string;
   creditLimit: Paise;
+  fatherName?: string;
+  dob?: string;
+  anniversary?: string;
+  pan?: string;
+  locality?: string;
+  route?: string;
+  creditDays?: number;
+  openingBalance?: Paise;
 }
 
 /* =====================================================================
@@ -221,6 +239,8 @@ export interface TaxSettings {
   roundToRupee: boolean;
   showHsn: boolean;
   interState: boolean;
+  /** GST percent on a POS home-delivery charge; 0 = delivery is not taxed */
+  deliveryGstRate?: number;
 }
 
 export interface BillFormatSettings {
@@ -520,6 +540,7 @@ const BUSINESSES = [
 
 interface Extra {
   type: CustomerType; business?: string; gstin?: string; email?: string; address?: string; notes?: string; since: string;
+  fatherName?: string; dob?: string; anniversary?: string; pan?: string; locality?: string; route?: string; creditDays?: number; openingBalance?: Paise;
 }
 
 interface Invoice { id: string; date: string; ref: string; amount: Paise; open: Paise; note: string }
@@ -777,8 +798,11 @@ export function createCrmMock(store: MockStore): CrmApi {
       }
       extras.set(c.id, {
         type: input.type, business: input.type === 'b2b' ? input.business?.trim() : undefined,
-        gstin: input.type === 'b2b' ? input.gstin?.trim().toUpperCase() : undefined,
+        gstin: input.gstin?.trim().toUpperCase() || undefined,
         email: input.email?.trim() || undefined, address: input.address?.trim() || undefined, notes: input.notes?.trim() || undefined,
+        fatherName: input.fatherName?.trim() || undefined, dob: input.dob || undefined, anniversary: input.anniversary || undefined,
+        pan: input.pan?.trim().toUpperCase() || undefined, locality: input.locality?.trim() || undefined, route: input.route?.trim() || undefined,
+        creditDays: input.creditDays || 0, openingBalance: input.openingBalance || 0,
         since: extras.get(c.id)?.since ?? new Date().toISOString(),
       });
       return delay(rowFor(c));

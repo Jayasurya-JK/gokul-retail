@@ -130,6 +130,9 @@ export function TaxTab({ v, set }: { v: TaxSettings; set: (n: TaxSettings) => vo
       <Card title="Calculation and printing">
         <Row title="Prices include GST" hint="MRP and selling price are tax inclusive, as printed on packs."><Switch checked={v.pricesInclusive} onCheckedChange={(x) => up('pricesInclusive', x)} /></Row>
         <Row title="Round bill to whole rupee" hint="Round off line is printed on the bill."><Switch checked={v.roundToRupee} onCheckedChange={(x) => up('roundToRupee', x)} /></Row>
+        <Row title="GST on home delivery charge" hint="The delivery charge added at the POS counter. 0 means it is billed without GST.">
+          <Select value={String(v.deliveryGstRate ?? 0)} onChange={(e) => up('deliveryGstRate', Number(e.target.value))} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: r === 0 ? 'No GST' : `${r}%` }))} />
+        </Row>
         <Row title="Show HSN code on bill" hint="Needed for B2B invoices."><Switch checked={v.showHsn} onCheckedChange={(x) => up('showHsn', x)} /></Row>
         <Row title="Interstate supply (IGST)" hint="Turn on only if the shop sells to other states."><Switch checked={v.interState} onCheckedChange={(x) => up('interState', x)} /></Row>
       </Card>

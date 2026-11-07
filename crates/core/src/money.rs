@@ -80,6 +80,45 @@ pub fn compute_totals(lines: &[BillLine], bill_discount: i64, round_to_rupee: bo
     }
 }
 
+/// Cash discount in paise: `bps` (percent x 100) of the net of the item lines (after item discounts), rounded to the paisa.
+pub fn cash_discount(lines: &[BillLine], bps: i64) -> i64 {
+    if bps <= 0 {
+        return 0;
+    }
+    let net: i64 = lines.iter().map(|l| l.amount).sum();
+    round_div(net as i128 * bps as i128, 10000) as i64
+}
+
+/// Totals for item lines plus an optional home-delivery charge. The bill-level discount is spread over the item lines only;
+/// the delivery charge is a separate taxable amount at `delivery_gst` percent (0 = no GST), merged into the GST slabs.
+/// With no delivery charge this is exactly `compute_totals`.
+pub fn compute_totals_with_delivery(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool, delivery: i64, delivery_gst: i64) -> BillTotals {
+    if delivery <= 0 {
+        return compute_totals(lines, bill_discount, round_to_rupee);
+    }
+    let mut t = compute_totals(lines, bill_discount, false);
+    let taxable = round_div(delivery as i128 * 100, 100 + delivery_gst as i128) as i64;
+    let gst = delivery - taxable;
+    let mut per: BTreeMap<i64, (i64, i64)> = t.slabs.iter().map(|s| (s.rate, (s.taxable, s.cgst + s.sgst))).collect();
+    let e = per.entry(delivery_gst).or_insert((0, 0));
+    e.0 += taxable;
+    e.1 += gst;
+    t.slabs = per
+        .into_iter()
+        .map(|(rate, (taxable, gst))| {
+            let cgst = floor_div(gst as i128, 2) as i64;
+            GstSlab { rate, taxable, cgst, sgst: gst - cgst }
+        })
+        .collect();
+    t.gross += delivery;
+    t.taxable = t.slabs.iter().map(|s| s.taxable).sum();
+    t.gst = t.slabs.iter().map(|s| s.cgst + s.sgst).sum();
+    t.before_round += delivery;
+    t.grand = if round_to_rupee { round_div(t.before_round as i128, 100) as i64 * 100 } else { t.before_round };
+    t.round_off = t.grand - t.before_round;
+    t
+}
+
 /// Port of `quoteReturn` (billops.ts): each returned line refunds its own (discounted) amount pro-rata,
 /// plus its share of any bill-level discount, then GST is reversed with the same slab rules as a bill.
 pub fn quote_return(

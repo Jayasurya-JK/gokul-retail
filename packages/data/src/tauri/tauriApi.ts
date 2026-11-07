@@ -25,6 +25,7 @@ import type {
   Expense, ExpenseCategory, ExpenseEdit, ExpenseInput, ExpenseList, ExpenseQuery, ExpenseVoid, VoidedLineInput,
 } from '../areas/expenses';
 import type { MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
+import type { PaymodeReport, ReportQuery, SalesReport, Staff, StaffReportRow, StockReport } from '../areas/posreports';
 
 /**
  * Calls the Rust backend (crates/core) through the single `gokul_call` Tauri command.
@@ -62,6 +63,7 @@ export const REAL_METHODS = [
   'saveSettingsBundle', 'testPrint', 'printDocument', 'printerStatus', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
   'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
+  'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -204,6 +206,13 @@ export function createTauriApi(): Api {
     editExpense: (input: ExpenseEdit) => call<Expense>('editExpense', input),
     voidExpense: (input: ExpenseVoid) => call<Expense>('voidExpense', input),
     logVoidedLine: (line: VoidedLineInput) => call<void>('logVoidedLine', line),
+    // ----- PosReportsApi -----
+    listStaff: () => call<Staff[]>('listStaff'),
+    addStaff: (name: string) => call<Staff[]>('addStaff', name),
+    salesReport: (q?: ReportQuery) => call<SalesReport>('salesReport', q ?? null),
+    paymodeReport: (q?: ReportQuery) => call<PaymodeReport>('paymodeReport', q ?? null),
+    staffReport: (q?: ReportQuery) => call<{ from: string; to: string; rows: StaffReportRow[] }>('staffReport', q ?? null),
+    stockReport: (q?: ReportQuery) => call<StockReport>('stockReport', q ?? null),
     getUiPref: (key: string) => call<string | null>('getUiPref', key),
     setUiPref: (key: string, value: string) => call<void>('setUiPref', key, value),
 

@@ -288,8 +288,8 @@ export function Sales() {
   );
 }
 
-const MODE_ORDER: PayMode[] = ['cash', 'upi', 'card', 'credit', 'credit_note'];
-const MODE_BAR: Record<PayMode, string> = { cash: 'bg-primary', upi: 'bg-info', card: 'bg-accent', credit: 'bg-warning', credit_note: 'bg-subtle', points: 'bg-subtle' };
+const MODE_ORDER: PayMode[] = ['cash', 'upi', 'card', 'credit', 'credit_note', 'sodexo'];
+const MODE_BAR: Record<PayMode, string> = { cash: 'bg-primary', upi: 'bg-info', card: 'bg-accent', credit: 'bg-warning', credit_note: 'bg-subtle', points: 'bg-subtle', sodexo: 'bg-subtle' };
 
 interface Totals { live: number; cancelled: number; total: number; avg: number; returns: number; returned: number; byMode: Partial<Record<PayMode, number>> }
 

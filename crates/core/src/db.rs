@@ -16,6 +16,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (5, include_str!("../migrations/005_loyalty_credit.sql")),
     (6, include_str!("../migrations/006_points_hundredths.sql")),
     (7, include_str!("../migrations/007_shelf_life.sql")),
+    (8, include_str!("../migrations/008_pos_parallel.sql")),
 ];
 
 pub struct Db {
@@ -197,6 +198,7 @@ pub fn load_settings(conn: &Connection) -> Result<Settings> {
         receipt_footer: g("receiptFooter")?,
         printer: g("printer")?,
         round_to_rupee: g("roundToRupee")? != "0",
+        delivery_gst_rate: g("deliveryGstRate")?.parse().ok().filter(|r| [0, 5, 12, 18].contains(r)).unwrap_or(0),
     })
 }
 

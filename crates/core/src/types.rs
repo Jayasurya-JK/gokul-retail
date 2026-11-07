@@ -41,6 +41,9 @@ pub struct Item {
     pub stock: i64,
     pub reorder_level: i64,
     pub active: bool,
+    /// Optional wholesale price per unit (GST inclusive), used when a bill is switched to wholesale mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wholesale_price: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +122,39 @@ pub struct Bill {
     pub totals: BillTotals,
     pub payments: Vec<Payment>,
     pub status: String, // paid | credit | cancelled | returned
+    #[serde(flatten)]
+    pub extras: BillExtras,
+}
+
+/// Round 4 per-bill extras, shared by a draft, a held bill and a saved bill.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BillExtras {
+    /// Salesman / staff attached to the bill.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub staff: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub delivery_address: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub delivery_locality: String,
+    /// Home-delivery charge in paise; becomes a "Delivery charge" line (GST rate from settings, 0 by default).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub delivery_charge: i64,
+    /// Bill uses wholesale prices.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wholesale: bool,
+    /// Cash discount on the whole bill, percent x 100 (250 = 2.5%). Separate from item discounts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cash_disc_bps: i64,
+    /// Cash discount in paise as saved (already part of the bill-level discount).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cash_disc: i64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub remarks: String,
+}
+
+fn is_zero(v: &i64) -> bool {
+    *v == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +174,8 @@ pub struct BillDraft {
     /// Manager or owner PIN for a discount above the role limit, a changed price or credit above the customer limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manager_pin: Option<String>,
+    #[serde(flatten)]
+    pub extras: BillExtras,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +189,8 @@ pub struct HeldBill {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<String>,
     pub total: i64,
+    #[serde(flatten)]
+    pub extras: BillExtras,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,6 +231,9 @@ pub struct Settings {
     pub receipt_footer: String,
     pub printer: String,
     pub round_to_rupee: bool,
+    /// GST percent on a home-delivery charge (0, 5, 12 or 18; 0 = delivery is not taxed).
+    #[serde(default)]
+    pub delivery_gst_rate: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

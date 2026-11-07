@@ -62,6 +62,29 @@ impl Actor {
     pub fn pin_listed(&self, action: &str) -> bool {
         self.pin_for.iter().any(|a| a == action)
     }
+    /// Cost and profit are for the owner and managers only.
+    pub fn can_see_cost(&self) -> bool {
+        self.role == "owner" || self.role == "manager"
+    }
+}
+
+/// Keys that carry cost or profit. Removed from every answer given to a user who may not see them (cashiers), so the
+/// numbers never reach the screen at all; hiding a column in the UI is only a second layer.
+const COST_KEYS: &[&str] = &["cost", "costTotal", "profit", "profitPct", "profitTotal", "totalProfit", "totalCost"];
+
+pub fn strip_cost(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            for k in COST_KEYS {
+                m.remove(*k);
+            }
+            for x in m.values_mut() {
+                strip_cost(x);
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(strip_cost),
+        _ => {}
+    }
 }
 
 pub fn load_actor(conn: &Connection, user_id: &str) -> Result<Option<Actor>> {
@@ -201,6 +224,17 @@ fn stamp_identity(actor: &Actor, method: &str, args: &mut Vec<Value>) {
                 o.insert("allDays".into(), Value::Bool(false));
             }
         }
+        "salesReport" | "paymodeReport" | "staffReport" if actor.role == "cashier" => {
+            // The counter's reports show today only; managers and owners pick any dates.
+            let today = Value::String(crate::db::day_of(Local::now()));
+            let mut q = args.first().and_then(|a| a.as_object()).cloned().unwrap_or_default();
+            q.insert("from".into(), today.clone());
+            q.insert("to".into(), today);
+            if args.is_empty() {
+                args.push(Value::Null);
+            }
+            args[0] = Value::Object(q);
+        }
         "recordReprint" => {
             if args.len() < 2 {
                 args.resize(2, Value::Null);
@@ -316,7 +350,9 @@ fn check_bill(conn: &Connection, actor: &Actor, args: &[Value]) -> Result<Option
     if lines.is_empty() {
         return Ok(None);
     }
-    let totals = compute_totals(&lines, draft.bill_discount, true);
+    // The cash discount counts as discount too: a cashier cannot get round the limit by using it.
+    let cash = crate::money::cash_discount(&lines, draft.extras.cash_disc_bps.clamp(0, 10000));
+    let totals = compute_totals(&lines, draft.bill_discount + cash, true);
     let mut reasons: Vec<String> = vec![];
     let mut perm: Option<&str> = None;
     let mut min_discount = 0;
@@ -329,8 +365,11 @@ fn check_bill(conn: &Connection, actor: &Actor, args: &[Value]) -> Result<Option
     }
     let mut price_changed = false;
     for l in &lines {
-        let price: Option<i64> = conn.query_row("SELECT price FROM items WHERE id=?1", [&l.item_id], |r| r.get(0)).optional()?;
-        if price.map(|p| p != l.rate).unwrap_or(false) {
+        let prices: Option<(i64, Option<i64>)> = conn.query_row("SELECT price, wholesale_price FROM items WHERE id=?1", [&l.item_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+        // A wholesale bill may use the item's wholesale price without a PIN; any other price is a price change.
+        let wholesale_ok = |w: Option<i64>| draft.extras.wholesale && w == Some(l.rate);
+        // A manual (one-off) line has no master price at all, so it always counts as a changed price.
+        if l.item_id == crate::bills::MANUAL_ITEM || prices.map(|(p, w)| p != l.rate && !wholesale_ok(w)).unwrap_or(false) {
             price_changed = true;
         }
     }

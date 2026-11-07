@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, CreditCard, HandCoins, QrCode, Receipt, Star, X } from 'lucide-react';
+import { Banknote, CreditCard, HandCoins, QrCode, Star, Ticket, Wallet, X } from 'lucide-react';
 import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
 import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
 import { api } from '../store';
@@ -9,8 +9,9 @@ const MODES: { mode: PayMode; label: string; key: string; icon: React.ReactNode 
   { mode: 'upi', label: 'UPI', key: 'F2', icon: <QrCode size={20} /> },
   { mode: 'card', label: 'Card', key: 'F3', icon: <CreditCard size={20} /> },
   { mode: 'credit', label: 'Credit', key: 'F4', icon: <HandCoins size={20} /> },
-  { mode: 'credit_note', label: 'Store credit', key: 'F5', icon: <Receipt size={20} /> },
+  { mode: 'credit_note', label: 'Wallet', key: 'F5', icon: <Wallet size={20} /> },
   { mode: 'points', label: 'Points', key: 'F6', icon: <Star size={20} /> },
+  { mode: 'sodexo', label: 'Sodexo', key: 'F7', icon: <Ticket size={20} /> },
 ];
 const modeLabel = (m: PayMode) => MODES.find((x) => x.mode === m)?.label ?? m;
 
@@ -72,7 +73,7 @@ export function PaymentDialog({ open, total, customer, wallet, onClose, onComple
     let amt = parsePaise(field) ?? remaining;
     if (amt <= 0) amt = remaining;
     if (mode === 'credit') {
-      if (!customer) { setError('Credit needs a customer. Close this and press F3 to choose one.'); return; }
+      if (!customer) { setError('Credit needs a customer. Close this and press F11 to choose one.'); return; }
       const limit = customer.creditLimit;
       const use = Math.min(amt, remaining);
       if (limit > 0 && customer.outstanding + use > limit) {
@@ -85,7 +86,7 @@ export function PaymentDialog({ open, total, customer, wallet, onClose, onComple
     let added: Payment[] = [{ mode, amount: use }];
     if (mode === 'credit_note') {
       use = Math.min(use, creditAvail);
-      if (use <= 0) { setError('This customer has no store credit left.'); return; }
+      if (use <= 0) { setError('This customer has no wallet balance left.'); return; }
       // oldest credit note first, each note only for what is left on it
       const taken: Record<string, number> = {};
       payments.filter((p) => p.mode === 'credit_note' && p.ref).forEach((p) => { taken[p.ref!] = (taken[p.ref!] ?? 0) + p.amount; });
@@ -234,7 +235,7 @@ export function PaymentDialog({ open, total, customer, wallet, onClose, onComple
 
         <div className="flex items-center justify-between border-t border-line bg-surface px-5 py-3">
           <div className="flex items-center gap-3 text-xs text-muted">
-            <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>F{visibleModes.length}</Kbd> method</span>
+            <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>F7</Kbd> method</span>
             <span className="flex items-center gap-1"><Kbd>Ctrl+Z</Kbd> undo split</span>
           </div>
           <div className="flex gap-2">

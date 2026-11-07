@@ -13,7 +13,7 @@ interface FormState {
   name: string; nameTa: string; code: string; barcodes: string[]; barcodeDraft: string;
   categoryId: string; brand: string; unit: UnitCode; loose: boolean; packSize: string; parentId: string; scaleCode: string;
   shelfLife: string; shelfLifeUnit: 'days' | 'months';
-  hsn: string; gstRate: string; mrp: string; price: string; cost: string; reorder: string; active: boolean;
+  hsn: string; gstRate: string; mrp: string; price: string; wholesale: string; cost: string; reorder: string; active: boolean;
 }
 
 const LOOSE_UNITS: UnitCode[] = ['kg', 'l', 'g', 'ml'];
@@ -23,7 +23,7 @@ const rupees = (p: number) => (p ? (p / 100).toFixed(2).replace(/\.00$/, '') : '
 
 const blank = (): FormState => ({
   name: '', nameTa: '', code: '', barcodes: [], barcodeDraft: '', categoryId: '', brand: 'Gokul', unit: 'btl', loose: false,
-  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', cost: '', reorder: '', active: true,
+  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', wholesale: '', cost: '', reorder: '', active: true,
 });
 
 function toInput(f: FormState, id?: string): ItemInput {
@@ -32,7 +32,7 @@ function toInput(f: FormState, id?: string): ItemInput {
     unit: f.unit, loose: f.loose, packSize: f.packSize, parentId: f.parentId, scaleCode: f.scaleCode, hsn: f.hsn,
     shelfLife: Number(f.shelfLife) > 0 ? Number(f.shelfLife) : undefined, shelfLifeUnit: f.shelfLifeUnit,
     gstRate: Number(f.gstRate) as Item['gstRate'],
-    mrp: parsePaise(f.mrp) ?? 0, price: parsePaise(f.price) ?? 0, cost: parsePaise(f.cost) ?? 0,
+    mrp: parsePaise(f.mrp) ?? 0, price: parsePaise(f.price) ?? 0, cost: parsePaise(f.cost) ?? 0, wholesalePrice: parsePaise(f.wholesale) ?? undefined,
     reorderLevel: parseQty(f.reorder) ?? 0, active: f.active,
   };
 }
@@ -68,7 +68,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
         setF({
           name: i.name, nameTa: i.nameTa ?? '', code: i.code, barcodes: d.barcodes, barcodeDraft: '', categoryId: i.categoryId, brand: i.brand,
           unit: i.unit, loose: i.loose, packSize: i.packSize ?? '', parentId: d.parentId, scaleCode: d.scaleCode, shelfLife: i.shelfLife ? String(i.shelfLife) : '', shelfLifeUnit: i.shelfLifeUnit ?? 'months', hsn: i.hsn,
-          gstRate: String(i.gstRate), mrp: rupees(i.mrp), price: rupees(i.price), cost: rupees(i.cost),
+          gstRate: String(i.gstRate), mrp: rupees(i.mrp), price: rupees(i.price), wholesale: rupees(i.wholesalePrice ?? 0), cost: rupees(i.cost),
           reorder: i.reorderLevel ? String(i.reorderLevel / 1000) : '', active: i.active,
         });
         setLoaded(true);
@@ -204,6 +204,9 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
                 <Field label={`MRP${per}`} error={err('mrp')}><NumberInput prefix="₹" value={f.mrp} onValueChange={(v) => set('mrp', v)} onBlur={() => touch('mrp')} placeholder="0.00" /></Field>
                 <Field label={`Selling price${per}`} error={err('price')}><NumberInput prefix="₹" value={f.price} onValueChange={(v) => set('price', v)} onBlur={() => touch('price')} placeholder="0.00" /></Field>
                 <Field label={`Purchase cost${per}`} error={err('cost') && !costWarn ? err('cost') : undefined}><NumberInput prefix="₹" value={f.cost} onValueChange={(v) => set('cost', v)} onBlur={() => touch('cost')} placeholder="0.00" /></Field>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                <Field label={`Wholesale price${per}`} hint="Optional. Used when a POS bill is switched to wholesale."><NumberInput prefix="₹" value={f.wholesale} onValueChange={(v) => set('wholesale', v)} placeholder="None" /></Field>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-control border border-line bg-line">
                 <div className="bg-surface-2 px-3 py-2">

@@ -5,7 +5,7 @@
 use crate::error::{invalid, ApiError, Result};
 use crate::types::*;
 use crate::authz::{self, Session};
-use crate::{bills, billops, catalog, crm, dash, expenses, mill, purchasing, reports, shift, store, Db};
+use crate::{bills, billops, catalog, crm, dash, expenses, mill, posreports, purchasing, reports, shift, store, Db};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -77,7 +77,10 @@ pub fn dispatch_session(db: &Db, session: &Session, method: &str, mut args: Vec<
     };
     let _who = crate::db::ActorGuard::set(&actor.name);
     let _appr = crate::db::ApproverGuard::set(approval.as_ref().map(|o| o.approver.as_str()));
-    let out = dispatch(db, method, args)?;
+    let mut out = dispatch(db, method, args)?;
+    if !actor.can_see_cost() {
+        authz::strip_cost(&mut out);
+    }
     if let Some(o) = &approval {
         db.with(|c| authz::record_override(c, &actor, method, o))?;
     }
@@ -318,6 +321,14 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
             Ok(Value::Null)
         }
 
+        // ----- POS reports and staff -----
+        "listStaff" => ok(posreports::list_staff(c)?),
+        "addStaff" => ok(posreports::add_staff(c, &arg::<String>(a, 0, "name")?)?),
+        "salesReport" => ok(posreports::sales_report(c, &arg::<Option<posreports::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
+        "paymodeReport" => ok(posreports::paymode_report(c, &arg::<Option<posreports::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
+        "staffReport" => ok(posreports::staff_report(c, &arg::<Option<posreports::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
+        "stockReport" => ok(posreports::stock_report(c, &arg::<Option<posreports::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
+
         // ----- ReportsApi -----
         "runReport" => ok(reports::run_report(c, &arg::<String>(a, 0, "id")?, &arg::<reports::ReportParams>(a, 1, "params")?)?),
 
@@ -344,4 +355,5 @@ pub const METHODS: &[&str] = &[
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
     "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
+    "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",
 ];

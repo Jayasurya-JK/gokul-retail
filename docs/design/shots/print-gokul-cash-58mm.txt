@@ -18,7 +18,7 @@ Kondur
 Points : 7.58
 --------------------------------
 BILL NO : 26/00001
-DATE : 07-11-2026    03:02:57 PM
+DATE : 07-11-2026    05:24:51 PM
 Counter : Counter 1
 --------------------------------
 ITEM      MRP   RATE QTY     AMT

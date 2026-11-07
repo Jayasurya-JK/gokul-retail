@@ -10,15 +10,17 @@ export interface EditState { i: number; field: EditField; draft: string }
  * Numbers share the spare width with the name (fr units), so on a 1920 screen the quantities and
  * amounts stay close to the item name instead of drifting to the far edge.
  */
-export const GRID_COLS = '52px minmax(0,3.2fr) minmax(104px,1.15fr) minmax(46px,.5fr) minmax(96px,1fr) minmax(80px,.85fr) minmax(52px,.5fr) minmax(124px,1.3fr)';
+export const GRID_COLS = '52px minmax(0,3.2fr) minmax(104px,1.15fr) minmax(46px,.5fr) minmax(68px,.7fr) minmax(96px,1fr) minmax(80px,.85fr) minmax(52px,.5fr) minmax(124px,1.3fr)';
 
 const unitLabel: Record<string, string> = { kg: 'kg', g: 'g', l: 'L', ml: 'ml', pc: 'pc', tin: 'tin', btl: 'btl', pkt: 'pkt' };
 
-export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCommit, onCancel, onReject, onEdit, onStep, onRemove }: {
+export function BillGrid({ lines, selected, edit, loose, stock, onSelect, onDraft, onCommit, onCancel, onReject, onEdit, onStep, onRemove }: {
   lines: BillLine[];
   selected: number;
   edit: EditState | null;
   loose: (l: BillLine) => boolean;
+  /** Stock left for the row's item after what is already on the bill */
+  stock: (l: BillLine) => { text: string; low: boolean } | null;
   onSelect: (i: number) => void;
   onDraft: (v: string) => void;
   onCommit: (tab: boolean) => void;
@@ -76,6 +78,7 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
         <div className="px-2">Item</div>
         <div className="px-2 text-right">Qty</div>
         <div className="px-2">Unit</div>
+        <div className="px-2 text-right">Stock</div>
         <div className="px-2 text-right">Rate</div>
         <div className="px-2 text-right">Disc</div>
         <div className="px-2 text-right">GST</div>
@@ -98,6 +101,7 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
             const active = i === selected;
             const isLoose = loose(l);
             const editing = edit?.i === i ? edit.field : null;
+            const stk = stock(l);
             return (
               <div
                 key={`${l.itemId}-${i}`}
@@ -125,6 +129,7 @@ export function BillGrid({ lines, selected, edit, loose, onSelect, onDraft, onCo
                   )}
                 </div>
                 <div className="px-2 text-sm text-muted min-[1700px]:text-base">{unitLabel[l.unit]}</div>
+                <div className={cn('px-2 text-right text-sm num min-[1700px]:text-base', stk?.low ? 'font-semibold text-danger' : 'text-muted')}>{stk ? stk.text : ''}</div>
                 <div className="px-1.5 text-right num">
                   {editing === 'rate' ? cellInput('rate', i, (l.rate / 100).toFixed(2)) : <CellButton label="Change rate" onClick={() => onEdit(i, 'rate')}><Money paise={l.rate} symbol={false} /></CellButton>}
                 </div>

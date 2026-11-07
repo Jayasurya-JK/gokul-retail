@@ -57,6 +57,9 @@ pub struct ItemInput {
     pub price: i64,
     #[serde(default)]
     pub cost: i64,
+    /// Optional wholesale price (GST inclusive); None or 0 = the item has no wholesale price.
+    #[serde(default)]
+    pub wholesale_price: Option<i64>,
     #[serde(default)]
     pub reorder_level: i64,
     #[serde(default = "yes")]
@@ -212,6 +215,7 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
                     input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, id, life, life_unit
                 ],
             )?;
+            tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
             audit(&tx, now, OFFICE, "update", "item", id, &name)?;
             id.clone()
         }
@@ -225,6 +229,7 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
                     input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, iso(now), life, life_unit
                 ],
             )?;
+            tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
             audit(&tx, now, OFFICE, "create", "item", &id, &name)?;
             id
         }

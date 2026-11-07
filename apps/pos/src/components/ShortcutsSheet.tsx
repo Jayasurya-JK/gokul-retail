@@ -6,31 +6,34 @@ const GROUPS: { title: string; rows: [string, string[]][] }[] = [
   {
     title: 'Go to',
     rows: [
-      ['Billing', ['Alt+1']], ['Customers', ['Alt+2']], ['Sales', ['Alt+3']], ['Returns', ['Alt+4']],
-      ['Expenses and cash', ['Alt+5']], ['Day close', ['Alt+6', 'Ctrl+E']], ['User menu', ['Alt+U']],
+      ['Point of Sale', ['Alt+1']], ['POS1 (second bill)', ['Alt+2']], ['POS2 (third bill)', ['Alt+3']], ['Bills (reprint, cancel)', ['Alt+4']],
+      ['Sales Report', ['Alt+5']], ['Paymode Report', ['Alt+6']], ['Stock', ['Alt+7']], ['Customer Profile', ['Alt+8']],
+      ['Returns and exchange', ['F10']], ['Expenses and cash', ['F9']], ['Day close', ['Ctrl+E']], ['User menu', ['Alt+U']],
       ['Lock the counter', ['Ctrl+L']], ['This sheet', ['F1']], ['Back to billing (from any other screen)', ['Esc']],
     ],
   },
   {
     title: 'Adding items',
     rows: [
-      ['Add scanned or typed code', ['Enter']], ['Add 5 of item 101', ['5*101']], ['Search items by name', ['F2']],
-      ['Choose customer', ['F3']], ['Move between rows', ['Up', 'Down']], ['Quantity up or down', ['+', '-']],
+      ['Add scanned or typed code', ['Enter']], ['Add 5 of item 101', ['5*101']], ['Search items by name', ['Ctrl+F']],
+      ['Choose customer', ['F11']], ['Move between rows', ['Up', 'Down']], ['Quantity up or down', ['+', '-']],
       ['Remove the row', ['Del']], ['Undo the removed row', ['Ctrl+Z']],
     ],
   },
   {
     title: 'Editing a row',
     rows: [
-      ['Edit quantity', ['F4']], ['Line discount (amount or 5%)', ['F5']], ['Discount on the whole bill', ['Shift+F5']],
+      ['Edit quantity', ['F4']], ['Line discount (amount or 5%)', ['Ctrl+D']], ['Discount on the whole bill', ['Shift+F5']],
+      ['Cash discount (percent, on top)', ['Ctrl+K']], ['Wholesale prices on or off', ['Alt+W']],
       ['Next field while editing', ['Tab']], ['Clear typed code, or cancel the bill', ['Esc']],
     ],
   },
   {
     title: 'Finishing',
     rows: [
-      ['Take payment', ['F12', 'End']], ['Hold this bill', ['F6']], ['Recall a held bill', ['F7']],
-      ['Return or exchange', ['F10']], ['Cash in / out', ['F9']], ['Reprint a bill (Sales)', ['Ctrl+P']],
+      ['Pay mode: take payment', ['F3', 'F12', 'End']], ['Home delivery', ['F2']], ['Refresh', ['F5']],
+      ['Hold this bill', ['F6']], ['Bring back a held bill', ['Shift+F6']], ['Staff for this bill', ['F7']],
+      ['Recent bills (reprint)', ['F8']], ['Reprint the last bill', ['Ctrl+P']],
     ],
   },
 ];
@@ -39,7 +42,7 @@ export function ShortcutsSheet({ open, onClose }: { open: boolean; onClose: () =
   const [showBar, setShowBar] = useKeyBar();
   const { pathname } = useLocation();
   const screen = useCurrentScreenKeys();
-  const onBilling = pathname === '/billing';
+  const onBilling = pathname === '/billing' || pathname === '/pos1' || pathname === '/pos2';
   // This screen's own keys come first, then the keys that work everywhere.
   const go = GROUPS[0];
   const groups = onBilling

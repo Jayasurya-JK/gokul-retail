@@ -87,6 +87,24 @@ docs/design/BRIEF.md   design rules every screen follows
    - **Closing stock** is calculated (opening + pressed + purchased + kept − sold − packed − adjusted). The supervisor enters the physical count, the difference is shown, and posting it creates adjustment rows with a reason.
    - The sheet prints and exports as a PDF in the same layout as the paper. Past sheets are read-only once closed.
 
+## Round 4: POSBean-familiar POS (owner, 7 Nov 2026)
+Staff are used to POSBean, so Gokul POS takes **inspiration** from it but **keeps our own look**: our top menu, grid, and right-side panel with totals, GST, grand total and Pay. From POSBean we take the parallel-bill tabs, the report tabs, the toolbar actions, the F-keys, a Stock column, and a compact customer, delivery and staff info area. We do not replicate POSBean's dense bottom panel, red header total or grey Windows-form styling. The detailed list below is the source of features; the visual layout stays ours.
+- **One window, tabs on top:** Point of Sale | Sales Report | Paymode Report | Stock | Customer Profile | POS1 | POS2. POS1 and POS2 are extra bills open in parallel; each tab keeps its own bill.
+- **Toolbar:** Save, Home Delivery (F2), Pay Mode (F3), Delete item, Refresh (F5), Manual, Staff (F7), Recent Bill, Bill Hold, Wholesale, Counter, Tools. **The F-keys are the same as POSBean**, and our extra actions get the free keys.
+- **Header:** Date, Bill No, a Customer picker, the green "Total Qty/NOS" chip, and a big red grand total on the right.
+- **Grid:** S.No | Barcode | Product | MRP | Discount | Discount % | Sales Price | Quantity | Total | Stock. Entry happens in the grid's last row (type or scan a barcode in the cell); everything is mouse-editable as well.
+- **Bottom panel:**
+  - Customer (Code, Name, Mobile, Last Visit, Closing Bal, Points), with tabs for Recent Bill, Hold Bill and Agent Details.
+  - Wallet, Locality, Address, Delivery ₹.
+  - Totals: No of Qty, No of Items, Gross, Item Disc %, Item Disc, Total; Cash Disc %, Cash Disc, Tax Inclusive, Tax Exclusive, Sodexo.
+- **Status bar:** User, Counter, TOTAL SALES today, Location, version.
+- **Sales Report:** date range; bills with expandable lines, Qty, Total, Net, Profit, Customer, Remarks; footer totals.
+- **Paymode Report:** each bill split by payment mode (Cash, BharatQR/UPI, Card, Credit, Customer Points, Sodexo).
+- **Stock:** Barcode, Product, Category, Brand, MRP, Cost, Profit %, Profit, Sales Price, Qty, Cost Total, Profit Total, Sales Total, Supplier; Fetch.
+- **Customer Profile:** list plus a detail panel with Father name, DOB, Anniversary, GST, PAN, Locality, Route, Credit limit and days, Opening balance.
+- **Cost and profit** columns and fields are visible to owner and manager only, enforced server-side.
+- **New features:** parallel bills, home delivery (address and delivery charge), staff per bill, wholesale price mode, cash discount on top of item discounts, and Sodexo/wallet as payment modes.
+
 ## Notes for later (from the owner, 7 Nov 2026)
 - **Packing pouch sizes (SSS Brand), in inches:** 50 g → 4×5, 100 g → 4×6, ¼ kg → 5×7, ½ kg → 6×8, 1 kg → 7×10. When packing runs are recorded, the matching pouch should be taken from packing-material stock automatically.
 - **TSC TE244 stickers:** 3 across, ribbon on. One blank row comes partly out after each print, which is the printer's tear-off position. Confirm the printer pulls it back on the next print; otherwise adjust the tear/feed settings.

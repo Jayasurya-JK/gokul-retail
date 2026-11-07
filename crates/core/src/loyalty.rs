@@ -20,6 +20,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
 pub const POINTS_REF: &str = "PTS";
+/// Sodexo meal coupons are stored like points: a credit_note payment row with this ref (bill_payments cannot gain a mode).
+pub const SODEXO_REF: &str = "SODEXO";
 
 /// Hundredths of a point (what the database holds) as points with two decimals (what screens and bills show).
 pub fn from_hundredths(h: i64) -> f64 {

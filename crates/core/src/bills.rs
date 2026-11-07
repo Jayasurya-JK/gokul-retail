@@ -3,7 +3,7 @@
 
 use crate::db::{self, audit, doc_number, fy_of, iso, next_seq, parse_id};
 use crate::error::{invalid, ApiError, Result};
-use crate::money::{compute_totals, recalc_line};
+use crate::money::{cash_discount, compute_totals_with_delivery, recalc_line};
 use crate::types::*;
 use chrono::{DateTime, Local};
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
@@ -54,10 +54,15 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     if draft.bill_discount < 0 || draft.payments.iter().any(|p| p.amount < 0) {
         return invalid("Amounts cannot be negative");
     }
-    let lines: Vec<BillLine> = draft.lines.iter().map(recalc_line).collect();
+    let mut lines: Vec<BillLine> = draft.lines.iter().map(recalc_line).collect();
+    let ex = &draft.extras;
+    if ex.delivery_charge < 0 || !(0..=10000).contains(&ex.cash_disc_bps) {
+        return invalid("Delivery charge or cash discount is not valid");
+    }
 
     let settings = db::load_settings(tx)?;
-    let totals = compute_totals(&lines, draft.bill_discount, settings.round_to_rupee);
+    let cash_disc = cash_discount(&lines, ex.cash_disc_bps);
+    let totals = compute_totals_with_delivery(&lines, draft.bill_discount + cash_disc, settings.round_to_rupee, ex.delivery_charge, settings.delivery_gst_rate);
 
     let paid: i64 = draft.payments.iter().map(|p| p.amount).sum();
     if paid != totals.grand {
@@ -91,24 +96,44 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     let cashier = draft.cashier.clone().unwrap_or_else(|| "Cashier".into());
     let bill_disc = totals.discount - lines.iter().map(|l| l.discount).sum::<i64>();
     let status = if credit > 0 { "credit" } else { "paid" };
+    if lines.iter().any(|l| l.item_id == MANUAL_ITEM) {
+        ensure_hidden_item(tx, now, MANUAL_ITEM, "MANUAL", "Manual item", "")?;
+    }
+    if ex.delivery_charge > 0 {
+        ensure_delivery_item(tx, now)?;
+        lines.push(BillLine {
+            item_id: DELIVERY_ITEM.into(),
+            code: "DLV".into(),
+            name: "Delivery charge".into(),
+            unit: "pc".into(),
+            qty: 1000,
+            rate: ex.delivery_charge,
+            discount: 0,
+            gst_rate: settings.delivery_gst_rate,
+            amount: ex.delivery_charge,
+        });
+    }
 
     tx.prepare_cached(
         "INSERT INTO bills(number,series,fy,seq,at,day,shift_id,cashier,counter,customer_id,customer_name,status,
-            item_count,qty_count,gross,discount,bill_discount,taxable,gst,before_round,round_off,grand)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+            item_count,qty_count,gross,discount,bill_discount,taxable,gst,before_round,round_off,grand,
+            staff,delivery_address,delivery_locality,delivery_charge,wholesale,cash_disc_bps,cash_disc,remarks)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30)",
     )?
     .execute(params![
         number, BILL_SERIES, fy, seq, at, db::day_of(now), shift_id, cashier, settings.counter, draft.customer_id, customer_name,
         status, totals.item_count, totals.qty_count, totals.gross, totals.discount, bill_disc,
-        totals.taxable, totals.gst, totals.before_round, totals.round_off, totals.grand
+        totals.taxable, totals.gst, totals.before_round, totals.round_off, totals.grand,
+        ex.staff.trim(), ex.delivery_address.trim(), ex.delivery_locality.trim(), ex.delivery_charge, ex.wholesale as i64,
+        ex.cash_disc_bps, cash_disc, ex.remarks.trim()
     ])?;
     let bill_id = tx.last_insert_rowid();
     hit(fault, Fault::AfterBillRow)?;
 
     {
         let mut ins = tx.prepare_cached(
-            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cost)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,(SELECT cost FROM items WHERE id=?3))",
         )?;
         for (i, l) in lines.iter().enumerate() {
             ins.execute(params![bill_id, i as i64, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount])
@@ -130,9 +155,13 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
         let mut ins = tx.prepare_cached("INSERT INTO bill_payments(bill_id,mode,amount,ref) VALUES(?1,?2,?3,?4)")?;
         for p in &draft.payments {
             // bill_payments only knows five modes and cannot be altered: points are stored as a credit_note payment with ref PTS
-            let (mode, rf) = if p.mode == "points" { ("credit_note", Some(crate::loyalty::POINTS_REF.to_string())) } else { (p.mode.as_str(), p.r#ref.clone()) };
+            let (mode, rf) = match p.mode.as_str() {
+                "points" => ("credit_note", Some(crate::loyalty::POINTS_REF.to_string())),
+                "sodexo" => ("credit_note", Some(crate::loyalty::SODEXO_REF.to_string())),
+                m => (m, p.r#ref.clone()),
+            };
             ins.execute(params![bill_id, mode, p.amount, rf]).map_err(|_| ApiError::Invalid(format!("Unknown payment mode '{}'", p.mode)))?;
-            if mode == "credit_note" && p.mode != "points" {
+            if mode == "credit_note" && p.mode != "points" && p.mode != "sodexo" {
                 if let Some(r) = &p.r#ref {
                     crate::loyalty::spend_credit_note(tx, r, p.amount)?;
                 }
@@ -183,13 +212,43 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
         totals,
         payments: draft.payments.clone(),
         status: status.into(),
+        extras: BillExtras {
+            staff: ex.staff.trim().into(),
+            delivery_address: ex.delivery_address.trim().into(),
+            delivery_locality: ex.delivery_locality.trim().into(),
+            delivery_charge: ex.delivery_charge,
+            wholesale: ex.wholesale,
+            cash_disc_bps: ex.cash_disc_bps,
+            cash_disc,
+            remarks: ex.remarks.trim().into(),
+        },
     })
+}
+
+pub const DELIVERY_ITEM: &str = "_delivery";
+/// A one-off line typed at the counter (Manual) is billed under this hidden item.
+pub const MANUAL_ITEM: &str = "_manual";
+
+/// Hidden service items (home-delivery charge, manual lines): no stock, never shown in item lists or search.
+fn ensure_hidden_item(tx: &Connection, now: DateTime<Local>, id: &str, code: &str, name: &str, hsn: &str) -> Result<()> {
+    tx.execute("INSERT OR IGNORE INTO categories(id,name,sort) VALUES('_service','Service charges',9999)", [])?;
+    tx.execute(
+        "INSERT OR IGNORE INTO items(id,code,name,category_id,brand,unit,loose,hsn,gst_rate,mrp,price,cost,stock,reorder_level,active,created_at,kind,service)
+         VALUES(?1,?2,?3,'_service','','pc',0,?4,0,0,0,0,0,0,0,?5,'charge',1)",
+        params![id, code, name, hsn, iso(now)],
+    )?;
+    Ok(())
+}
+
+fn ensure_delivery_item(tx: &Connection, now: DateTime<Local>) -> Result<()> {
+    ensure_hidden_item(tx, now, DELIVERY_ITEM, "DELIVERY", "Delivery charge", "9965")
 }
 
 // ---------- loading ----------
 
 const BILL_COLS: &str = "b.id,b.number,b.at,b.cashier,b.counter,b.customer_id,b.customer_name,b.status,
-    b.item_count,b.qty_count,b.gross,b.discount,b.taxable,b.gst,b.before_round,b.round_off,b.grand";
+    b.item_count,b.qty_count,b.gross,b.discount,b.taxable,b.gst,b.before_round,b.round_off,b.grand,
+    b.staff,b.delivery_address,b.delivery_locality,b.delivery_charge,b.wholesale,b.cash_disc_bps,b.cash_disc,b.remarks";
 
 fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
     Ok(Bill {
@@ -214,6 +273,16 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             before_round: r.get(14)?,
             round_off: r.get(15)?,
             grand: r.get(16)?,
+        },
+        extras: BillExtras {
+            staff: r.get(17)?,
+            delivery_address: r.get(18)?,
+            delivery_locality: r.get(19)?,
+            delivery_charge: r.get(20)?,
+            wholesale: r.get::<_, i64>(21)? != 0,
+            cash_disc_bps: r.get(22)?,
+            cash_disc: r.get(23)?,
+            remarks: r.get(24)?,
         },
     })
 }
@@ -242,7 +311,14 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
             })?
             .collect::<rusqlite::Result<_>>()?;
         b.payments = pays
-            .query_map([id], |r| Ok(Payment { mode: r.get(0)?, amount: r.get(1)?, r#ref: r.get(2)? }))?
+            .query_map([id], |r| {
+                let mut p = Payment { mode: r.get(0)?, amount: r.get(1)?, r#ref: r.get(2)? };
+                if p.mode == "credit_note" && p.r#ref.as_deref() == Some(crate::loyalty::SODEXO_REF) {
+                    p.mode = "sodexo".into(); // stored as a credit_note row (see write_bill); screens see the real mode
+                    p.r#ref = None;
+                }
+                Ok(p)
+            })?
             .collect::<rusqlite::Result<_>>()?;
         b.totals.slabs = slabs
             .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)? }))?
@@ -300,12 +376,15 @@ pub fn hold_bill(conn: &mut Connection, draft: &BillDraft) -> Result<HeldBill> {
     let now = Local::now();
     let lines: Vec<BillLine> = draft.lines.iter().map(recalc_line).collect();
     let round = db::load_settings(conn)?.round_to_rupee;
-    let total = compute_totals(&lines, draft.bill_discount, round).grand;
+    let ex = draft.extras.clone();
+    let cash_disc = cash_discount(&lines, ex.cash_disc_bps.clamp(0, 10000));
+    let dgst = db::load_settings(conn)?.delivery_gst_rate;
+    let total = compute_totals_with_delivery(&lines, draft.bill_discount + cash_disc, round, ex.delivery_charge.max(0), dgst).grand;
     let name = draft.customer_name.clone().unwrap_or_else(|| "Walk-in".into());
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
-        "INSERT INTO held_bills(at,customer_id,customer_name,bill_discount,lines_json,total) VALUES(?1,?2,?3,?4,?5,?6)",
-        params![iso(now), draft.customer_id, name, draft.bill_discount, serde_json::to_string(&lines)?, total],
+        "INSERT INTO held_bills(at,customer_id,customer_name,bill_discount,lines_json,total,meta_json) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![iso(now), draft.customer_id, name, draft.bill_discount, serde_json::to_string(&lines)?, total, serde_json::to_string(&ex)?],
     )?;
     let id = tx.last_insert_rowid();
     audit(&tx, now, draft.cashier.as_deref().unwrap_or("Cashier"), "hold", "held_bill", &id.to_string(), "")?;
@@ -318,6 +397,7 @@ pub fn hold_bill(conn: &mut Connection, draft: &BillDraft) -> Result<HeldBill> {
         bill_discount: draft.bill_discount,
         customer_id: draft.customer_id.clone(),
         total,
+        extras: ex,
     })
 }
 
@@ -331,12 +411,13 @@ fn held_from_row(r: &Row) -> rusqlite::Result<HeldBill> {
         bill_discount: r.get(4)?,
         lines: serde_json::from_str(&lines_json).unwrap_or_default(),
         total: r.get(6)?,
+        extras: r.get::<_, Option<String>>(7)?.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default(),
     })
 }
 
 pub fn list_held(conn: &Connection) -> Result<Vec<HeldBill>> {
     let mut st = conn.prepare_cached(
-        "SELECT id,at,customer_id,customer_name,bill_discount,lines_json,total FROM held_bills WHERE recalled_at IS NULL ORDER BY id",
+        "SELECT id,at,customer_id,customer_name,bill_discount,lines_json,total,meta_json FROM held_bills WHERE recalled_at IS NULL ORDER BY id",
     )?;
     let v = st.query_map([], held_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
@@ -348,7 +429,7 @@ pub fn recall_held(conn: &mut Connection, id: &str) -> Result<Option<HeldBill>> 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let h = tx
         .query_row(
-            "SELECT id,at,customer_id,customer_name,bill_discount,lines_json,total FROM held_bills WHERE id=?1 AND recalled_at IS NULL",
+            "SELECT id,at,customer_id,customer_name,bill_discount,lines_json,total,meta_json FROM held_bills WHERE id=?1 AND recalled_at IS NULL",
             [n],
             held_from_row,
         )

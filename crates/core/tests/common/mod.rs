@@ -65,6 +65,7 @@ pub fn draft_with(lines: Vec<BillLine>, bill_discount: i64, customer: Option<&st
         payments: vec![Payment { mode: mode.into(), amount: grand, r#ref: None }],
         cashier: Some("Karthik".into()),
         manager_pin: None,
+                extras: Default::default(),
     }
 }
 

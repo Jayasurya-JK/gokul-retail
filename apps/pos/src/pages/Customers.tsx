@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HandCoins, Pencil, Phone, Plus, Receipt, Search, ShoppingCart, UserRound, UserPlus } from 'lucide-react';
-import { parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustStatement } from '@gokul/data';
+import { formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustStatement } from '@gokul/data';
 import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useToast, type FKey } from '@gokul/ui';
 import { api, useBilling } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -27,7 +27,7 @@ const CUSTOMERS_KEYS: KeyRows = [
 ];
 
 export function Customers() {
-  useScreenKeys('Customers', CUSTOMERS_KEYS);
+  useScreenKeys('Customer Profile', CUSTOMERS_KEYS);
   const nav = useNavigate();
   const toast = useToast();
   const [rows, setRows] = useState<CustomerRow[]>([]);
@@ -197,6 +197,22 @@ export function Customers() {
                   <Tile label="Average bill" hint={sel.lastBillAt ? `Last ${dateTimeOf(sel.lastBillAt)}` : 'No bills yet'}><Money paise={sel.avgBill} decimals={false} /></Tile>
                 </div>
 
+                <div className="mt-4 rounded-card border border-line p-4">
+                  <h3 className="text-sm font-semibold text-ink">Profile</h3>
+                  <dl className="mt-3 grid grid-cols-5 gap-x-5 gap-y-3">
+                    <Fact k="Father name" v={sel.fatherName} />
+                    <Fact k="Date of birth" v={sel.dob ? dayText(sel.dob) : ''} />
+                    <Fact k="Anniversary" v={sel.anniversary ? dayText(sel.anniversary) : ''} />
+                    <Fact k="GST" v={sel.gstin} mono />
+                    <Fact k="PAN" v={sel.pan} mono />
+                    <Fact k="Locality" v={sel.locality || sel.area} />
+                    <Fact k="Route" v={sel.route} />
+                    <Fact k="Credit limit" v={sel.creditLimit < 0 ? 'No limit' : sel.creditLimit === 0 ? 'Not allowed' : formatRupees(sel.creditLimit, { decimals: false })} />
+                    <Fact k="Credit days" v={sel.creditDays ? `${sel.creditDays} days` : ''} />
+                    <Fact k="Opening balance" v={sel.openingBalance ? formatRupees(sel.openingBalance, { decimals: false }) : ''} />
+                  </dl>
+                </div>
+
                 {sel.outstanding > 0 && buckets && (
                   <div className="mt-4 rounded-card border border-line p-4">
                     <div className="flex items-center justify-between">
@@ -267,6 +283,20 @@ export function Customers() {
   );
 }
 
+const dayText = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return y ? new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
+};
+
+function Fact({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-subtle">{k}</dt>
+      <dd className={cn('mt-0.5 truncate text-sm', v ? 'font-medium text-ink' : 'text-subtle', mono && v && 'num')}>{v || '-'}</dd>
+    </div>
+  );
+}
+
 function Tile({ label, hint, tone, children }: { label: string; hint?: string; tone?: 'warn'; children: React.ReactNode }) {
   return (
     <div className="rounded-card border border-line bg-surface-2 px-4 py-3">
@@ -281,7 +311,8 @@ function Tile({ label, hint, tone, children }: { label: string; hint?: string; t
 function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | CustomerRow; onClose: () => void; onSaved: (c: CustomerRow) => void }) {
   const open = target !== null;
   const existing = target && target !== 'new' ? target : null;
-  const [f, setF] = useState({ name: '', phone: '', address: '', area: '', gstin: '', limit: '', unlimited: false, notes: '' });
+  const blank = { name: '', phone: '', address: '', area: '', gstin: '', limit: '0', unlimited: false, notes: '', fatherName: '', dob: '', anniversary: '', pan: '', locality: '', route: '', creditDays: '', opening: '' };
+  const [f, setF] = useState({ ...blank, limit: '' });
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState('');
@@ -290,8 +321,14 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
     if (!open) return;
     setErr({}); setFail(''); setBusy(false);
     setF(existing
-      ? { name: existing.name, phone: existing.phone.replace(/\D/g, '').slice(-10), address: existing.address ?? '', area: existing.area, gstin: existing.gstin ?? '', limit: existing.creditLimit > 0 ? String(existing.creditLimit / 100) : '0', unlimited: existing.creditLimit < 0, notes: existing.notes ?? '' }
-      : { name: '', phone: '', address: '', area: '', gstin: '', limit: '0', unlimited: false, notes: '' });
+      ? {
+        ...blank, name: existing.name, phone: existing.phone.replace(/\D/g, '').slice(-10), address: existing.address ?? '', area: existing.area, gstin: existing.gstin ?? '',
+        limit: existing.creditLimit > 0 ? String(existing.creditLimit / 100) : '0', unlimited: existing.creditLimit < 0, notes: existing.notes ?? '',
+        fatherName: existing.fatherName ?? '', dob: existing.dob ?? '', anniversary: existing.anniversary ?? '', pan: existing.pan ?? '', locality: existing.locality ?? '',
+        route: existing.route ?? '', creditDays: existing.creditDays ? String(existing.creditDays) : '', opening: existing.openingBalance ? String(existing.openingBalance / 100) : '',
+      }
+      : { ...blank });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existing]);
 
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => { setF((p) => ({ ...p, [k]: e.target.value })); setErr((p) => ({ ...p, [k]: '' })); };
@@ -303,30 +340,47 @@ function CustomerSheet({ target, onClose, onSaved }: { target: null | 'new' | Cu
     if (f.gstin.trim() && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/i.test(f.gstin.trim())) e.gstin = 'GSTIN looks wrong (15 characters)';
     const limit = f.limit.trim() === '' ? 0 : parsePaise(f.limit);
     if (limit === null) e.limit = 'Enter an amount';
+    const opening = f.opening.trim() === '' ? 0 : parsePaise(f.opening);
+    if (opening === null) e.opening = 'Enter an amount';
+    if (f.pan.trim() && !/^[A-Z]{5}\d{4}[A-Z]$/i.test(f.pan.trim())) e.pan = 'PAN looks wrong (like ABCDE1234F)';
     setErr(e);
-    if (Object.keys(e).length || limit === null) return;
+    if (Object.keys(e).length || limit === null || opening === null) return;
     setBusy(true);
     try {
       const gstin = f.gstin.trim().toUpperCase();
       const saved = await api.saveCustomer({
         id: existing?.id, name: f.name.trim(), phone: f.phone.trim(), area: f.area.trim() || 'Local', address: f.address.trim() || undefined,
         gstin: gstin || undefined, type: gstin ? 'b2b' : 'retail', business: existing?.business, email: existing?.email, creditLimit: f.unlimited ? -1 : limit, notes: f.notes.trim(),
+        fatherName: f.fatherName.trim() || undefined, dob: f.dob || undefined, anniversary: f.anniversary || undefined, pan: f.pan.trim().toUpperCase() || undefined,
+        locality: f.locality.trim() || undefined, route: f.route.trim() || undefined, creditDays: Number(f.creditDays) || 0, openingBalance: opening,
       });
       onSaved(saved);
     } catch (x) { setFail(x instanceof Error ? x.message : 'Could not save the customer'); setBusy(false); }
   };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()} width={460} title={existing ? 'Edit customer' : 'New customer'} description={existing ? existing.name : 'Saved on this computer'}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} width={540} title={existing ? 'Edit customer' : 'New customer'} description={existing ? existing.name : 'Saved on this computer'}>
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <Input data-autofocus autoFocus label="Name" value={f.name} onChange={set('name')} error={err.name} placeholder="Customer or shop name" />
           <Input label="Phone" inputMode="numeric" maxLength={10} value={f.phone} onChange={(e) => set('phone')({ target: { value: e.target.value.replace(/\D/g, '') } })} error={err.phone} placeholder="10 digit mobile number" />
           <Input label="Address" value={f.address} onChange={set('address')} placeholder="Street, town" />
-          <Input label="Area" value={f.area} onChange={set('area')} placeholder="e.g. Gandhipuram" />
-          <Input label="GSTIN" value={f.gstin} onChange={(e) => set('gstin')({ target: { value: e.target.value.toUpperCase() } })} error={err.gstin} hint="Only for business customers who need a GST invoice" maxLength={15} />
-          <NumberInput label="Credit limit" prefix="₹" value={f.unlimited ? '' : f.limit} disabled={f.unlimited} onValueChange={(v) => set('limit')({ target: { value: v } })} error={err.limit} decimals={0} hint="0 means credit is not allowed" />
-          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={f.unlimited} onChange={(e) => setF((p) => ({ ...p, unlimited: e.target.checked }))} /> No limit (only for customers you fully trust)</label>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Father name" value={f.fatherName} onChange={set('fatherName')} />
+            <Input label="Locality" value={f.locality} onChange={set('locality')} placeholder="Area for delivery" />
+            <Input label="Date of birth" type="date" value={f.dob} onChange={set('dob')} />
+            <Input label="Anniversary" type="date" value={f.anniversary} onChange={set('anniversary')} />
+            <Input label="Area" value={f.area} onChange={set('area')} placeholder="e.g. Gandhipuram" />
+            <Input label="Route" value={f.route} onChange={set('route')} placeholder="Delivery route" />
+            <Input label="GST" value={f.gstin} onChange={(e) => set('gstin')({ target: { value: e.target.value.toUpperCase() } })} error={err.gstin} maxLength={15} />
+            <Input label="PAN" value={f.pan} onChange={(e) => set('pan')({ target: { value: e.target.value.toUpperCase() } })} error={err.pan} maxLength={10} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <NumberInput label="Credit limit" prefix="₹" value={f.unlimited ? '' : f.limit} disabled={f.unlimited} onValueChange={(v) => set('limit')({ target: { value: v } })} error={err.limit} decimals={0} />
+            <NumberInput label="Credit days" value={f.creditDays} onValueChange={(v) => set('creditDays')({ target: { value: v } })} decimals={0} />
+            <NumberInput label="Opening balance" prefix="₹" value={f.opening} onValueChange={(v) => set('opening')({ target: { value: v } })} error={err.opening} />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={f.unlimited} onChange={(e) => setF((p) => ({ ...p, unlimited: e.target.checked }))} /> No credit limit (only for customers you fully trust). A limit of 0 means credit is not allowed.</label>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-ink">Notes</span>
             <textarea value={f.notes} onChange={set('notes')} rows={3} placeholder="Delivery instructions, preferred oil, anything staff should know" className="w-full resize-none rounded-control border border-line-strong bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25" />

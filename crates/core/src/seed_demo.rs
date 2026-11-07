@@ -186,6 +186,7 @@ pub fn seed_demo(conn: &mut Connection) -> Result<()> {
             payments: pays.iter().map(|(m, a, r)| Payment { mode: m.clone(), amount: *a, r#ref: r.clone() }).collect(),
             cashier: Some(cashier.clone()),
             manager_pin: None,
+                extras: Default::default(),
         };
         write_bill(&tx, &draft, at, None)?;
     }
