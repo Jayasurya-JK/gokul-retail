@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MessageCircle, Pencil, Phone, Plus, Users, Wallet } from 'lucide-react';
-import { formatPoints, formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow, type PointsEntry } from '@gokul/data';
+import { formatPoints, formatQty, fuzzyFilter, type CustomerProfile, type CustomerRow } from '@gokul/data';
 import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Tabs, TabPanel, useToast, type ColumnDef } from '@gokul/ui';
 import { api } from '../store';
 import { CustomerSheet } from '../components/crm/CustomerSheet';
+import { PointsLedgerList } from '../components/crm/PointsParts';
 import { Avatar, DetailPane, fmtDate, fmtDateTime, initialsOf, nameColor, PropRow, Segmented, SectionLabel, StatusBadge, ago } from '../components/crm/common';
 
 const DECIMAL = ['kg', 'g', 'l', 'ml'];
@@ -40,25 +41,6 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-0.5 text-md font-semibold text-ink num">{children}</div>
     </div>
-  );
-}
-
-function PointsHistory({ customerId }: { customerId: string }) {
-  const [rows, setRows] = useState<PointsEntry[] | null>(null);
-  useEffect(() => { let live = true; setRows(null); api.listPointsHistory(customerId, 200).then((r) => live && setRows(r)).catch(() => live && setRows([])); return () => { live = false; }; }, [customerId]);
-  if (rows === null) return <div className="p-4 text-sm text-muted">Loading</div>;
-  if (rows.length === 0) return <EmptyState title="No points yet" hint="Points are earned on every bill and show here, one line each." />;
-  const label = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Taken back / given back', adjust: 'Opening balance' } as const;
-  return (
-    <>
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-sm"><span className="text-muted">Balance</span><b className="num text-ink">{formatPoints(Math.round(rows.reduce((s, r) => s + r.points, 0) * 100) / 100)} points</b></div>
-      {rows.map((r, i) => (
-        <div key={i} className="flex items-center justify-between gap-3 border-b border-line/70 px-4 py-2 text-sm">
-          <div className="min-w-0"><div className="font-medium text-ink">{label[r.kind]}{r.bill ? ` · ${r.bill}` : ''}</div><div className="truncate text-xs text-muted">{fmtDateTime(r.at)} · {r.note}</div></div>
-          <b className={`num shrink-0 ${r.points >= 0 ? 'text-success' : 'text-danger'}`}>{r.points > 0 ? '+' : ''}{formatPoints(r.points)}</b>
-        </div>
-      ))}
-    </>
   );
 }
 
@@ -150,7 +132,8 @@ function Detail({ profile, onEdit, onCollect }: { profile: CustomerProfile; onEd
           </Button>
         </TabPanel>
         <TabPanel value="points" className="min-h-0 flex-1 overflow-auto outline-none">
-          <PointsHistory customerId={c.id} />
+          <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-sm"><span className="text-muted">Balance</span><b className="num text-ink">{formatPoints(c.loyaltyPoints)} points</b></div>
+          <PointsLedgerList customerId={c.id} />
         </TabPanel>
         <TabPanel value="history" className="min-h-0 flex-1 overflow-auto outline-none">
           {bills.length === 0 ? (
@@ -200,7 +183,8 @@ export function Customers() {
 
   const shown = useMemo(() => {
     const base = rows.filter((r) => (view === 'credit' ? r.creditLimit !== 0 : view === 'dues' ? r.outstanding > 0 : view === 'b2b' ? r.type === 'b2b' : true));
-    return fuzzyFilter(base, q, (r) => [r.name, r.phone.replace(' ', ''), r.business ?? '', r.area], 500);
+    // no cap: every customer is searchable (the table below is virtualised, so thousands of rows stay fast)
+    return fuzzyFilter(base, q, (r) => [r.name, r.id, r.phone.replace(' ', ''), r.business ?? '', r.area], Infinity);
   }, [rows, q, view]);
 
   const owing = rows.filter((r) => r.outstanding > 0);
@@ -208,11 +192,11 @@ export function Customers() {
   return (
     <>
       <PageHeader
-        title="Customers" subtitle={`${rows.length} customers · ${owing.length} with dues`} icon={<Users size={17} />}
+        title="Customers" subtitle={`${rows.length.toLocaleString('en-IN')} customers · ${owing.length} with dues`} icon={<Users size={17} />}
         actions={<Button variant="primary" icon={<Plus size={15} />} kbd="Ctrl+N" onClick={() => setSheet({ open: true, edit: null })}>New customer</Button>}
       />
-      <FilterBar trailing={<span>{shown.length} shown</span>}>
-        <div className="w-72"><SearchInput placeholder="Search name, phone, business or area" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <FilterBar trailing={<span><b className="num text-ink">{shown.length.toLocaleString('en-IN')}</b> shown of <b className="num text-ink">{rows.length.toLocaleString('en-IN')}</b> customers</span>}>
+        <div className="w-72"><SearchInput placeholder="Search name, phone, code, business or area" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <Segmented<View> value={view} onChange={setView} options={[{ value: 'all', label: 'All' }, { value: 'credit', label: 'Credit' }, { value: 'dues', label: 'With dues' }, { value: 'b2b', label: 'Business' }]} />
       </FilterBar>
       <div className="flex min-h-0 flex-1">
@@ -220,7 +204,7 @@ export function Customers() {
           data={shown} columns={columns} getRowId={(r) => r.id} selectedId={selId} onSelect={(r) => setSelId(r.id)}
           onActivate={(r) => setSheet({ open: true, edit: r })}
           empty={<EmptyState icon={<Users size={20} />} title="No customers match" hint="Check the spelling, or add a new customer with Ctrl+N." />}
-          footer={<><span>{shown.length} customers</span><span>Enter edits the selected customer</span></>}
+          footer={<><span>{shown.length.toLocaleString('en-IN')} of {rows.length.toLocaleString('en-IN')} customers</span><span>Enter edits the selected customer</span></>}
         />
         {profile && profile.customer.id === selId && (
           <Detail

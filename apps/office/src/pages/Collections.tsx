@@ -121,7 +121,7 @@ export function Collections() {
 
   const shown = useMemo(() => {
     const base = bucket ? rows.filter((r) => r.buckets[bucket] > 0) : rows;
-    return fuzzyFilter(base, q, (r) => [r.name, r.phone.replace(' ', ''), r.business ?? '', r.area], 500);
+    return fuzzyFilter(base, q, (r) => [r.name, r.phone.replace(' ', ''), r.business ?? '', r.area], Infinity);
   }, [rows, q, bucket]);
 
   const totals = useMemo(() => {

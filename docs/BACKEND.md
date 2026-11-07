@@ -240,3 +240,11 @@ Migration `008_pos_parallel.sql`, additive only (new nullable or defaulted colum
 - **Customer profile fields:** father name, DOB, anniversary, PAN, locality, route, credit days, opening balance (GST uses the existing `gstin`). Part of `saveCustomer` and `listCustomerRows`.
 - **POS reports:** `listStaff`, `addStaff`, `salesReport`, `paymodeReport`, `staffReport`, `stockReport` (`posreports.rs`). A cashier is held to today's bills whatever dates are sent.
 - **Cost and profit privacy.** `bill_lines.cost` keeps the item cost at the time of sale. For anyone but the owner and managers, `dispatch_session` removes the keys `cost`, `costTotal`, `profit`, `profitPct`, `profitTotal` from every answer (`authz::strip_cost`), so a cashier's screen never receives them; the UI also hides those columns.
+
+## Customer Points module (round 5)
+
+- **Units.** The database holds points in hundredths; every API answer (`loyaltyPoints` on customer rows, wallet, history, ledger, overview, reports) is points with two decimals (78.56), and screens format with `formatPoints` (always two decimals, Indian grouping). A test (`points.rs`, `packages/data/scripts/points-format.mjs`) guards it.
+- **Migration 009** rebuilds `points_ledger` to allow kind `expire` (same ids and rows; guard triggers restored). Imported/opening rows are `adjust` rows whose note starts with "Opening" and are shown as `import`.
+- **API** (`crates/core/src/points.rs`): `pointsOverview`, `pointsReport` (need reports permission), `listPointsCustomers` (server-side search over name, mobile, code, area with paging and sorting, any role), `getPointsLedger` (balance after every row, any role), `adjustPoints`, `bulkAdjustPoints` (role needs `canEditPrices` AND a manager/owner PIN every time; reason required; never below zero; bulk checks the confirmed count; audited), `runPointsExpiry(dryRun)`.
+- **Rules** (Settings, Loyalty; saving needs `canChangeSettings`): rupees per point, point value, minimum, max %, `expiryMonths` (0 = off; nothing lapses until Run expiry is pressed) and `excludeCategories` (lines of those categories, e.g. `_service`, earn nothing; their share of the bill is left out).
+- Tests: `cargo test -p gokul-core --test points` (and the ignored `real_copy_has_every_customer_and_exact_points` with `GOKUL_DB_COPY`).

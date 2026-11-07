@@ -152,7 +152,7 @@ export function Suppliers() {
 
   const shown = useMemo(() => {
     const base = rows.filter((r) => filter === 'all' || (filter === 'due' && r.due > 0) || (filter === 'overdue' && r.overdue > 0));
-    return fuzzyFilter(base, q, (r) => [r.profile.name, r.profile.city, r.profile.phone, r.profile.gstin], 200);
+    return fuzzyFilter(base, q, (r) => [r.profile.name, r.profile.city, r.profile.phone, r.profile.gstin], Infinity);
   }, [rows, q, filter]);
   const totalDue = rows.reduce((a, r) => a + r.due, 0);
   const openNew = () => { setEditing(null); setFormOpen(true); };

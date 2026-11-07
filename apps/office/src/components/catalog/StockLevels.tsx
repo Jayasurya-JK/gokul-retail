@@ -36,7 +36,7 @@ export function StockLevels({ version }: { version: number }) {
   const active = useMemo(() => items.filter((i) => i.active), [items]);
   const rows = useMemo(() => fuzzyFilter(
     active.filter((i) => (cat === 'all' || i.categoryId === cat) && (level === 'all' || (level === 'low' ? state(i) !== 'ok' : state(i) === 'out'))),
-    q, (i) => [i.name, i.code, i.barcode], 800), [active, cat, level, q]);
+    q, (i) => [i.name, i.code, i.barcode], Infinity), [active, cat, level, q]);
   const totalValue = active.reduce((s, i) => s + worth(i), 0);
   const low = active.filter((i) => state(i) === 'low').length;
   const out = active.filter((i) => state(i) === 'out').length;

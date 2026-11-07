@@ -1,5 +1,5 @@
 import {
-  BarChart3, Barcode, Boxes, ClipboardList, Factory, LayoutDashboard, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Tags, Truck, Users, Wallet,
+  BarChart3, Barcode, Boxes, ClipboardList, Factory, LayoutDashboard, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { NavGroup } from '@gokul/ui';
 
@@ -28,6 +28,7 @@ export const nav: NavGroup[] = [
     items: [
       { path: '/sales', label: 'Bills', icon: <Receipt />, keywords: 'sales invoices' },
       { path: '/customers', label: 'Customers', icon: <Users /> },
+      { path: '/loyalty-points', label: 'Loyalty points', icon: <Star />, keywords: 'points reward liability redeem expire adjust' },
       { path: '/collections', label: 'Credit and collections', icon: <Wallet />, keywords: 'ledger outstanding' },
     ],
   },

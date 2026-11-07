@@ -119,6 +119,8 @@ enum Rule {
     Perm(&'static str),
     /// The role holds the permission and the action is not on its "needs manager PIN" list, or the call carries a manager PIN.
     PermPin { perm: &'static str, action: &'static str, pin_arg: usize, pin_key: Option<&'static str> },
+    /// The role must hold the permission AND the call must carry a manager or owner PIN, every time (no "PIN not required" setting).
+    PermAndPin { perm: &'static str, action_what: &'static str },
     /// Discount above the limit, changed prices and credit above the customer limit.
     Bill,
     /// An expense over the limit (setting) needs a manager PIN unless the role may open the drawer on its own.
@@ -130,7 +132,7 @@ enum Rule {
 fn rule_for(method: &str, args: &[Value]) -> Rule {
     use Rule::*;
     match method {
-        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
+        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
         | "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => Perm("canManageItems"),
         "createGrn" | "saveSupplier" | "recordSupplierPayment" | "saveSeedNorms" | "createPressingBatch" | "moveBatchToBarrel" | "createPackRun" => {
             Perm("canManageStock")
@@ -141,7 +143,9 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => Perm("canManageUsers"),
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => Perm("canChangeSettings"),
-        "runReport" => Perm("canSeeReports"),
+        "runReport" | "pointsOverview" | "pointsReport" => Perm("canSeeReports"),
+        "adjustPoints" | "bulkAdjustPoints" => PermAndPin { perm: "canEditPrices", action_what: "change customer points" },
+        "runPointsExpiry" => Perm("canEditPrices"),
         "cancelBill" => PermPin { perm: "canCancelBill", action: "cancel_bill", pin_arg: 0, pin_key: Some("managerPin") },
         "createReturn" => PermPin { perm: "canReturn", action: "return", pin_arg: 0, pin_key: Some("managerPin") },
         "addCashEntry" if args.first().map(|a| a["kind"] == "out").unwrap_or(false) => {
@@ -160,7 +164,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
 
 fn describe(method: &str) -> &'static str {
     match method {
-        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" => "change items",
+        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" => "change items",
         "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory" => "change categories",
         "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => "change brands",
         "createGrn" | "saveSupplier" | "recordSupplierPayment" => "record purchases and supplier payments",
@@ -170,7 +174,9 @@ fn describe(method: &str) -> &'static str {
         "setCustomerCredit" => "allow credit for a customer",
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => "manage users",
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => "change settings or backups",
-        "runReport" => "see reports",
+        "runReport" | "pointsOverview" | "pointsReport" => "see reports",
+        "adjustPoints" | "bulkAdjustPoints" => "change customer points",
+        "runPointsExpiry" => "expire points",
         "cancelBill" => "cancel a bill",
         "createReturn" => "give a refund",
         "addCashEntry" => "take cash out of the drawer",
@@ -298,6 +304,19 @@ pub fn authorize(conn: &Connection, actor: &Actor, method: &str, args: &mut Vec<
             match store::find_approver(conn, &pin, Some(perm), 0)? {
                 Some(m) => Ok(Some(Override { approver: m.name, what: what.to_string() })),
                 None => Err(wrong_approval_pin(conn, actor, what)),
+            }
+        }
+        Rule::PermAndPin { perm, action_what } => {
+            if !actor.has(perm) {
+                return invalid(format!("You do not have permission to {action_what}. Ask the owner or a manager."));
+            }
+            let pin = pin_from(args, 0, Some("managerPin"));
+            if pin.is_empty() {
+                return invalid(format!("A manager PIN is needed to {action_what}"));
+            }
+            match store::find_approver(conn, &pin, Some(perm), 0)? {
+                Some(m) => Ok(Some(Override { approver: m.name, what: action_what.to_string() })),
+                None => Err(wrong_approval_pin(conn, actor, action_what)),
             }
         }
         Rule::Bill => check_bill(conn, actor, args),

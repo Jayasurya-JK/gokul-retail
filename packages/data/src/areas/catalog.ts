@@ -94,6 +94,20 @@ export interface CountedCategory extends Category { items: number }
 export interface CountedBrand extends Brand { items: number }
 export type NameResult = { ok: true } | { ok: false; message: string };
 
+/** Filter for the Categories and brands master-detail list. Parts combine with AND. */
+export interface ItemPageQuery {
+  categoryId?: string;
+  /** Brand id from listBrands. */
+  brandId?: string;
+  /** Name, Tamil name, code or barcode. */
+  search?: string;
+  status?: 'active' | 'inactive' | 'all';
+  offset?: number;
+  /** Default 500, at most 5000. `total` counts every match. */
+  limit?: number;
+}
+export interface ItemPage { total: number; items: Item[] }
+
 export interface CatalogApi {
   getItemDetail(id: string): Promise<ItemDetail | null>;
   /** Pure checks, same ones saveItem runs. */
@@ -106,6 +120,10 @@ export interface CatalogApi {
   setItemsActive(ids: string[], active: boolean): Promise<void>;
   setItemsCategory(ids: string[], categoryId: string): Promise<void>;
   setItemsGst(ids: string[], rate: Item['gstRate']): Promise<void>;
+  /** Bulk change brand (owner / manager). */
+  setItemsBrand(ids: string[], brandId: string): Promise<void>;
+  /** Items for one category and/or brand, with search and paging. */
+  listItemsPage(query: ItemPageQuery): Promise<ItemPage>;
   itemMovements(itemId: string, limit: number): Promise<StockMovement[]>;
 
   listCategoriesWithCounts(): Promise<CountedCategory[]>;
@@ -299,6 +317,22 @@ export function createCatalogMock(store: MockStore): CatalogApi {
       for (const id of ids) { const it = byId(id); if (it) { it.categoryId = categoryId; it.category = catName(categoryId); } }
     },
     setItemsGst: async (ids, rate) => { for (const id of ids) { const it = byId(id); if (it) it.gstRate = rate; } },
+    setItemsBrand: async (ids, brandId) => {
+      const b = brands.find((x) => x.id === brandId);
+      if (!b) return;
+      for (const id of ids) { const it = byId(id); if (it) it.brand = b.name; }
+    },
+    listItemsPage: async (q) => {
+      const brandName = q.brandId ? brands.find((b) => b.id === q.brandId)?.name ?? '\u0000' : undefined;
+      const term = norm(q.search ?? '').toLowerCase();
+      const hit = items.filter((i) =>
+        (!q.categoryId || i.categoryId === q.categoryId) && (brandName === undefined || i.brand === brandName) &&
+        (!q.status || q.status === 'all' || (q.status === 'active') === i.active) &&
+        (!term || i.name.toLowerCase().includes(term) || (i.nameTa ?? '').toLowerCase().includes(term) || i.code.includes(term) || allBarcodes(i).some((b) => b.includes(term))));
+      const off = Math.max(0, q.offset ?? 0);
+      const lim = q.limit && q.limit > 0 ? Math.min(q.limit, 5000) : 500;
+      return { total: hit.length, items: hit.slice(off, off + lim).map((i) => ({ ...i })) };
+    },
     itemMovements: async (itemId, limit) => {
       const out: StockMovement[] = movements.filter((m) => m.itemId === itemId);
       for (const b of store.bills) for (const l of b.lines) if (l.itemId === itemId) {

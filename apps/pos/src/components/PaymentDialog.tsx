@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, CreditCard, HandCoins, QrCode, Star, Ticket, Wallet, X } from 'lucide-react';
-import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
+import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatPoints, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
 import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 
@@ -178,6 +178,12 @@ export function PaymentDialog({ open, total, customer, wallet, onClose, onComple
                     {i === 0 ? 'Exact' : formatRupees(c, { decimals: false })}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {mode === 'points' && wallet && (
+              <div className="mt-2 text-sm text-muted">
+                Balance <b className="num text-ink">{formatPoints(wallet.points)}</b> points. Can use <b className="num text-ink">{Math.floor(pointsAvail / pv)}</b> now ({formatRupees(pointsAvail)}); whole points only.
               </div>
             )}
 

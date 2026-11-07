@@ -238,7 +238,7 @@ export function buildCustomers(): Customer[] {
       area: AREAS[Math.floor(r() * AREAS.length)],
       creditLimit: limit,
       outstanding: credit && r() < 0.7 ? R(Math.floor(200 + r() * 4200)) : 0,
-      loyaltyPoints: Math.floor(r() * 900),
+      loyaltyPoints: Math.round(r() * 90000) / 100,
       lastVisit: `${1 + Math.floor(r() * 28)} days ago`,
     });
   }

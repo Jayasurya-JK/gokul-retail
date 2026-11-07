@@ -276,7 +276,7 @@ fn migration_008_keeps_existing_data() {
     let db = Db::open(&path).unwrap();
     db.with(|c| {
         let v: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        assert_eq!(v, 8);
+        assert_eq!(v, 9);
         let name: String = c.query_row("SELECT name FROM items WHERE id='i1'", [], |r| r.get(0))?;
         assert_eq!(name, "G7 Sesame Oil 1L");
         let (wp, locality): (Option<i64>, String) = c.query_row(

@@ -217,6 +217,11 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
             catalog::set_items_gst(c, &arg::<Vec<String>>(a, 0, "ids")?, arg(a, 1, "rate")?)?;
             Ok(Value::Null)
         }
+        "listItemsPage" => ok(catalog::list_items_page(c, &arg::<catalog::ItemPageQuery>(a, 0, "query")?)?),
+        "setItemsBrand" => {
+            catalog::set_items_brand(c, &arg::<Vec<String>>(a, 0, "ids")?, &arg::<String>(a, 1, "brandId")?)?;
+            Ok(Value::Null)
+        }
         "itemMovements" => ok(catalog::item_movements(c, &arg::<String>(a, 0, "itemId")?, arg(a, 1, "limit")?)?),
         "listCategoriesWithCounts" => ok(catalog::list_categories_with_counts(c)?),
         "addCategory" => ok(catalog::add_category(c, &arg::<String>(a, 0, "name")?)?),
@@ -268,6 +273,13 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "getCustomerProfile" => ok(crm::get_customer_profile(c, &arg::<String>(a, 0, "id")?)?),
         "getCustomerWallet" => ok(crate::loyalty::wallet(c, &arg::<String>(a, 0, "customerId")?)?),
         "listPointsHistory" => ok(crate::loyalty::history(c, &arg::<String>(a, 0, "customerId")?, arg::<Option<i64>>(a, 1, "limit")?.unwrap_or(100))?),
+        "pointsOverview" => ok(crate::points::overview(c)?),
+        "listPointsCustomers" => ok(crate::points::list_customers(c, &arg::<Option<crate::points::PointsQuery>>(a, 0, "query")?.unwrap_or_default())?),
+        "getPointsLedger" => ok(crate::points::ledger(c, &arg::<String>(a, 0, "customerId")?, arg::<Option<i64>>(a, 1, "limit")?.unwrap_or(500))?),
+        "adjustPoints" => ok(crate::points::adjust(c, &arg::<crate::points::AdjustInput>(a, 0, "input")?)?),
+        "bulkAdjustPoints" => ok(crate::points::bulk_adjust(c, &arg::<crate::points::BulkInput>(a, 0, "input")?)?),
+        "runPointsExpiry" => ok(crate::points::run_expiry(c, arg::<Option<bool>>(a, 0, "dryRun")?.unwrap_or(true))?),
+        "pointsReport" => ok(crate::points::report(c, &arg::<Option<crate::points::ReportQuery>>(a, 0, "query")?.unwrap_or_default())?),
         "setCustomerCredit" => ok(crm::set_customer_credit(c, &arg::<String>(a, 0, "customerId")?, arg::<i64>(a, 1, "limit")?, "")?),
         "saveCustomer" => ok(crm::save_customer(c, &arg::<crm::CustomerInput>(a, 0, "input")?)?),
         "listReceivables" => ok(crm::list_receivables(c)?),
@@ -345,12 +357,12 @@ pub const METHODS: &[&str] = &[
     "cancelBill", "recordReprint", "createReturn", "listCreditNotes", "getPendingExchange", "clearPendingExchange",
     "listSuppliers", "listPurchases", "listProduction",
     "getItemDetail", "validateItem", "saveItem", "generateBarcode", "nextItemCode", "listLooseItems", "setItemsActive", "setItemsCategory",
-    "setItemsGst", "itemMovements", "listCategoriesWithCounts", "addCategory", "renameCategory", "deleteCategory", "moveCategory",
+    "setItemsGst", "setItemsBrand", "listItemsPage", "itemMovements", "listCategoriesWithCounts", "addCategory", "renameCategory", "deleteCategory", "moveCategory",
     "listBrands", "addBrand", "renameBrand", "deleteBrand", "moveBrand", "createAdjustment", "listAdjustments", "startStockTake", "postStockTake",
     "searchPurchasable", "listGrns", "getGrn", "createGrn", "listSupplierSummaries", "getSupplierLedger", "saveSupplier", "recordSupplierPayment",
     "listSeedProfiles", "saveSeedNorms", "listPressingBatches", "createPressingBatch", "moveBatchToBarrel", "listBarrels", "listPackTargets",
     "listPackRuns", "createPackRun",
-    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "listReceivables", "getStatement",
+    "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "pointsOverview", "listPointsCustomers", "getPointsLedger", "adjustPoints", "bulkAdjustPoints", "runPointsExpiry", "pointsReport", "listReceivables", "getStatement",
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",

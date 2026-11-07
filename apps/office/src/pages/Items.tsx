@@ -44,7 +44,7 @@ export function Items() {
       (gst === 'all' || i.gstRate === Number(gst)) &&
       (stockF === 'all' || (stockF === 'low' ? stockState(i) !== 'ok' : stockState(i) === 'out')) &&
       (status === 'all' || (status === 'active') === i.active));
-    return fuzzyFilter(base, q, (i) => [i.name, i.code, i.barcode, i.nameTa ?? ''], 800);
+    return fuzzyFilter(base, q, (i) => [i.name, i.code, i.barcode, i.nameTa ?? ''], Infinity);
   }, [items, q, cat, type, gst, stockF, status]);
 
   const sel = items.find((i) => i.id === selId) ?? null;

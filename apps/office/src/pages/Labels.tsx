@@ -10,6 +10,8 @@ import { DEFAULT_FIELDS, GOKUL_FIELDS, LabelRoll, RIBBON_FIELDS } from '../compo
 const fieldsFor = (p: LabelPresetId) => (p === 'gokul-small' ? GOKUL_FIELDS : p === '32x25-3up' ? RIBBON_FIELDS : DEFAULT_FIELDS);
 
 const MAX_PREVIEW = 24;
+const LIST_MAX = 400;
+
 /** Today as YYYY-MM-DD in the shop's local time (the default Pkd shown in the dialog). */
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 type Custom = { width: string; height: string; gap: string; columns: string; colGap: string };
@@ -52,7 +54,8 @@ export function Labels() {
     }).catch(() => undefined);
   }, []);
 
-  const shown = useMemo(() => fuzzyFilter(items.filter((i) => i.active), q, (i) => [i.name, i.code, i.barcode], 200), [items, q]);
+  const matches = useMemo(() => fuzzyFilter(items.filter((i) => i.active), q, (i) => [i.name, i.code, i.barcode], Infinity), [items, q]);
+  const shown = useMemo(() => matches.slice(0, LIST_MAX), [matches]);
   const picked = useMemo(() => items.filter((i) => copies[i.id] > 0), [items, copies]);
   const total = picked.reduce((s, i) => s + copies[i.id], 0);
   const sheet = useMemo(() => picked.flatMap((i) => Array.from({ length: copies[i.id] }, () => i)), [picked, copies]);
@@ -132,6 +135,7 @@ export function Labels() {
             />
             {picked.length > 0 && <button className="font-medium text-primary hover:underline" onClick={() => setCopies({})}>Clear {picked.length} picked</button>}
           </div>
+          {matches.length > LIST_MAX && <div className="shrink-0 border-b border-line bg-warning-soft px-3 py-1.5 text-xs text-warning">Showing the first {LIST_MAX} of {matches.length} items. Type to narrow the list.</div>}
           <ul className="min-h-0 flex-1 overflow-auto">
             {shown.length === 0 && <EmptyState title="No items match" hint="Try the item name or scan a barcode." />}
             {shown.map((i) => {

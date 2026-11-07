@@ -17,6 +17,7 @@ import { Production } from './pages/Production';
 import { Sales } from './pages/Sales';
 import { Customers } from './pages/Customers';
 import { Collections } from './pages/Collections';
+import { LoyaltyPoints } from './pages/LoyaltyPoints';
 import { Reports } from './pages/Reports';
 import { Users } from './pages/Users';
 import { SettingsPage } from './pages/SettingsPage';
@@ -82,6 +83,7 @@ function Shell() {
         <Route path="/production" element={<Production />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/customers" element={<Customers />} />
+        <Route path="/loyalty-points" element={<LoyaltyPoints />} />
         <Route path="/collections" element={<Collections />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />

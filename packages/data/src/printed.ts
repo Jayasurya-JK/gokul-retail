@@ -33,5 +33,8 @@ export const receiptConfigFrom = (b: SettingsBundle): ReceiptConfig => ({
   tagline: b.shop.tagline, whatsapp: b.shop.whatsapp, footerTamil: b.billFormat.footerTamil, mobile: b.shop.phone, billFormat: b.billFormat,
 });
 
-/** Points with two decimals: 4.6 -> "4.60"; whole points stay whole in lists ("12"). */
-export const formatPoints = (p: number): string => (Number.isInteger(p) ? String(p) : p.toFixed(2));
+/** Points are always shown with two decimals and Indian digit grouping: 4.6 -> "4.60", 78.56 -> "78.56", 116383.98 -> "1,16,383.98". */
+export const formatPoints = (p: number): string => (Math.round((Number.isFinite(p) ? p : 0) * 100) / 100 || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Points as stored by the database (hundredths of a point) shown as points: 7856 -> "78.56". */
+export const formatPointsHundredths = (h: number): string => formatPoints(Math.round(h) / 100);

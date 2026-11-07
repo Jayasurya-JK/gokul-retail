@@ -33,7 +33,7 @@ pub fn fmt_points(h: i64) -> String {
     format!("{}{}.{:02}", if h < 0 { "-" } else { "" }, h.abs() / 100, h.abs() % 100)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Rules {
     pub enabled: bool,
     /// Rupees of bill value for one point.
@@ -42,6 +42,10 @@ pub struct Rules {
     pub point_value: i64,
     pub min_redeem: i64,
     pub max_pct: i64,
+    /// Points not earned again within this many months lapse when expiry is run; 0 = points never expire.
+    pub expiry_months: i64,
+    /// Category ids whose lines earn no points (e.g. Service charges).
+    pub exclude: Vec<String>,
 }
 
 pub fn rules(conn: &Connection) -> Rules {
@@ -61,12 +65,15 @@ pub fn rules(conn: &Connection) -> Rules {
         point_value: n("loyalty.pointValue", 100).max(1),
         min_redeem: n("loyalty.minRedeem", 100).max(1),
         max_pct: n("loyalty.maxPct", 100).clamp(1, 100),
+        expiry_months: n("loyalty.expiryMonths", 0).clamp(0, 120),
+        exclude: m.get("loyalty.excludeCategories").map(|v| v.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
     }
 }
 
 pub fn rules_json(conn: &Connection) -> Value {
     let r = rules(conn);
-    json!({ "enabled": r.enabled, "rupeesPerPoint": r.rupees_per_point, "pointValue": r.point_value, "minRedeem": r.min_redeem, "maxPct": r.max_pct })
+    json!({ "enabled": r.enabled, "rupeesPerPoint": r.rupees_per_point, "pointValue": r.point_value, "minRedeem": r.min_redeem, "maxPct": r.max_pct,
+            "expiryMonths": r.expiry_months, "excludeCategories": r.exclude })
 }
 
 pub fn save_rules(conn: &Connection, v: &Value) -> Result<()> {
@@ -76,6 +83,14 @@ pub fn save_rules(conn: &Connection, v: &Value) -> Result<()> {
     set_setting(conn, "loyalty.pointValue", &n("pointValue", 100, 1, 100_000).to_string())?;
     set_setting(conn, "loyalty.minRedeem", &n("minRedeem", 100, 1, 1_000_000).to_string())?;
     set_setting(conn, "loyalty.maxPct", &n("maxPct", 100, 1, 100).to_string())?;
+    // Expiry and excluded categories are optional in the call (an older screen may not send them): keep what is stored then.
+    if v["expiryMonths"].is_number() {
+        set_setting(conn, "loyalty.expiryMonths", &n("expiryMonths", 0, 0, 120).to_string())?;
+    }
+    if let Some(a) = v["excludeCategories"].as_array() {
+        let ids: Vec<&str> = a.iter().filter_map(|x| x.as_str()).map(str::trim).filter(|x| !x.is_empty() && !x.contains(',')).collect();
+        set_setting(conn, "loyalty.excludeCategories", &ids.join(","))?;
+    }
     Ok(())
 }
 
@@ -84,7 +99,7 @@ pub fn balance(conn: &Connection, customer_id: &str) -> Result<i64> {
     Ok(conn.query_row("SELECT COALESCE(SUM(points),0) FROM points_ledger WHERE customer_id=?1", [customer_id], |r| r.get(0))?)
 }
 
-fn post(conn: &Connection, customer_id: &str, kind: &str, points: i64, bill_id: Option<i64>, note: &str, by: &str) -> Result<()> {
+pub(crate) fn post(conn: &Connection, customer_id: &str, kind: &str, points: i64, bill_id: Option<i64>, note: &str, by: &str) -> Result<()> {
     if points == 0 {
         return Ok(());
     }
@@ -135,15 +150,37 @@ pub fn redeem_for_bill(tx: &Connection, customer_id: Option<&str>, payments: &[P
 pub fn earn_for_bill(tx: &Connection, customer_id: Option<&str>, payments: &[Payment], grand: i64, bill_id: i64, number: &str, by: &str) -> Result<i64> {
     let Some(cid) = customer_id else { return Ok(0) };
     let non_money: i64 = payments.iter().filter(|p| p.mode == "credit_note" || p.mode == "points").map(|p| p.amount).sum();
-    let base = (grand - non_money).max(0);
+    let mut base = (grand - non_money).max(0);
     let r = rules(tx);
     if !r.enabled {
         return Ok(0);
+    }
+    if !r.exclude.is_empty() {
+        // lines of an excluded category (e.g. Service charges) earn nothing: take their share of the bill off the base
+        let (excluded, all) = excluded_share(tx, bill_id, &r.exclude)?;
+        if excluded > 0 && all > 0 {
+            base -= (base as i128 * excluded as i128 / all as i128) as i64;
+        }
     }
     // paise / rupees-per-point = hundredths of a point (46000 paise at Rs 100 per point = 460 = 4.60 points)
     let pts = base / r.rupees_per_point;
     post(tx, cid, "earn", pts, Some(bill_id), &format!("Bill {number}"), by)?;
     Ok(pts)
+}
+
+/// (amount of the bill's lines in the excluded categories, amount of all lines).
+fn excluded_share(tx: &Connection, bill_id: i64, exclude: &[String]) -> Result<(i64, i64)> {
+    let mut st = tx.prepare_cached("SELECT i.category_id, l.amount FROM bill_lines l JOIN items i ON i.id=l.item_id WHERE l.bill_id=?1")?;
+    let rows = st.query_map([bill_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+    let (mut ex, mut all) = (0i64, 0i64);
+    for r in rows {
+        let (cat, amt) = r?;
+        all += amt;
+        if exclude.iter().any(|e| *e == cat) {
+            ex += amt;
+        }
+    }
+    Ok((ex, all))
 }
 
 /// A cancelled bill: take back what it earned and give back what it redeemed.
@@ -219,7 +256,7 @@ pub fn wallet(conn: &Connection, customer_id: &str) -> Result<Value> {
 
 pub fn history(conn: &Connection, customer_id: &str, limit: i64) -> Result<Vec<Value>> {
     let mut st = conn.prepare(
-        "SELECT l.at,l.kind,l.points,l.note,l.by_name,b.number FROM points_ledger l LEFT JOIN bills b ON b.id=l.bill_id WHERE l.customer_id=?1 ORDER BY l.id DESC LIMIT ?2",
+        "SELECT l.at,CASE WHEN l.kind='adjust' AND l.note LIKE 'Opening%' THEN 'import' ELSE l.kind END,l.points,l.note,l.by_name,b.number FROM points_ledger l LEFT JOIN bills b ON b.id=l.bill_id WHERE l.customer_id=?1 ORDER BY l.id DESC LIMIT ?2",
     )?;
     let rows = st.query_map(params![customer_id, limit.clamp(1, 500)], |r| {
         Ok(json!({ "at": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?, "points": from_hundredths(r.get::<_, i64>(2)?), "note": r.get::<_, String>(3)?,

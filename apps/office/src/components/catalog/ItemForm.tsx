@@ -41,8 +41,10 @@ function toInput(f: FormState, id?: string): ItemInput {
  * The item editor. Used as the body of the large side sheet on Items and as the full pane at /items/new.
  * Owns its scroll area and pinned footer, so the parent just gives it a height.
  */
-export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
+export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults }: {
   itemId?: string; onSaved: (item: Item) => void; onCancel: () => void; layout?: 'sheet' | 'pane';
+  /** New items only: start with this category and brand (Categories and brands screen). */
+  defaults?: { categoryId?: string; brand?: string };
 }) {
   const toast = useToast();
   const [f, setF] = useState<FormState>(blank);
@@ -74,10 +76,11 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet' }: {
         setLoaded(true);
       } else {
         const code = await api.nextItemCode();
-        if (live) setF((s) => ({ ...s, code, categoryId: c[0]?.id ?? '' }));
+        if (live) setF((s) => ({ ...s, code, categoryId: defaults?.categoryId || c[0]?.id || '', brand: defaults?.brand || s.brand }));
       }
     })();
     return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
   const input = useMemo(() => toInput(f, itemId), [f, itemId]);

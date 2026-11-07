@@ -124,7 +124,8 @@ fn customer_row(r: &rusqlite::Row, now: chrono::DateTime<Local>, spend: &HashMap
     m.insert("area".into(), json!(r.get::<_, String>(3)?));
     m.insert("creditLimit".into(), json!(r.get::<_, i64>(4)?));
     m.insert("outstanding".into(), json!(r.get::<_, i64>(5)?));
-    m.insert("loyaltyPoints".into(), json!(r.get::<_, i64>(6)?));
+    // the database holds hundredths of a point; the API always speaks points with two decimals (7856 -> 78.56)
+    m.insert("loyaltyPoints".into(), json!(crate::loyalty::from_hundredths(r.get::<_, i64>(6)?)));
     m.insert("lastVisit".into(), json!(db::visit_label(last.as_deref(), now)));
     m.insert("type".into(), json!(r.get::<_, String>(8)?));
     for (k, i) in [("business", 9), ("gstin", 10), ("email", 11), ("address", 12)] {

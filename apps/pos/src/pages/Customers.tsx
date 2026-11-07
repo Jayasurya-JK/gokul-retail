@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HandCoins, Pencil, Phone, Plus, Receipt, Search, ShoppingCart, UserRound, UserPlus } from 'lucide-react';
-import { formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustStatement } from '@gokul/data';
+import { HandCoins, Pencil, Phone, Plus, Receipt, Search, ShoppingCart, Star, UserRound, UserPlus } from 'lucide-react';
+import { formatPoints, formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustomerWallet, type CustStatement, type PointsLedgerRow } from '@gokul/data';
 import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useToast, type FKey } from '@gokul/ui';
 import { api, useBilling } from '../store';
 import { TopBar } from '../components/TopBar';
@@ -146,7 +146,7 @@ export function Customers() {
                 <li
                   key={c.id} onClick={() => { setSelId(c.id); refocus(); }}
                   ref={(el) => { if (el && on) el.scrollIntoView({ block: 'nearest' }); }}
-                  className={cn('relative flex h-[60px] cursor-default items-center gap-3 border-b border-line/70 px-4', on ? 'bg-primary-soft' : 'hover:bg-surface-2')}
+                  className={cn('relative flex h-[60px] cursor-default items-center gap-3 border-b border-line/70 px-4 [content-visibility:auto] [contain-intrinsic-size:auto_60px]', on ? 'bg-primary-soft' : 'hover:bg-surface-2')}
                 >
                   {on && <span className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-muted">{initialsOf(c.name)}</span>
@@ -212,6 +212,8 @@ export function Customers() {
                     <Fact k="Opening balance" v={sel.openingBalance ? formatRupees(sel.openingBalance, { decimals: false }) : ''} />
                   </dl>
                 </div>
+
+                <PointsCard customerId={sel.id} version={version} />
 
                 {sel.outstanding > 0 && buckets && (
                   <div className="mt-4 rounded-card border border-line p-4">
@@ -293,6 +295,44 @@ function Fact({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
     <div className="min-w-0">
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-subtle">{k}</dt>
       <dd className={cn('mt-0.5 truncate text-sm', v ? 'font-medium text-ink' : 'text-subtle', mono && v && 'num')}>{v || '-'}</dd>
+    </div>
+  );
+}
+
+/** Loyalty points of the selected customer: balance, what it is worth, and the last ledger lines (the counter only looks; Office adjusts). */
+function PointsCard({ customerId, version }: { customerId: string; version: number }) {
+  const [wallet, setWallet] = useState<CustomerWallet | null>(null);
+  const [rows, setRows] = useState<PointsLedgerRow[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    setRows(null);
+    void Promise.all([api.getCustomerWallet(customerId), api.getPointsLedger(customerId, 8)]).then(([w, r]) => { if (live) { setWallet(w); setRows(r); } }).catch(() => { if (live) setRows([]); });
+    return () => { live = false; };
+  }, [customerId, version]);
+  const label: Record<PointsLedgerRow['kind'], string> = { earn: 'Earned', redeem: 'Used to pay', reverse: 'Reversed', adjust: 'Adjusted', expire: 'Expired', import: 'Opening balance' };
+  return (
+    <div className="mt-4 rounded-card border border-line p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink"><Star size={14} className="text-primary" /> Loyalty points</h3>
+        {wallet && <span className="text-xs text-muted">1 point = {formatRupees(wallet.rules.pointValue)}</span>}
+      </div>
+      <div className="mt-3 flex items-end gap-6">
+        <div><div className="text-xs text-muted">Balance</div><div className="num text-2xl font-semibold tracking-tight text-ink">{wallet ? formatPoints(wallet.points) : '-'}</div></div>
+        <div><div className="text-xs text-muted">Worth at the counter</div><div className="num text-base font-semibold text-ink">{wallet ? formatRupees(wallet.pointsValue) : '-'}</div></div>
+        {wallet && wallet.rules.enabled && <div className="ml-auto text-right text-xs text-subtle">Needs {wallet.rules.minRedeem} points to use<br />Earns 1 point per {formatRupees(wallet.rules.rupeesPerPoint * 100, { decimals: false })}</div>}
+      </div>
+      <div className="mt-3 overflow-hidden rounded-control border border-line">
+        {rows === null && <div className="px-3 py-3 text-sm text-muted">Loading</div>}
+        {rows?.length === 0 && <div className="px-3 py-3 text-sm text-subtle">No points yet. They are earned on every bill.</div>}
+        {rows?.map((r) => (
+          <div key={r.id} className="flex h-9 items-center gap-3 border-b border-line/70 px-3 text-sm last:border-b-0">
+            <span className="w-14 shrink-0 text-xs text-muted">{new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+            <span className="flex-1 truncate text-ink">{label[r.kind]}{r.bill ? <span className="num ml-1.5 text-xs text-muted">{r.bill}</span> : null}</span>
+            <b className={cn('num w-16 text-right', r.points >= 0 ? 'text-success' : 'text-danger')}>{r.points > 0 ? '+' : ''}{formatPoints(r.points)}</b>
+            <span className="num w-16 text-right text-muted">{formatPoints(r.balanceAfter)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

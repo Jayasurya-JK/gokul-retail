@@ -28,7 +28,7 @@ export function StockAdjustments({ version, onNew }: { version: number; onNew: (
   const [q, setQ] = useState('');
   const [reason, setReason] = useState('all');
   useEffect(() => { api.listAdjustments().then(setRows); }, [version]);
-  const shown = useMemo(() => fuzzyFilter(rows.filter((r) => reason === 'all' || r.reason === reason), q, (r) => [r.itemName, r.note]), [rows, q, reason]);
+  const shown = useMemo(() => fuzzyFilter(rows.filter((r) => reason === 'all' || r.reason === reason), q, (r) => [r.itemName, r.note], Infinity), [rows, q, reason]);
   const lost = shown.reduce((s, r) => s + Math.min(0, r.value), 0);
   return (
     <div className="flex min-h-0 flex-1 flex-col">

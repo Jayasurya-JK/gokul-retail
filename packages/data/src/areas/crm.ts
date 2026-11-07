@@ -431,6 +431,10 @@ export interface LoyaltySettings {
   minRedeem: number;
   /** Points may pay at most this percent of a bill */
   maxPct: number;
+  /** Points lapse when not earned again within this many months (0 = never expire). They come off when "Run expiry" is pressed. */
+  expiryMonths: number;
+  /** Category ids whose lines earn no points (e.g. Service charges) */
+  excludeCategories: string[];
 }
 export interface CustomerWallet {
   points: number;
@@ -439,7 +443,51 @@ export interface CustomerWallet {
   creditNotes: { number: string; at: string; balance: Paise }[];
   rules: LoyaltySettings;
 }
-export interface PointsEntry { at: string; kind: 'earn' | 'redeem' | 'reverse' | 'adjust'; points: number; note: string; by: string; bill: string | null }
+/** import = the opening balance brought in from the old software */
+export type PointsKind = 'earn' | 'redeem' | 'reverse' | 'adjust' | 'expire' | 'import';
+export interface PointsEntry { at: string; kind: PointsKind; points: number; note: string; by: string; bill: string | null }
+
+/* ---- Customer Points module (points are always numbers with two decimals; money in paise) ---- */
+export interface PointsOverview {
+  /** Points customers can still use (positive balances) */
+  outstanding: number;
+  /** Net of negative balances: what the old software's total showed */
+  netTotal: number;
+  negativeBalances: number;
+  negativePoints: number;
+  /** outstanding x value of a point */
+  liability: Paise;
+  customersWithPoints: number;
+  customers: number;
+  earnedMonth: number;
+  redeemedMonth: number;
+  expiredMonth: number;
+  adjustedMonth: number;
+  pointValue: Paise;
+  expiryMonths: number;
+  enabled: boolean;
+}
+export interface PointsQuery {
+  q?: string;
+  filter?: 'all' | 'withPoints' | 'zero';
+  sort?: 'points' | 'name' | 'code' | 'lastEarned' | 'lastRedeemed';
+  dir?: 'asc' | 'desc';
+  offset?: number;
+  limit?: number;
+}
+export interface PointsCustomerRow { id: string; name: string; phone: string; area: string; points: number; lastEarned: string | null; lastRedeemed: string | null }
+export interface PointsPage { rows: PointsCustomerRow[]; /** customers the search matched */ matched: number; /** all customers */ total: number }
+export interface PointsLedgerRow { id: number; at: string; kind: PointsKind; points: number; balanceAfter: number; bill: string | null; note: string; by: string }
+export interface PointsAdjustInput { customerId: string; /** + adds, - removes (two decimals) */ points: number; reason: string; /** owner or manager PIN (always needed) */ managerPin?: string }
+export interface PointsBulkInput { q?: string; filter?: 'all' | 'withPoints' | 'zero'; points: number; reason: string; /** the count the confirmation showed */ expectedCount?: number; managerPin?: string }
+export interface PointsBulkResult { customers: number; matched: number; points: number }
+export interface PointsExpiryResult { customers: number; points: number; months: number; done: boolean }
+export interface PointsReport {
+  from: string; to: string;
+  byDay: { date: string; earned: number; redeemed: number; expired: number; adjusted: number }[];
+  top: { id: string; name: string; phone: string; points: number; earned: number; redeemed: number }[];
+  liability: { outstanding: number; value: Paise; customers: number; pointValue: Paise };
+}
 export type PrintKind = 'bill' | 'creditNote' | 'xreport' | 'zreport' | 'expense' | 'receipt' | 'drawer';
 export interface PrintOptions {
   /** Reprint: the paper says DUPLICATE COPY and the drawer stays shut */
@@ -486,6 +534,20 @@ export interface CrmApi {
   /** Points, store credit (open credit notes) and the loyalty rules for one customer */
   getCustomerWallet(customerId: string): Promise<CustomerWallet>;
   listPointsHistory(customerId: string, limit?: number): Promise<PointsEntry[]>;
+  /* customer points module (Office; the POS shows balances and the ledger read-only) */
+  /** Owner and manager only. */
+  pointsOverview(): Promise<PointsOverview>;
+  /** Server-side search and paging over every customer (name, mobile, code, area). */
+  listPointsCustomers(query?: PointsQuery): Promise<PointsPage>;
+  /** Every earn, redeem, adjust, reverse, expire and import row of one customer, newest first, with the balance after each. */
+  getPointsLedger(customerId: string, limit?: number): Promise<PointsLedgerRow[]>;
+  /** Owner or manager, with a manager PIN: add or remove points for one customer. Audited. */
+  adjustPoints(input: PointsAdjustInput): Promise<{ customerId: string; balance: number }>;
+  /** The same for every customer a search and filter match. Never takes a balance below zero. */
+  bulkAdjustPoints(input: PointsBulkInput): Promise<PointsBulkResult>;
+  /** Takes off points not earned again within the expiry months. `dryRun` (default) only counts. */
+  runPointsExpiry(dryRun?: boolean): Promise<PointsExpiryResult>;
+  pointsReport(query?: { from?: string; to?: string }): Promise<PointsReport>;
   /* credit */
   listReceivables(): Promise<ReceivableRow[]>;
   getStatement(customerId: string): Promise<CustStatement | null>;
@@ -574,7 +636,7 @@ function seedRoles(): RoleDef[] {
 function seedSettings(store: MockStore): SettingsBundle {
   const s = store.settings;
   return {
-    loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100 },
+    loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100, expiryMonths: 0, excludeCategories: [] },
     shop: {
       name: s.shopName, legalName: 'Gokul Oils (Proprietor: Suresh Kumar)', address: '48, Mettupalayam Road, Gandhipuram',
       city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
@@ -658,6 +720,55 @@ export function createCrmMock(store: MockStore): CrmApi {
       last = b.at;
     }
     return { ...c, ...ex, totalSpend: spend, visits, avgBill: visits ? Math.round(spend / visits) : 0, lastBillAt: last };
+  };
+
+  /* ---------- points ledger (mock: built once from each customer's balance, newest row first; amounts in hundredths inside) ---------- */
+  const pointRows = new Map<string, PointsLedgerRow[]>();
+  let pointSeq = 0;
+  const pointsLedgerOf = (id: string): PointsLedgerRow[] => {
+    let rows = pointRows.get(id);
+    if (!rows) {
+      const c = store.customers.find((x) => x.id === id);
+      const total = Math.round((c?.loyaltyPoints ?? 0) * 100);
+      const h = hash(id);
+      const out: PointsLedgerRow[] = [];
+      if (total > 0) {
+        const opening = Math.round(total * (0.5 + (h % 20) / 100));
+        const earn1 = Math.round(total * 0.2);
+        const spent = h % 3 === 0 ? Math.round(total * 0.12) : 0;
+        const earn2 = total - opening - earn1 + spent;
+        const seq: [PointsKind, number, number, string, string][] = [
+          ['import', opening, 34 + (h % 20), 'Opening points from POSBean', 'import'],
+          ['earn', earn1, 12 + (h % 9), `Bill GK-26-00${400 + (h % 90)}`, 'Karthik Murugan'],
+        ];
+        if (spent) seq.push(['redeem', -spent, 6, `Paid on GK-26-00${480 + (h % 40)}`, 'Karthik Murugan']);
+        seq.push(['earn', earn2, 1 + (h % 4), `Bill GK-26-00${520 + (h % 60)}`, 'Priya Selvam']);
+        let bal = 0;
+        for (const [kind, pts, ago, note, by] of seq) {
+          bal += pts;
+          out.push({ id: ++pointSeq, at: daysAgo(ago), kind, points: pts / 100, balanceAfter: bal / 100, bill: note.startsWith('Bill ') ? note.slice(5) : note.startsWith('Paid on ') ? note.slice(8) : null, note, by });
+        }
+      }
+      rows = out.reverse();
+      pointRows.set(id, rows);
+    }
+    return rows;
+  };
+  const postPoints = (c: Customer, kind: PointsKind, hundredths: number, note: string) => {
+    const rows = pointsLedgerOf(c.id);
+    const bal = Math.round(c.loyaltyPoints * 100) + hundredths;
+    rows.unshift({ id: ++pointSeq, at: new Date().toISOString(), kind, points: hundredths / 100, balanceAfter: bal / 100, bill: null, note, by: 'Suresh Kumar' });
+    c.loyaltyPoints = bal / 100;
+  };
+  const lastOf = (id: string, kind: PointsKind): string | null => pointsLedgerOf(id).find((r) => r.kind === kind)?.at ?? null;
+  const pointsMatch = (q: { q?: string; filter?: string }): Customer[] => {
+    const toks = (q.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    return store.customers.filter((c) => {
+      if (q.filter === 'withPoints' && !(c.loyaltyPoints > 0)) return false;
+      if (q.filter === 'zero' && c.loyaltyPoints !== 0) return false;
+      const hay = `${c.name} ${c.id} ${c.area} ${c.phone} ${c.phone.replace(' ', '')}`.toLowerCase();
+      return toks.every((t) => hay.includes(t));
+    });
   };
 
   /* ---------- credit ledgers ---------- */
@@ -778,8 +889,89 @@ export function createCrmMock(store: MockStore): CrmApi {
       const favourites = [...agg.values()].sort((a, b) => b.amount - a.amount).slice(0, 5);
       return delay({ customer: rowFor(c), favourites, bills: bills.slice(0, 40) });
     },
-    getCustomerWallet: () => delay({ points: 0, pointsValue: 0, storeCredit: 0, creditNotes: [], rules: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100 } }),
-    listPointsHistory: () => delay([]),
+    getCustomerWallet: (id) => delay({ points: store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0, pointsValue: Math.round((store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0) * bundle.loyalty.pointValue),  storeCredit: 0, creditNotes: [], rules: bundle.loyalty }),
+    listPointsHistory: (id) => delay(pointsLedgerOf(id).slice(0, 100).map((r) => ({ at: r.at, kind: r.kind, points: r.points, note: r.note, by: r.by, bill: r.bill }))),
+    getPointsLedger: (id, limit = 500) => delay(pointsLedgerOf(id).slice(0, limit)),
+    pointsOverview: () => {
+      const pos = store.customers.filter((c) => c.loyaltyPoints > 0);
+      const outstanding = Math.round(pos.reduce((s, c) => s + c.loyaltyPoints * 100, 0)) / 100;
+      const since = new Date(); since.setDate(1); since.setHours(0, 0, 0, 0);
+      const month = (kind: PointsKind) => Math.round(store.customers.flatMap((c) => pointsLedgerOf(c.id)).filter((r) => r.kind === kind && new Date(r.at) >= since).reduce((s, r) => s + r.points, 0) * 100) / 100;
+      return delay({
+        outstanding, netTotal: outstanding, negativeBalances: 0, negativePoints: 0, liability: Math.round(outstanding * bundle.loyalty.pointValue),
+        customersWithPoints: pos.length, customers: store.customers.length, earnedMonth: month('earn'), redeemedMonth: -month('redeem'), expiredMonth: -month('expire'), adjustedMonth: month('adjust'),
+        pointValue: bundle.loyalty.pointValue, expiryMonths: bundle.loyalty.expiryMonths, enabled: bundle.loyalty.enabled,
+      });
+    },
+    listPointsCustomers: (q = {}) => {
+      const filtered = pointsMatch(q);
+      const key = (c: Customer): string | number => (q.sort === 'name' ? c.name.toLowerCase() : q.sort === 'code' ? c.id : q.sort === 'lastEarned' ? lastOf(c.id, 'earn') ?? '' : q.sort === 'lastRedeemed' ? lastOf(c.id, 'redeem') ?? '' : c.loyaltyPoints);
+      const sign = q.dir === 'asc' ? 1 : -1;
+      const sorted = [...filtered].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * sign || a.id.localeCompare(b.id); });
+      const off = q.offset ?? 0;
+      const rows = sorted.slice(off, off + (q.limit && q.limit > 0 ? q.limit : 100)).map((c) => ({ id: c.id, name: c.name, phone: c.phone, area: c.area, points: c.loyaltyPoints, lastEarned: lastOf(c.id, 'earn'), lastRedeemed: lastOf(c.id, 'redeem') }));
+      return delay({ rows, matched: filtered.length, total: store.customers.length });
+    },
+    adjustPoints: (input) => {
+      const c = store.customers.find((x) => x.id === input.customerId);
+      const h = Math.round(input.points * 100);
+      if (!c) return Promise.reject(new Error('Customer not found.'));
+      if (!input.managerPin) return Promise.reject(new Error('A manager PIN is needed to change customer points'));
+      if (input.managerPin === '0000') return Promise.reject(new Error('Manager PIN is not correct'));
+      if (!h) return Promise.reject(new Error('Enter the points to add or remove.'));
+      if (input.reason.trim().length < 3) return Promise.reject(new Error('Write the reason for the change (at least 3 letters).'));
+      if (h < 0 && -h > Math.round(c.loyaltyPoints * 100)) return Promise.reject(new Error(`${c.name} has only ${c.loyaltyPoints.toFixed(2)} points, so ${(-h / 100).toFixed(2)} cannot be taken off.`));
+      postPoints(c, 'adjust', h, input.reason.trim());
+      return delay({ customerId: c.id, balance: c.loyaltyPoints });
+    },
+    bulkAdjustPoints: (input) => {
+      const h = Math.round(input.points * 100);
+      const set = pointsMatch({ q: input.q, filter: input.filter });
+      if (!input.managerPin) return Promise.reject(new Error('A manager PIN is needed to change customer points'));
+      if (input.managerPin === '0000') return Promise.reject(new Error('Manager PIN is not correct'));
+      if (!h || input.reason.trim().length < 3) return Promise.reject(new Error('Enter the points and the reason.'));
+      if (input.expectedCount !== undefined && input.expectedCount !== set.length) return Promise.reject(new Error(`The list changed: it now has ${set.length} customers, not ${input.expectedCount}. Check it and try again.`));
+      let n = 0, tot = 0;
+      for (const c of set) {
+        const amt = h < 0 ? -Math.min(-h, Math.max(0, Math.round(c.loyaltyPoints * 100))) : h;
+        if (!amt) continue;
+        postPoints(c, 'adjust', amt, `${input.reason.trim()} (bulk)`); n += 1; tot += amt;
+      }
+      return delay({ customers: n, matched: set.length, points: tot / 100 });
+    },
+    runPointsExpiry: (dryRun = true) => {
+      const months = bundle.loyalty.expiryMonths;
+      if (months <= 0) return Promise.reject(new Error('Points expiry is switched off. Turn it on in Settings, Loyalty.'));
+      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months);
+      let n = 0, tot = 0;
+      for (const c of store.customers) {
+        const recent = pointsLedgerOf(c.id).filter((r) => r.points > 0 && r.kind !== 'expire' && new Date(r.at) >= cutoff).reduce((s, r) => s + Math.round(r.points * 100), 0);
+        const old = Math.round(c.loyaltyPoints * 100) - recent;
+        if (c.loyaltyPoints > 0 && old > 0) { n += 1; tot += old; if (!dryRun) postPoints(c, 'expire', -old, `Expired: not earned in the last ${months} months`); }
+      }
+      return delay({ customers: n, points: tot / 100, months, done: !dryRun });
+    },
+    pointsReport: (q = {}) => {
+      const to = q.to ?? dayKey(new Date());
+      const from = q.from ?? `${to.slice(0, 8)}01`;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const inRange = (r: PointsLedgerRow) => { const d = dayKey(r.at); return d >= from && d <= to; };
+      const days = new Map<string, { date: string; earned: number; redeemed: number; expired: number; adjusted: number }>();
+      for (const r of store.customers.flatMap((c) => pointsLedgerOf(c.id)).filter((x) => inRange(x) && x.kind !== 'import')) {
+        const d = dayKey(r.at);
+        const x = days.get(d) ?? { date: d, earned: 0, redeemed: 0, expired: 0, adjusted: 0 };
+        if (r.kind === 'earn') x.earned += r.points; else if (r.kind === 'redeem') x.redeemed -= r.points; else if (r.kind === 'expire') x.expired -= r.points; else if (r.kind === 'adjust') x.adjusted += r.points;
+        days.set(d, x);
+      }
+      const byDay = [...days.values()].sort((a, b) => a.date.localeCompare(b.date)).map((x) => ({ date: x.date, earned: r2(x.earned), redeemed: r2(x.redeemed), expired: r2(x.expired), adjusted: r2(x.adjusted) }));
+      const holders = store.customers.filter((c) => c.loyaltyPoints > 0);
+      const top = [...holders].sort((a, b) => b.loyaltyPoints - a.loyaltyPoints).slice(0, 25).map((c) => {
+        const l = pointsLedgerOf(c.id).filter(inRange);
+        return { id: c.id, name: c.name, phone: c.phone, points: c.loyaltyPoints, earned: r2(l.filter((r) => r.kind === 'earn').reduce((s, r) => s + r.points, 0)), redeemed: r2(-l.filter((r) => r.kind === 'redeem').reduce((s, r) => s + r.points, 0)) };
+      });
+      const out = r2(holders.reduce((s, c) => s + c.loyaltyPoints, 0));
+      return delay({ from, to, byDay, top, liability: { outstanding: out, value: Math.round(out * bundle.loyalty.pointValue), customers: holders.length, pointValue: bundle.loyalty.pointValue } });
+    },
     setCustomerCredit: (customerId, limit) => {
       const c = store.customers.find((x) => x.id === customerId);
       if (!c) return Promise.reject(new Error('Customer not found.'));

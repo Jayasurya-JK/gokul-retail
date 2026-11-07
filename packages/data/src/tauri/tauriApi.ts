@@ -9,7 +9,7 @@ import type {
 } from '../areas/billops';
 import type { CashEntry, CashEntryInput, DayStatus, DenomCounts, ShiftSummary, ZReport } from '../areas/shift';
 import type {
-  AdjustmentInput, AdjustmentResult, CountedBrand, CountedCategory, ItemDetail, ItemInput, ItemIssues, NameResult, SaveItemResult,
+  AdjustmentInput, AdjustmentResult, CountedBrand, CountedCategory, ItemDetail, ItemInput, ItemIssues, ItemPage, ItemPageQuery, NameResult, SaveItemResult,
   StockAdjustment, StockTakeCount, StockTakeLine, StockTakeResult,
 } from '../areas/catalog';
 import type {
@@ -18,7 +18,7 @@ import type {
 } from '../areas/purchasing';
 import type {
   BackupEntry, CollectionInput, CustStatement, CustomerInput, CustomerProfile, CustomerRow, ReceivableRow, RoleDef, SalesBill,
-  BackupStatus, CustomerWallet, HardwareSettings, LabelOptions, LabelPreview, PointsEntry, PrintKind, PrintOptions, PrinterStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
+  BackupStatus, CustomerWallet, HardwareSettings, LabelOptions, LabelPreview, PointsAdjustInput, PointsBulkInput, PointsBulkResult, PointsEntry, PointsExpiryResult, PointsLedgerRow, PointsOverview, PointsPage, PointsQuery, PointsReport, PrintKind, PrintOptions, PrinterStatus, SalesFilterOptions, SalesQuery, SettingsBundle, UserAccount, UserInput,
 } from '../areas/crm';
 import type { ReportId, ReportParams, ReportResult } from '../areas/reports';
 import type {
@@ -53,12 +53,12 @@ export const REAL_METHODS = [
   'cancelBill', 'recordReprint', 'createReturn', 'listCreditNotes', 'getPendingExchange', 'clearPendingExchange',
   'listSuppliers', 'listPurchases', 'listProduction',
   'getItemDetail', 'validateItem', 'saveItem', 'generateBarcode', 'nextItemCode', 'listLooseItems', 'setItemsActive', 'setItemsCategory',
-  'setItemsGst', 'itemMovements', 'listCategoriesWithCounts', 'addCategory', 'renameCategory', 'deleteCategory', 'moveCategory',
+  'setItemsGst', 'setItemsBrand', 'listItemsPage', 'itemMovements', 'listCategoriesWithCounts', 'addCategory', 'renameCategory', 'deleteCategory', 'moveCategory',
   'listBrands', 'addBrand', 'renameBrand', 'deleteBrand', 'moveBrand', 'createAdjustment', 'listAdjustments', 'startStockTake', 'postStockTake',
   'searchPurchasable', 'listGrns', 'getGrn', 'createGrn', 'listSupplierSummaries', 'getSupplierLedger', 'saveSupplier', 'recordSupplierPayment',
   'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
   'listPackRuns', 'createPackRun',
-  'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'setCustomerCredit', 'getCustomerWallet', 'listPointsHistory', 'listReceivables', 'getStatement',
+  'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'setCustomerCredit', 'getCustomerWallet', 'listPointsHistory', 'pointsOverview', 'listPointsCustomers', 'getPointsLedger', 'adjustPoints', 'bulkAdjustPoints', 'runPointsExpiry', 'pointsReport', 'listReceivables', 'getStatement',
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
   'saveSettingsBundle', 'testPrint', 'printDocument', 'printerStatus', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
@@ -134,6 +134,8 @@ export function createTauriApi(): Api {
     setItemsActive: (ids: string[], active: boolean) => call<void>('setItemsActive', ids, active),
     setItemsCategory: (ids: string[], categoryId: string) => call<void>('setItemsCategory', ids, categoryId),
     setItemsGst: (ids: string[], rate: Item['gstRate']) => call<void>('setItemsGst', ids, rate),
+    setItemsBrand: (ids: string[], brandId: string) => call<void>('setItemsBrand', ids, brandId),
+    listItemsPage: (query: ItemPageQuery) => call<ItemPage>('listItemsPage', query),
     itemMovements: (itemId: string, limit: number) => call<StockMovement[]>('itemMovements', itemId, limit),
     listCategoriesWithCounts: () => call<CountedCategory[]>('listCategoriesWithCounts'),
     addCategory: (name: string) => call<NameResult>('addCategory', name),
@@ -176,6 +178,13 @@ export function createTauriApi(): Api {
     saveCustomer: (input: CustomerInput) => call<CustomerRow>('saveCustomer', input),
     getCustomerWallet: (customerId: string) => call<CustomerWallet>('getCustomerWallet', customerId),
     listPointsHistory: (customerId: string, limit?: number) => call<PointsEntry[]>('listPointsHistory', customerId, limit ?? 100),
+    pointsOverview: () => call<PointsOverview>('pointsOverview'),
+    listPointsCustomers: (query?: PointsQuery) => call<PointsPage>('listPointsCustomers', query ?? {}),
+    getPointsLedger: (customerId: string, limit?: number) => call<PointsLedgerRow[]>('getPointsLedger', customerId, limit ?? 500),
+    adjustPoints: (input: PointsAdjustInput) => call<{ customerId: string; balance: number }>('adjustPoints', input),
+    bulkAdjustPoints: (input: PointsBulkInput) => call<PointsBulkResult>('bulkAdjustPoints', input),
+    runPointsExpiry: (dryRun?: boolean) => call<PointsExpiryResult>('runPointsExpiry', dryRun ?? true),
+    pointsReport: (query?: { from?: string; to?: string }) => call<PointsReport>('pointsReport', query ?? {}),
     setCustomerCredit: (customerId: string, limit: Paise, managerPin?: string) => call<CustomerRow>('setCustomerCredit', customerId, limit, managerPin ?? ''),
     listReceivables: () => call<ReceivableRow[]>('listReceivables'),
     getStatement: (customerId: string) => call<CustStatement | null>('getStatement', customerId),

@@ -22,23 +22,37 @@ export interface DataTableProps<T> {
   autoFocus?: boolean;
   className?: string;
   footer?: ReactNode;
+  /** Server-side sorting: the table shows the order it is given and reports header clicks instead of sorting itself. `null` = no sort. */
+  sort?: { id: string; desc: boolean } | null;
+  onSortChange?: (s: { id: string; desc: boolean } | null) => void;
+  /** Called when the user scrolls near the last row (load the next page). */
+  onEndReached?: () => void;
 }
 
 /** Virtualised, sortable table with keyboard row navigation (arrows, Home/End, PageUp/PageDown, Enter). */
 export function DataTable<T>({
-  data, columns, getRowId, rowHeight = 36, selectedId, onSelect, onActivate, empty, autoFocus, className, footer,
+  data, columns, getRowId, rowHeight = 36, selectedId, onSelect, onActivate, empty, autoFocus, className, footer, sort, onSortChange, onEndReached,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [internalSel, setInternalSel] = useState<string | null>(null);
   const sel = selectedId !== undefined ? selectedId : internalSel;
   const scroller = useRef<HTMLDivElement>(null);
 
+  const manual = sort !== undefined;
+  const sortingState: SortingState = manual ? (sort ? [sort] : []) : sorting;
   const table = useReactTable({
-    data, columns, getRowId, state: { sorting }, onSortingChange: setSorting,
+    data, columns, getRowId, state: { sorting: sortingState }, manualSorting: manual,
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(sortingState) : u;
+      if (manual) onSortChange?.(next[0] ?? null); else setSorting(next);
+    },
     getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
   });
   const rows = table.getRowModel().rows;
   const virt = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => rowHeight, overscan: 12 });
+
+  const lastVisible = virt.getVirtualItems().at(-1)?.index ?? -1;
+  useEffect(() => { if (onEndReached && rows.length > 0 && lastVisible >= rows.length - 15) onEndReached(); }, [onEndReached, lastVisible, rows.length]);
 
   const selIndex = useMemo(() => rows.findIndex((r) => r.id === sel), [rows, sel]);
   const choose = (i: number) => {

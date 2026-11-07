@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test:money": "node scripts/money-fixtures.mjs"
+    "test:money": "node scripts/money-fixtures.mjs",
+    "test:points": "node scripts/points-format.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4"

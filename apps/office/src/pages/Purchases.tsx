@@ -98,7 +98,7 @@ export function Purchases() {
 
   const rows = useMemo(() => {
     const base = grns.filter((g) => (sup === 'all' || g.supplierId === sup) && (status === 'all' || g.status === status));
-    return fuzzyFilter(base, q, (g) => [g.number, g.invoiceNo, g.supplierName, ...g.lines.map((l) => l.name)], 300);
+    return fuzzyFilter(base, q, (g) => [g.number, g.invoiceNo, g.supplierName, ...g.lines.map((l) => l.name)], Infinity);
   }, [grns, q, sup, status]);
   const sel = grns.find((g) => g.id === selId) ?? null;
   const paySummary = suppliers.find((s) => s.profile.id === sel?.supplierId) ?? null;
@@ -139,7 +139,7 @@ export function Purchases() {
         <StatTile label="Input GST, 30 days" value={<Money paise={stats.monthGst} decimals={false} />} hint="Claim in GSTR-3B" icon={<FileText size={14} />} />
         <StatTile label="Owed to suppliers" value={<Money paise={stats.due} decimals={false} />} hint={<>{stats.unpaid} unpaid bills, <span className="font-semibold text-danger"><Money paise={stats.overdue} decimals={false} /></span> overdue</>} icon={<Banknote size={14} />} />
       </div>
-      <FilterBar trailing={<span>{rows.length} shown</span>}>
+      <FilterBar trailing={<span>{rows.length} shown{grns.length >= 1000 ? ' · latest 1,000 purchases (use Reports for older ones)' : ''}</span>}>
         <div className="w-72"><SearchInput placeholder="Search entry, invoice, supplier or item" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <Select value={sup} onChange={(e) => setSup(e.target.value)} options={[{ value: 'all', label: 'All suppliers' }, ...suppliers.map((s) => ({ value: s.profile.id, label: s.profile.name }))]} />
         <Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: 'all', label: 'Any payment status' }, { value: 'due', label: 'Unpaid' }, { value: 'partial', label: 'Part paid' }, { value: 'paid', label: 'Paid' }]} />

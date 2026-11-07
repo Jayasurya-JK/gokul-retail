@@ -1,8 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { CheckCircle2, DatabaseBackup, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, DatabaseBackup, Star, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import { LABEL_PRESETS, type HardwareSettings, type LabelPresetId } from '@gokul/data';
+import type { Category } from '@gokul/data';
 import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
-import { Badge, Button, Card, Dialog, Field, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
+import { Badge, Button, Card, Dialog, Field, Checkbox, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
 import { BillFormatPreview } from './BillFormatPreview';
 import { ago, fmtDateTime, Segmented } from './common';
@@ -526,6 +528,9 @@ export function MillTab({ v, set }: { v: MillSettings; set: (n: MillSettings) =>
 export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySettings) => void }) {
   const up = <K extends keyof LoyaltySettings>(k: K, val: LoyaltySettings[K]) => set({ ...v, [k]: val });
   const num = (x: string, min: number, max: number) => Math.min(max, Math.max(min, Number(x || min)));
+  const nav = useNavigate();
+  const [cats, setCats] = useState<Category[]>([]);
+  useEffect(() => { let live = true; api.listCategories().then((c) => live && setCats([...c])); return () => { live = false; }; }, []);
   return (
     <div className="grid grid-cols-2 gap-4">
       <Card title="Loyalty points">
@@ -544,6 +549,30 @@ export function LoyaltyTab({ v, set }: { v: LoyaltySettings; set: (n: LoyaltySet
         <Row title="Most of a bill points can pay" hint="Percent of the bill total.">
           <div className="w-28"><NumberInput value={String(v.maxPct)} decimals={0} size="sm" onValueChange={(x) => up('maxPct', num(x, 1, 100))} /></div>
         </Row>
+      </Card>
+      <Card title="Points expiry">
+        <Row title="Points expire" hint="Off by default. When on, points a customer has not earned again within the months below can be taken off.">
+          <Switch checked={v.expiryMonths > 0} onCheckedChange={(x) => up('expiryMonths', x ? 12 : 0)} />
+        </Row>
+        <Row title="Expire after (months)" hint="Nothing is removed automatically: press Run expiry on the Loyalty points page, which shows what would lapse first.">
+          <div className="w-28"><NumberInput value={String(v.expiryMonths || '')} decimals={0} size="sm" disabled={v.expiryMonths === 0} onValueChange={(x) => up('expiryMonths', num(x, 1, 120))} /></div>
+        </Row>
+      </Card>
+      <Card title="Not earned on these categories">
+        <p className="mb-2 text-xs text-muted">Lines in a ticked category earn no points (for example Service charges). Their share of the bill is left out.</p>
+        {cats.length === 0 ? <div className="text-sm text-subtle">Loading categories</div> : (
+          <div className="grid max-h-44 grid-cols-2 gap-x-4 gap-y-1.5 overflow-auto">
+            {[...cats, { id: '_service', name: 'Service charges (delivery, manual lines)' }].map((c) => (
+              <Checkbox key={c.id} label={c.name} checked={v.excludeCategories.includes(c.id)}
+                onCheckedChange={(on) => up('excludeCategories', on ? [...v.excludeCategories, c.id] : v.excludeCategories.filter((x) => x !== c.id))} />
+            ))}
+          </div>
+        )}
+      </Card>
+      <Card title="Customer points">
+        <p className="text-sm text-muted">See who holds points, the full ledger, manual adjustments, expiry and reports.</p>
+        <Button className="mt-3" icon={<Star size={14} />} onClick={() => nav('/loyalty-points')}>Open Loyalty points</Button>
+        <p className="mt-2 text-xs text-subtle">Only the owner can change these settings; adjusting a customer&apos;s points needs an owner or manager PIN.</p>
       </Card>
     </div>
   );

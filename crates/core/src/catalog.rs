@@ -644,3 +644,80 @@ pub fn post_stock_take(conn: &mut Connection, counts: &[StockTakeCount], note: &
     tx.commit()?;
     Ok(json!({ "adjusted": adjusted, "unchanged": unchanged, "netValue": net }))
 }
+
+// ---------- items by category / brand (Categories and brands screen) ----------
+
+/// Filter for the master-detail item list. All parts optional; they combine with AND.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemPageQuery {
+    #[serde(default)]
+    pub category_id: Option<String>,
+    /// Brand id as listed by `list_brands` ("br12").
+    #[serde(default)]
+    pub brand_id: Option<String>,
+    /// Name, Tamil name, code or any barcode.
+    #[serde(default)]
+    pub search: String,
+    /// "active", "inactive" or "all" (default).
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub offset: i64,
+    /// Default 500, at most 5000 per call. `total` always counts every match, so nothing is silently dropped.
+    #[serde(default)]
+    pub limit: i64,
+}
+
+pub fn list_items_page(conn: &Connection, q: &ItemPageQuery) -> Result<Value> {
+    sync_brands(conn)?;
+    let mut wh = String::from("i.kind='item'");
+    let mut args: Vec<rusqlite::types::Value> = Vec::new();
+    if let Some(c) = q.category_id.as_deref().filter(|c| !c.is_empty()) {
+        args.push(c.to_string().into());
+        wh += &format!(" AND i.category_id=?{}", args.len());
+    }
+    if let Some(b) = q.brand_id.as_deref().filter(|b| !b.is_empty()) {
+        let name: Option<String> = match brand_id(b) {
+            Some(bid) => conn.query_row("SELECT name FROM brands WHERE id=?1", [bid], |r| r.get(0)).optional()?,
+            None => None,
+        };
+        // An unknown brand matches nothing rather than everything.
+        args.push(name.unwrap_or_else(|| "\u{0}".into()).into());
+        wh += &format!(" AND i.brand=?{}", args.len());
+    }
+    match q.status.as_str() {
+        "active" => wh += " AND i.active=1",
+        "inactive" => wh += " AND i.active=0",
+        _ => {}
+    }
+    let term = norm(&q.search).to_lowercase();
+    if !term.is_empty() {
+        let like = format!("%{}%", term.replace('!', "!!").replace('%', "!%").replace('_', "!_"));
+        args.push(like.into());
+        let n = args.len();
+        wh += &format!(
+            " AND (lower(i.name) LIKE ?{n} ESCAPE '!' OR lower(COALESCE(i.name_ta,'')) LIKE ?{n} ESCAPE '!' OR i.code LIKE ?{n} ESCAPE '!'
+              OR EXISTS (SELECT 1 FROM barcodes bb WHERE bb.item_id=i.id AND bb.barcode LIKE ?{n} ESCAPE '!'))"
+        );
+    }
+    let total: i64 = conn.query_row(
+        &format!("SELECT COUNT(*) FROM items i WHERE {wh}"),
+        rusqlite::params_from_iter(args.iter()),
+        |r| r.get(0),
+    )?;
+    let limit = if q.limit <= 0 { 500 } else { q.limit.min(5000) };
+    let mut st = conn.prepare(&format!("{ITEM_SELECT} WHERE {wh} ORDER BY i.rowid LIMIT {limit} OFFSET {}", q.offset.max(0)))?;
+    let items = st.query_map(rusqlite::params_from_iter(args.iter()), item_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(json!({ "total": total, "items": items }))
+}
+
+pub fn set_items_brand(conn: &mut Connection, ids: &[String], brand_id_str: &str) -> Result<()> {
+    sync_brands(conn)?;
+    let name: Option<String> = match brand_id(brand_id_str) {
+        Some(bid) => conn.query_row("SELECT name FROM brands WHERE id=?1", [bid], |r| r.get(0)).optional()?,
+        None => None,
+    };
+    let Some(name) = name else { return Err(ApiError::Invalid("Choose a brand.".into())) };
+    bulk(conn, ids, &format!("brand {name}"), "UPDATE items SET brand=?1 WHERE id=?2", name.clone().into())
+}

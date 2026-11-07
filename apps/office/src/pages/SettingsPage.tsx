@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import type { SettingsBundle } from '@gokul/data';
 import { PageHeader, Tabs, TabPanel, useToast } from '@gokul/ui';
@@ -17,7 +18,9 @@ export function SettingsPage() {
   const toast = useToast();
   const [saved, setSaved] = useState<SettingsBundle | null>(null);
   const [draft, setDraft] = useState<SettingsBundle | null>(null);
-  const [tab, setTab] = useState<Section>('shop');
+  const [params] = useSearchParams();
+  const want = params.get('tab') as Section | null;
+  const [tab, setTab] = useState<Section>(want && LABELS.some((l) => l.value === want) ? want : 'shop');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api.getSettingsBundle().then((b) => { setSaved(b); setDraft(b); }); }, []);
