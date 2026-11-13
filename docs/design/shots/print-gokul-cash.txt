@@ -16,7 +16,7 @@ Address : 12, Gandhi Street, Kondur
 Points : 7.58
 ------------------------------------------------
 BILL NO : 26/00001             DATE : 13-11-2026
-Counter : Counter 1           TIME : 11:04:44 AM
+Counter : Counter 1           TIME : 05:50:12 PM
 ------------------------------------------------
 PRODUCT            MRP    RATE    QTY        AMT
 ------------------------------------------------

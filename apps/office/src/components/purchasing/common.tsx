@@ -37,6 +37,7 @@ export const phaseInfo: Record<BatchPhase, { tone: Tone; label: string }> = {
   settling: { tone: 'warning', label: 'Settling' },
   ready: { tone: 'info', label: 'Ready to filter' },
   'in-barrel': { tone: 'success', label: 'In barrel' },
+  'in-godown': { tone: 'info', label: 'In godown' },
 };
 
 export const seedColor: Record<SeedType, string> = {

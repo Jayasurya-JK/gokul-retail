@@ -22,4 +22,8 @@ export interface MockStore {
   /** Over this an expense needs a manager PIN (paise); kept in sync with Settings */
   expenseLimit?: number;
   mill?: MillSettings;
+  /** Set by the production mock; the purchasing mock reads the godown barrels a batch fills */
+  godown?: GodownMockState;
+  /** Set by the purchasing mock; the Mill daily report reads the pressing batches */
+  pressing?: () => PressingBatch[];
 }

@@ -8,9 +8,9 @@
              X REPORT (day so far)
              The day is still open
 ------------------------------------------------
-Printed 13-11-2026                      11:04 AM
+Printed 13-11-2026                      05:50 PM
 Counter                                Counter 1
-Opened by Karthik            13-11-2026 11:04 AM
+Opened by Karthik            13-11-2026 05:50 PM
 ------------------------------------------------
 Bills                                          1
 Items sold                                     2

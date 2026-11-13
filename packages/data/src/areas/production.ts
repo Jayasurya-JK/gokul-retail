@@ -22,6 +22,8 @@ export interface GodownBarrel {
   levelL: Milli;
   /** What people see: empty at 0 L, and a settling barrel turns ready by itself after its settling days */
   status: GodownStatus;
+  /** The stored status, before a settling barrel turns ready on its own */
+  storedStatus: GodownStatus;
   filledOn: string | null;
   settleStartedOn: string | null;
   readyOn: string | null;
@@ -132,7 +134,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
   const mk = (id: string, label: string, oil: SeedType, level: number, status: GodownStatus, filledDays: number | null, settleDays: number | null): GodownBarrel => {
     stored.set(id, status);
     return {
-      id, label, oil, oilName: OIL_BASE[oil].oilName, capacityL: 200000, levelL: level, status, filledOn: filledDays === null ? null : ago(filledDays),
+      id, label, oil, oilName: OIL_BASE[oil].oilName, capacityL: 200000, levelL: level, status, storedStatus: status, filledOn: filledDays === null ? null : ago(filledDays),
       settleStartedOn: settleDays === null ? null : ago(settleDays), readyOn: null, active: true, settleDays: OIL_BASE[oil].settleDays, lastReading: null,
     };
   };
@@ -152,6 +154,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
 
   const refresh = (b: GodownBarrel): GodownBarrel => {
     const st = stored.get(b.id) ?? 'empty';
+    b.storedStatus = st;
     b.status = godownStatus({ levelL: b.levelL, settleStartedOn: b.settleStartedOn, settleDays: b.settleDays, stored: st });
     b.readyOn = b.settleStartedOn ? new Date(new Date(b.settleStartedOn).getTime() + b.settleDays * DAY).toISOString() : null;
     b.lastReading = [...state.readings].reverse().find((r) => r.barrelId === b.id) ?? null;
