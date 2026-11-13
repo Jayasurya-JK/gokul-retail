@@ -145,7 +145,7 @@ export function MillSheetPage() {
   return (
     <>
       <PageHeader
-        title="Mill daily sheet" icon={<Factory size={17} />} subtitle={`${shop} - ${longDay(day)}`}
+        title="Mill sheet (manual – old)" icon={<Factory size={17} />} subtitle={`${shop} - ${longDay(day)}`}
         actions={
           <>
             <div className="flex items-center rounded-control border border-line-strong bg-surface">

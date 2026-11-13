@@ -13,3 +13,4 @@ Fix by: Haiku or Sonnet. Commit: the commit hash once the lead commits the work 
 | T03 godown tab | tasks/T03-godown-tab.md | wip/r6 | flash | logs/T03-* | done | 2 files, typecheck 0, lint clean; visual check pending in final pass. | - | |
 | T04 godown actions | tasks/T04-godown-actions.md | wip/r6 | flash | logs/T04-* | done | 2 files, checks clean. Invoice no/date stored in note (backlog: real columns). | - | |
 | T05 pressing + transfer | tasks/T05-pressing-transfer.md | wip/r6 | flash | logs/T05-* | done | 4 files, checks clean, old MoveToBarrel UI retired (backend kept). Godown barrel required on pressing - confirm with owner. | - | |
+| T06 mill daily (read-only) | tasks/T06-mill-daily.md | wip/r6 | flash | logs/T06-* | gate-passed | typecheck 0; full review at end of batch. | - | |

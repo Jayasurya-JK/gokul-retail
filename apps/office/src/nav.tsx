@@ -1,4 +1,4 @@
-import { BarChart3, Barcode, Boxes, ClipboardList, Factory, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
+import { BarChart3, Barcode, Boxes, ClipboardList, Factory, FileClock, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
 import type { NavGroup } from '@gokul/ui';
 
 export const nav: NavGroup[] = [
@@ -18,7 +18,8 @@ export const nav: NavGroup[] = [
       { path: '/purchases', label: 'Purchases', icon: <ShoppingCart />, keywords: 'grn entry' },
       { path: '/suppliers', label: 'Suppliers', icon: <Truck /> },
       { path: '/production', label: 'Production', icon: <Factory />, keywords: 'pressing batch packing seeds' },
-      { path: '/mill', label: 'Mill daily sheet', icon: <ClipboardList />, keywords: 'aravai operator punnaku stock paper form day end' },
+      { path: '/mill-daily', label: 'Mill daily sheet', icon: <ClipboardList />, keywords: 'godown seeds barrels stick reading outsourced transfers print report day end' },
+      { path: '/mill', label: 'Mill sheet (manual – old)', icon: <FileClock />, keywords: 'aravai operator punnaku stock paper form day end' },
     ],
   },
   {
