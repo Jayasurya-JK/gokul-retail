@@ -11,3 +11,6 @@ apps/*/src-tauri/gen/
 
 # Real business data (never commit)
 data/import/
+
+# Junior (DeepSeek) run logs: may be large, never commit
+tools/junior/logs/
