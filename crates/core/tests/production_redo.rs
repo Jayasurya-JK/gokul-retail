@@ -47,7 +47,7 @@ fn live_like_v13(path: &std::path::Path) {
     }
     conn.execute(
         "INSERT INTO pressing_batches(number,series,fy,seq,at,day,seed,seed_g,oil_raw_ml,cake_g,settle_ready_on,norm_kg_per_l,norm_density,machine)
-         VALUES('PB-OLD','PB','2026-27',1,'2026-11-07T10:00:00Z','2026-11-07','groundnut',50000,20000,30000,'2026-11-11T10:00:00Z','2.5','0.91','W')",
+         VALUES('PB-OLD','PB','2026-27',900,'2026-11-07T10:00:00Z','2026-11-07','groundnut',50000,20000,30000,'2026-11-11T10:00:00Z','2.5','0.91','W')",
         [],
     )
     .unwrap();
@@ -145,6 +145,50 @@ fn analysis_gives_yield_vs_norm_cost_and_flags_low_batches() {
         let g = gokul_core::analysis::get_mill_analysis(c, &de(json!({ "from": today, "to": today, "seed": "sesame" })))?;
         assert_eq!(g["totals"]["batches"], 0);
         assert!(gokul_core::analysis::get_mill_analysis(c, &de(json!({ "from": "2026-12-02", "to": "2026-12-01" }))).is_err());
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn the_pressing_grid_saves_all_rows_or_none_and_moves_old_draft_rows_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("gokul.db");
+    live_like_v13(&path);
+    let db = Db::open(&path).unwrap();
+    db.with(|c| {
+        post_movement(c, &iso(Local::now()), "rm-gn", "purchase", 300_000, "test", "1", "seed", "Test")?;
+        c.execute("INSERT OR IGNORE INTO categories(id,name,sort) VALUES('oil','Oils',0)", [])?;
+        godown::add_godown_barrels(c, &de(json!({ "oil": "groundnut", "count": 1, "capacityL": 150_000 })))?;
+        let row = |kg: i64, oil: i64, op: &str| json!({ "seed": "groundnut", "seedKg": kg, "oilRawL": oil, "cakeKg": 60_000, "godownBarrelId": "GB-001", "operator": op, "machine": "W" });
+        let stock = |c: &rusqlite::Connection| c.query_row::<i64, _, _>("SELECT stock FROM items WHERE id='rm-gn'", [], |r| r.get(0)).unwrap();
+        let before = stock(c);
+        // the second row has no operator: nothing is saved
+        let bad = purchasing::create_pressing_batches(c, &de(json!({ "rows": [row(100_000, 40_000, "Selvam"), row(100_000, 40_000, "")] })));
+        assert!(bad.is_err());
+        assert_eq!(stock(c), before, "seed untouched");
+        assert_eq!(purchasing::list_pressing_batches(c)?.len(), 1, "only the old batch exists");
+        // the third row would overfill the 100 L barrel: nothing is saved either
+        let over = purchasing::create_pressing_batches(c, &de(json!({ "rows": [row(100_000, 100_000, "A"), row(100_000, 60_000, "B")] })));
+        assert!(over.is_err());
+        let m = over.unwrap_err().to_string(); assert!(m.starts_with("Row 2"), "{m}");
+        assert_eq!(stock(c), before);
+        // two good rows
+        let ok = purchasing::create_pressing_batches(c, &de(json!({ "rows": [row(100_000, 40_000, "Selvam"), row(100_000, 38_000, "Kannan")] })))?;
+        assert_eq!(ok.as_array().unwrap().len(), 2);
+        assert_eq!(stock(c), before - 200_000);
+        // an old draft row moves into Production once, on its own day
+        let ids: Vec<i64> = c.prepare("SELECT id FROM mill_op_rows WHERE day='2026-11-07'")?.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        let moved = purchasing::create_pressing_batches(c, &de(json!({ "rows": [row(100_000, 38_000, "Murugesan")], "day": "2026-11-07", "legacyRowIds": ids })))?;
+        assert_eq!(moved[0]["source"], "legacy-sheet");
+        assert!(moved[0]["date"].as_str().unwrap().starts_with("2026-11-07"));
+        let again = purchasing::create_pressing_batches(c, &de(json!({ "rows": [row(100_000, 1_000, "Murugesan")], "legacyRowIds": ids })));
+        assert!(again.unwrap_err().to_string().contains("already moved"));
+        // the draft is still readable, its row now marked
+        let s = mill::get_sheet(c, "2026-11-07")?;
+        assert_eq!(s["status"], "draft");
+        assert_eq!(s["opRows"].as_array().unwrap().len(), 1);
+        assert_eq!(c.query_row::<i64, _, _>("SELECT imported FROM mill_op_rows WHERE id=?1", [ids[0]], |r| r.get(0))?, 1);
         Ok(())
     })
     .unwrap();

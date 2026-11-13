@@ -29,6 +29,8 @@ export interface MockStore {
   godown?: GodownMockState;
   /** Set by the purchasing mock; the Mill daily report reads the pressing batches */
   pressing?: () => PressingBatch[];
+  /** Old manual-sheet draft row ids already moved into Production (mock of mill_op_rows.imported) */
+  legacyImported?: Set<string>;
   /** Set by the purchasing mock: seed stock (milli-kg) and last cost (paise per kg) */
   seedStock?: (seed: 'groundnut' | 'sesame' | 'copra') => { stock: number; cost: number };
 }

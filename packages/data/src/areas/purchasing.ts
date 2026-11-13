@@ -357,6 +357,14 @@ export interface PressingDraft extends PressingInput {
   godownBarrelId?: string;
 }
 
+export interface PressingBatchesInput {
+  rows: PressingDraft[];
+  /** The day the batches belong to (default today); a back-dated day is stamped 20:00 */
+  day?: string;
+  /** Old manual-sheet row ids, one per row, when the rows are moved from a draft sheet */
+  legacyRowIds?: number[];
+}
+
 export interface MoveToBarrelDraft {
   batchId: string;
   barrelId: string;
@@ -445,6 +453,8 @@ export interface PurchasingApi {
   listSeedProfiles(): Promise<SeedProfile[]>;
   listPressingBatches(): Promise<PressingBatch[]>;
   createPressingBatch(draft: PressingDraft): Promise<PressingBatch>;
+  /** The pressing grid: every row becomes one batch, all rows or none. legacyRowIds pulls rows of an old manual sheet draft (one id per row) */
+  createPressingBatches(input: PressingBatchesInput): Promise<PressingBatch[]>;
   moveBatchToBarrel(draft: MoveToBarrelDraft): Promise<PressingBatch>;
   listBarrels(): Promise<Barrel[]>;
   listPackTargets(barrelId: string): Promise<PackTarget[]>;
@@ -459,6 +469,7 @@ interface BatchRec extends PressingInput {
   id: string; number: string; date: string; chekku: string; operator: string; settleReadyOn: string;
   clearOilL: Milli | null; sedimentL: Milli | null; barrelId: string | null; movedOn: string | null;
   machine?: 'W' | 'R'; godownBarrelId?: string | null;
+  seedCostPerKg?: Paise | null; jaggeryCost?: Paise | null; source?: 'entry' | 'legacy-sheet';
 }
 
 const R = (n: number) => Math.round(n * 100);
@@ -811,6 +822,46 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
   packRuns.sort((a, b) => b.date.localeCompare(a.date));
 
   /* ---- API ---- */
+  const createBatch = async (d: PressingDraft, at?: Date): Promise<PressingBatch> => {
+      const base = SEED_BASE[d.seed];
+      const stock = seedStock(d.seed);
+      if (d.seedKg <= 0) throw new Error('Enter the seed weight.');
+      if (d.oilRawL <= 0) throw new Error('Enter the oil that came out.');
+      if (d.cleaningLossKg >= d.seedKg) throw new Error('Cleaning loss cannot be more than the seed weight.');
+      if (d.seedKg > stock.stock) throw new Error(`Only ${(stock.stock / 1000).toFixed(0)} kg ${base.label} in the godown.`);
+      if (d.jaggeryKg > 0 && jaggery && d.jaggeryKg > jaggery.stock) throw new Error('Not enough palm jaggery in stock.');
+      const gstate = store.godown;
+      const gb = d.godownBarrelId ? gstate?.barrels.find((x) => x.id === d.godownBarrelId) : undefined;
+      if (d.godownBarrelId) {
+        if (!gb) throw new Error('Choose a godown barrel.');
+        if (gb.oil !== d.seed) throw new Error(`${gb.label} holds ${SEED_BASE[gb.oil].label.split(' ')[0].toLowerCase()} oil. Choose a ${SEED_BASE[d.seed].label.split(' ')[0].toLowerCase()} barrel.`);
+        if (gb.status === 'settling' || gb.status === 'ready') throw new Error(`${gb.label} is ${gb.status} and cannot take fresh oil. Pick a barrel that is filling or empty.`);
+        if (gb.levelL + d.oilRawL > gb.capacityL) throw new Error(`${gb.label} has room for only ${((gb.capacityL - gb.levelL) / 1000).toFixed(1)} L.`);
+      }
+      batchSeq += 1;
+      const now = at ?? new Date();
+      const rec: BatchRec = {
+        ...d, seedCostPerKg: stock.cost, jaggeryCost: jaggery && d.jaggeryKg > 0 ? Math.round((jaggery.cost * d.jaggeryKg) / 1000) : 0, source: 'entry',
+        id: `pb${batchSeq}`, number: `PB-${String(batchNo).padStart(4, '0')}`, date: now.toISOString(),
+        settleReadyOn: new Date(now.getTime() + base.settleDays * DAY).toISOString(), clearOilL: null, sedimentL: null, barrelId: null, movedOn: null,
+        machine: d.machine ?? 'W', godownBarrelId: d.godownBarrelId ?? null,
+      };
+      batchNo += 1;
+      batchRecs.push(rec);
+      stock.stock -= d.seedKg;
+      if (d.jaggeryKg > 0 && jaggery) jaggery.stock -= d.jaggeryKg;
+      const c = cake[d.seed];
+      if (c) c.stock += d.cakeKg;
+      if (gb && gstate) {
+        gb.levelL += d.oilRawL;
+        gstate.moves.push({ at: now.toISOString(), kind: 'press', qtyL: d.oilRawL, note: `Oil from ${rec.number}`, by: 'Suresh Kumar', barrelId: gb.id });
+        gb.filledOn = gb.filledOn ?? now.toISOString();
+        gstate.stored.set(gb.id, 'filling');
+        gb.settleStartedOn = null;
+      }
+      return enrichBatch(rec);
+  };
+
   return {
     searchPurchasable: async (query, limit = 40) => fuzzyFilter(allPurchasable(), query, (p) => [p.name, p.hsn], limit),
 
@@ -881,43 +932,41 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
 
     listSeedProfiles: async () => profiles(),
     listPressingBatches: async () => [...batchRecs].sort((a, b) => b.date.localeCompare(a.date)).map(enrichBatch),
-    createPressingBatch: async (d) => {
-      const base = SEED_BASE[d.seed];
-      const stock = seedStock(d.seed);
-      if (d.seedKg <= 0) throw new Error('Enter the seed weight.');
-      if (d.oilRawL <= 0) throw new Error('Enter the oil that came out.');
-      if (d.cleaningLossKg >= d.seedKg) throw new Error('Cleaning loss cannot be more than the seed weight.');
-      if (d.seedKg > stock.stock) throw new Error(`Only ${(stock.stock / 1000).toFixed(0)} kg ${base.label} in the godown.`);
-      if (d.jaggeryKg > 0 && jaggery && d.jaggeryKg > jaggery.stock) throw new Error('Not enough palm jaggery in stock.');
-      const gstate = store.godown;
-      const gb = d.godownBarrelId ? gstate?.barrels.find((x) => x.id === d.godownBarrelId) : undefined;
-      if (d.godownBarrelId) {
-        if (!gb) throw new Error('Choose a godown barrel.');
-        if (gb.oil !== d.seed) throw new Error(`${gb.label} holds ${SEED_BASE[gb.oil].label.split(' ')[0].toLowerCase()} oil. Choose a ${SEED_BASE[d.seed].label.split(' ')[0].toLowerCase()} barrel.`);
-        if (gb.status === 'settling' || gb.status === 'ready') throw new Error(`${gb.label} is ${gb.status} and cannot take fresh oil. Pick a barrel that is filling or empty.`);
-        if (gb.levelL + d.oilRawL > gb.capacityL) throw new Error(`${gb.label} has room for only ${((gb.capacityL - gb.levelL) / 1000).toFixed(1)} L.`);
-      }
-      batchSeq += 1;
-      const now = new Date();
-      const rec: BatchRec = {
-        ...d, id: `pb${batchSeq}`, number: `PB-${String(batchNo).padStart(4, '0')}`, date: now.toISOString(),
-        settleReadyOn: new Date(now.getTime() + base.settleDays * DAY).toISOString(), clearOilL: null, sedimentL: null, barrelId: null, movedOn: null,
-        machine: d.machine ?? 'W', godownBarrelId: d.godownBarrelId ?? null,
+    createPressingBatch: (d) => createBatch(d),
+    createPressingBatches: async (input) => {
+      if (input.rows.length === 0) throw new Error('Enter at least one pressing row.');
+      if (input.legacyRowIds?.length && input.legacyRowIds.length !== input.rows.length) throw new Error('Every row must come from an old sheet row, or none.');
+      const at = input.day && input.day !== new Date().toISOString().slice(0, 10) ? new Date(`${input.day}T20:00:00`) : undefined;
+      // all rows or none: remember what a batch changes and put it back when a later row fails
+      const gs = store.godown;
+      const snap = {
+        n: batchRecs.length, seq: batchSeq, no: batchNo,
+        seeds: (['groundnut', 'sesame', 'copra'] as SeedType[]).map((s) => [s, seedStock(s).stock] as const),
+        jag: jaggery?.stock ?? 0, cakes: Object.entries(cake).map(([k, v]) => [k, v?.stock ?? 0] as const),
+        barrels: gs?.barrels.map((b) => ({ id: b.id, level: b.levelL, filledOn: b.filledOn, settle: b.settleStartedOn, st: gs.stored.get(b.id) })) ?? [],
+        moves: gs?.moves.length ?? 0,
       };
-      batchNo += 1;
-      batchRecs.push(rec);
-      stock.stock -= d.seedKg;
-      if (d.jaggeryKg > 0 && jaggery) jaggery.stock -= d.jaggeryKg;
-      const c = cake[d.seed];
-      if (c) c.stock += d.cakeKg;
-      if (gb && gstate) {
-        gb.levelL += d.oilRawL;
-        gstate.moves.push({ at: now.toISOString(), kind: 'press', qtyL: d.oilRawL, note: `Oil from ${rec.number}`, by: 'Suresh Kumar', barrelId: gb.id });
-        gb.filledOn = gb.filledOn ?? now.toISOString();
-        gstate.stored.set(gb.id, 'filling');
-        gb.settleStartedOn = null;
+      const out: PressingBatch[] = [];
+      try {
+        for (const [i, d] of input.rows.entries()) {
+          if (!d.operator.trim()) throw new Error('choose the operator.');
+          const b = await createBatch(d, at);
+          const rec = batchRecs.find((x) => x.id === b.id)!;
+          if (input.legacyRowIds?.length) { rec.source = 'legacy-sheet'; (store.legacyImported ??= new Set()).add(String(input.legacyRowIds[i])); }
+          out.push(enrichBatch(rec));
+        }
+      } catch (e) {
+        batchRecs.length = snap.n; batchSeq = snap.seq; batchNo = snap.no;
+        snap.seeds.forEach(([s, v]) => { seedStock(s).stock = v; });
+        if (jaggery) jaggery.stock = snap.jag;
+        snap.cakes.forEach(([k, v]) => { const c = (cake as Record<string, { stock: number } | undefined>)[k]; if (c) c.stock = v; });
+        if (gs) {
+          snap.barrels.forEach((x) => { const b = gs.barrels.find((y) => y.id === x.id)!; b.levelL = x.level; b.filledOn = x.filledOn; b.settleStartedOn = x.settle; if (x.st) gs.stored.set(x.id, x.st); });
+          gs.moves.length = snap.moves;
+        }
+        throw new Error(`Row ${out.length + 1}: ${e instanceof Error ? e.message : 'could not save'}`);
       }
-      return enrichBatch(rec);
+      return out;
     },
     moveBatchToBarrel: async (d) => {
       const rec = batchRecs.find((b) => b.id === d.batchId);

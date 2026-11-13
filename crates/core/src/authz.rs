@@ -136,7 +136,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
     match method {
         "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
         | "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => Perm("canManageItems"),
-        "createGrn" | "saveSupplier" | "recordSupplierPayment" | "saveSeedNorms" | "createPressingBatch" | "moveBatchToBarrel" | "createPackRun" => {
+        "createGrn" | "saveSupplier" | "recordSupplierPayment" | "saveSeedNorms" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
             Perm("canManageStock")
         }
         "setCustomerCredit" => PermPin { perm: "canEditPrices", action: "allow_credit", pin_arg: 2, pin_key: None },
@@ -171,7 +171,7 @@ fn describe(method: &str) -> &'static str {
         "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory" => "change categories",
         "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => "change brands",
         "createGrn" | "saveSupplier" | "recordSupplierPayment" => "record purchases and supplier payments",
-        "saveSeedNorms" | "createPressingBatch" | "moveBatchToBarrel" | "createPackRun" => "record production",
+        "saveSeedNorms" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => "record production",
         "createAdjustment" | "postStockTake" => "adjust stock",
         "recordCollection" | "logReminder" => "collect credit",
         "setCustomerCredit" => "allow credit for a customer",

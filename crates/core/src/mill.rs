@@ -219,7 +219,7 @@ pub(crate) fn day_end(day: &str) -> Result<String> {
 }
 
 /// When the sheet's own postings are stamped: now for today's sheet, 20:00 for a back-dated one.
-fn posting_time(day: &str) -> chrono::DateTime<Local> {
+pub(crate) fn posting_time(day: &str) -> chrono::DateTime<Local> {
     let now = Local::now();
     if db::day_of(now) == day {
         return now;

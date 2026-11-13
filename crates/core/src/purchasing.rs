@@ -987,6 +987,76 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
     get_batch(tx, bid)
 }
 
+/// The pressing grid: every complete row becomes one batch, all in ONE transaction (all rows or none).
+/// `legacy_row_ids` (same length as `rows`) pulls rows of an old manual mill-sheet draft into real batches and marks them imported.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PressingBatchesInput {
+    pub rows: Vec<PressingDraft>,
+    /// The day the batches belong to (default today). A back-dated day is stamped 20:00.
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub legacy_row_ids: Vec<i64>,
+}
+
+pub fn create_pressing_batches(conn: &mut Connection, i: &PressingBatchesInput) -> Result<Value> {
+    if i.rows.is_empty() {
+        return invalid("Enter at least one pressing row.");
+    }
+    if i.rows.len() > 60 {
+        return invalid("Too many rows at once. Save in smaller groups.");
+    }
+    if !i.legacy_row_ids.is_empty() && i.legacy_row_ids.len() != i.rows.len() {
+        return invalid("Every row must come from an old sheet row, or none.");
+    }
+    let now = match i.day.as_deref().filter(|d| !d.is_empty()) {
+        Some(d) => {
+            if d > db::day_of(Local::now()).as_str() {
+                return invalid("The day cannot be in the future.");
+            }
+            crate::mill::posting_time(d)
+        }
+        None => Local::now(),
+    };
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let mut out = Vec::new();
+    for (n, d) in i.rows.iter().enumerate() {
+        let row = n + 1;
+        if d.operator.trim().is_empty() {
+            return invalid(format!("Row {row}: choose the operator."));
+        }
+        if let Some(id) = i.legacy_row_ids.get(n) {
+            let open: Option<(i64, String)> = tx
+                .query_row(
+                    "SELECT o.imported,s.status FROM mill_op_rows o JOIN mill_sheets s ON s.day=o.day WHERE o.id=?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            match open {
+                None => return invalid(format!("Row {row}: the old sheet row was not found.")),
+                Some((1, _)) => return invalid(format!("Row {row}: this old sheet row was already moved to Production.")),
+                Some((_, st)) if st != "draft" => return invalid(format!("Row {row}: that sheet is closed; its batches already exist.")),
+                _ => {}
+            }
+        }
+        let mut b = create_pressing_in_tx(&tx, d, now).map_err(|e| match e {
+            ApiError::Invalid(m) => ApiError::Invalid(format!("Row {row}: {m}")),
+            other => other,
+        })?;
+        if let Some(id) = i.legacy_row_ids.get(n) {
+            let bid = parse_id("pb", b["id"].as_str().unwrap_or("")).unwrap_or(0);
+            tx.execute("UPDATE mill_op_rows SET imported=1, batch_id=?1 WHERE id=?2", params![bid, id])?;
+            tx.execute("UPDATE pressing_batches SET source='legacy-sheet' WHERE id=?1", [bid])?;
+            b = get_batch(&tx, bid)?;
+        }
+        out.push(b);
+    }
+    tx.commit()?;
+    Ok(Value::Array(out))
+}
+
 fn barrel_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
     Ok(json!({
         "id": r.get::<_, String>(0)?, "label": r.get::<_, String>(1)?, "seed": r.get::<_, Option<String>>(2)?,

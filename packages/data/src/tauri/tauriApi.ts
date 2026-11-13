@@ -13,7 +13,7 @@ import type {
   StockAdjustment, StockTakeCount, StockTakeLine, StockTakeResult,
 } from '../areas/catalog';
 import type {
-  Barrel, Grn, GrnDraft, MoveToBarrelDraft, PackRun, PackRunDraft, PackTarget, PressingBatch, PressingDraft, Purchasable, SeedProfile,
+  Barrel, Grn, GrnDraft, MoveToBarrelDraft, PackRun, PackRunDraft, PackTarget, PressingBatch, PressingBatchesInput, PressingDraft, Purchasable, SeedProfile,
   SupplierDraft, SupplierLedger, SupplierPaymentDraft, SupplierProfile, SupplierSummary,
 } from '../areas/purchasing';
 import type {
@@ -60,7 +60,7 @@ export const REAL_METHODS = [
   'setItemsGst', 'setItemsBrand', 'listItemsPage', 'itemMovements', 'listCategoriesWithCounts', 'addCategory', 'renameCategory', 'deleteCategory', 'moveCategory',
   'listBrands', 'addBrand', 'renameBrand', 'deleteBrand', 'moveBrand', 'createAdjustment', 'listAdjustments', 'startStockTake', 'postStockTake',
   'searchPurchasable', 'listGrns', 'getGrn', 'createGrn', 'listSupplierSummaries', 'getSupplierLedger', 'saveSupplier', 'recordSupplierPayment',
-  'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
+  'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'createPressingBatches', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
   'listPackRuns', 'createPackRun',
   'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'setCustomerCredit', 'getCustomerWallet', 'listPointsHistory', 'pointsOverview', 'listPointsCustomers', 'getPointsLedger', 'pointsExpiring', 'setLoyaltyGoLive', 'pointsReport', 'listReceivables', 'getStatement',
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
@@ -172,6 +172,7 @@ export function createTauriApi(): Api {
     listSeedProfiles: () => call<SeedProfile[]>('listSeedProfiles'),
     listPressingBatches: () => call<PressingBatch[]>('listPressingBatches'),
     createPressingBatch: (draft: PressingDraft) => call<PressingBatch>('createPressingBatch', draft),
+    createPressingBatches: (input: PressingBatchesInput) => call<PressingBatch[]>('createPressingBatches', input),
     moveBatchToBarrel: (draft: MoveToBarrelDraft) => call<PressingBatch>('moveBatchToBarrel', draft),
     listBarrels: () => call<Barrel[]>('listBarrels'),
     listPackTargets: (barrelId: string) => call<PackTarget[]>('listPackTargets', barrelId),
