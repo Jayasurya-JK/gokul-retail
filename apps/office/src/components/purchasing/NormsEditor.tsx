@@ -94,7 +94,7 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
           )}
         >
           <p className="mb-3 text-xs text-muted">Expected oil from 100 kg of seed. Each batch is compared to this.</p>
-          <div className="grid grid-cols-[minmax(150px,1.1fr)_110px_110px_96px_84px_minmax(380px,1.9fr)] items-center gap-x-4 gap-y-3">
+          <div className="grid grid-cols-[minmax(130px,1.1fr)_104px_104px_84px_76px_minmax(240px,1.9fr)] items-center gap-x-4 gap-y-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Seed</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Seed per litre of oil (kg)</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Oil weight (kg per L)</div>

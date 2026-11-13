@@ -62,7 +62,6 @@ export interface MillAnalysis {
 
 const SEEDS: SeedType[] = ['groundnut', 'sesame', 'copra'];
 const SEED_LABEL: Record<SeedType, string> = { groundnut: 'Groundnut', sesame: 'Sesame (Ellu)', copra: 'Copra' };
-const RM: Record<SeedType, string> = { groundnut: 'rm-gn', sesame: 'rm-sesame', copra: 'rm-copra' };
 const OIL_ITEM: Record<SeedType, string> = { groundnut: 'Groundnut Oil (Loose)', sesame: 'Gingelly Oil (Loose)', copra: 'Coconut Oil (Loose)' };
 const CAKE_ITEM: Record<SeedType, string> = { groundnut: 'Groundnut Oil Cake (Loose)', sesame: 'Gingelly Oil Cake (Loose)', copra: 'Coconut Oil Cake (Loose)' };
 const DAY = 86400000;
@@ -100,15 +99,17 @@ class Agg {
   }
 }
 
-export function buildMillAnalysis(q: MillAnalysisQuery, batchesIn: PressingBatch[], barrels: GodownBarrel[], items: Item[]): MillAnalysis {
+export function buildMillAnalysis(
+  q: MillAnalysisQuery, batchesIn: PressingBatch[], barrels: GodownBarrel[], items: Item[],
+  seedStock: (s: SeedType) => { stock: number; cost: number },
+): MillAnalysis {
   if (q.from > q.to) throw new Error('The start date is after the end date.');
   const threshold = Math.min(50, Math.max(0, q.thresholdPct ?? 5));
   const seedFilter = q.seed && q.seed !== 'all' ? q.seed : null;
-  const item = (id: string) => items.find((i) => i.id === id);
   const named = (n: string) => items.find((i) => i.name === n);
   const oilPrice = (s: SeedType) => named(OIL_ITEM[s])?.price ?? 0;
   const cakePrice = (s: SeedType) => named(CAKE_ITEM[s])?.price ?? 0;
-  const seedCost = (s: SeedType) => item(RM[s])?.cost ?? 0;
+  const seedCost = (s: SeedType) => seedStock(s).cost;
 
   const all: B[] = batchesIn
     .filter((b) => (seedFilter ? b.seed === seedFilter : true))
@@ -209,7 +210,7 @@ export function buildMillAnalysis(q: MillAnalysisQuery, batchesIn: PressingBatch
     for (const b of batchesIn.filter((x) => x.seed === seed)) perDay.set(ymd(b.date), (perDay.get(ymd(b.date)) ?? 0) + b.seedKg / 1000);
     const last = [...perDay.entries()].sort((a, c) => c[0].localeCompare(a[0])).slice(0, 14).map((e) => e[1]);
     const avg = last.length ? last.reduce((a, v) => a + v, 0) / last.length : 0;
-    const stockKg = (item(RM[seed])?.stock ?? 0) / 1000;
+    const stockKg = seedStock(seed).stock / 1000;
     const daysOfCover = avg > 0 ? stockKg / avg : null;
     return { seed, label: SEED_LABEL[seed], stockKg, avgKgPerPressingDay: avg, pressingDays: last.length, daysOfCover, low: daysOfCover !== null && daysOfCover < 5 };
   });

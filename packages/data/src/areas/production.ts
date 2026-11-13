@@ -296,7 +296,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
       return rec;
     },
     listGodownTransfers: async () => [...state.transfers].sort((a, c) => c.date.localeCompare(a.date)),
-    getMillAnalysis: async (q) => buildMillAnalysis(q, store.pressing?.() ?? [], state.barrels.map((b) => ({ ...refresh(b) })), store.items),
+    getMillAnalysis: async (q) => buildMillAnalysis(q, store.pressing?.() ?? [], state.barrels.map((b) => ({ ...refresh(b) })), store.items, (s) => store.seedStock?.(s) ?? { stock: 0, cost: 0 }),
     getMillDaily: async (day) => {
       const inDay = (iso: string) => ymd(iso) === day;
       const before = (iso: string) => ymd(iso) < day;

@@ -700,6 +700,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
   const jaggery = findItem('Palm Jaggery (Karupatti) (Loose)');
 
   const seedStock = (s: SeedType) => matById.get(SEED_BASE[s].rm)!;
+  store.seedStock = (s) => { const m = seedStock(s); return { stock: m.stock, cost: m.cost }; };
   const profiles = (): SeedProfile[] =>
     (Object.keys(SEED_BASE) as SeedType[]).map((s) => {
       const b = SEED_BASE[s];
