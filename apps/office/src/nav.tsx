@@ -1,4 +1,4 @@
-import { BarChart3, Barcode, Boxes, ClipboardList, Factory, FileClock, Gauge, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
+import { BarChart3, Barcode, Boxes, ClipboardList, Factory, Gauge, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
 import type { NavGroup } from '@gokul/ui';
 
 export const nav: NavGroup[] = [
@@ -17,10 +17,14 @@ export const nav: NavGroup[] = [
       { path: '/stock', label: 'Stock', icon: <Boxes />, keywords: 'levels adjustment stock take' },
       { path: '/purchases', label: 'Purchases', icon: <ShoppingCart />, keywords: 'grn entry' },
       { path: '/suppliers', label: 'Suppliers', icon: <Truck /> },
-      { path: '/production', label: 'Production', icon: <Factory />, keywords: 'pressing batch packing seeds' },
-      { path: '/production-insights', label: 'Production insights', icon: <Gauge />, keywords: 'yield norm machine operator loss trend low batch punnakku cake' },
-      { path: '/mill-daily', label: 'Mill daily sheet', icon: <ClipboardList />, keywords: 'godown seeds barrels stick reading outsourced transfers print report day end' },
-      { path: '/mill', label: 'Mill sheet (manual – old)', icon: <FileClock />, keywords: 'aravai operator punnaku stock paper form day end' },
+    ],
+  },
+  {
+    title: 'Mill',
+    items: [
+      { path: '/production', label: 'Production', icon: <Factory />, keywords: 'pressing batch packing seeds godown barrels settling stick reading outsourced oil transfer job work aravai' },
+      { path: '/mill-daily', label: 'Mill day sheet', icon: <ClipboardList />, keywords: 'daily sheet print report day end count close supervisor old sheets manual aravai' },
+      { path: '/production-insights', label: 'Mill analysis', icon: <Gauge />, keywords: 'yield norm machine operator loss trend low batch cost per litre punnakku cake godown settling seed cover insights' },
     ],
   },
   {
@@ -52,7 +56,7 @@ export const placeholders: ScreenInfo[] = [
   { path: '/stock', title: 'Stock', subtitle: 'Levels, adjustments and stock take', tabs: ['Levels', 'Adjustments', 'Stock take'], action: 'New adjustment', hint: 'Live stock per item with low-stock filters.' },
   { path: '/purchases', title: 'Purchases', subtitle: 'Goods received from suppliers', tabs: ['All purchases', 'New entry (GRN)'], action: 'New purchase', hint: 'Purchase list with supplier, amount and payment status.' },
   { path: '/suppliers', title: 'Suppliers', subtitle: 'Who you buy from, and what you owe', action: 'New supplier', hint: 'Supplier list with ledger on the right.' },
-  { path: '/production', title: 'Production', subtitle: 'Pressing batches and packing', tabs: ['Pressing', 'Packing'], action: 'New batch', hint: 'Seeds in, oil and cake out. Loose oil into bottles and tins.' },
+  { path: '/production', title: 'Production', subtitle: 'Pressing, godown, packing and job work', tabs: ['Pressing', 'Godown', 'Packing', 'Job work'], action: 'New batch', hint: 'Seeds in, oil and cake out. Loose oil into bottles and tins.' },
   { path: '/sales', title: 'Bills', subtitle: 'Every bill from every counter', action: 'Export', hint: 'Bills list with a bill detail panel and reprint.' },
   { path: '/customers', title: 'Customers', subtitle: 'People who buy from you', action: 'New customer', hint: 'Customer list, purchase history and credit.' },
   { path: '/collections', title: 'Credit and collections', subtitle: 'Outstanding balances and payments received', action: 'Record payment', hint: 'Who owes what, oldest first.' },
