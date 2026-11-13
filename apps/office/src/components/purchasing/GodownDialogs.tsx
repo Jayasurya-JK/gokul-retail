@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Check, Plus, RotateCcw, Save, Timer, Truck } from 'lucide-react';
-import type { GodownBarrel, GodownStatus, SeedType, Supplier } from '@gokul/data';
-import { Badge, Button, Dialog, Field, Input, Money, NumberInput, Select, useToast } from '@gokul/ui';
+import { ArrowRightLeft, Check, Plus, RotateCcw, Save, Timer, Truck } from 'lucide-react';
+import type { GodownBarrel, GodownStatus, Item, SeedType, Supplier } from '@gokul/data';
+import { Badge, Button, Dialog, Field, Input, Money, NumberInput, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
 import { fmtDateYear, fmtMilli, todayYmd } from './common';
 
@@ -434,6 +434,120 @@ export function OutsourcedOilDialog({ open, barrels, onClose, onSaved }: {
             {costP > 0 && <span className="text-muted"><Money paise={rate} /> / L</span>}
           </div>
         )}
+        {err && <ErrorBox>{err}</ErrorBox>}
+        <button type="submit" className="hidden" />
+      </form>
+    </Dialog>
+  );
+}
+
+/* ---------------- transfer settled oil to the store ---------------- */
+/** A store loose-oil item belongs to a godown oil when its name (without " (Loose)") is the oil's name. */
+const looseOilFor = (item: Item, oilName: string) =>
+  item.loose && item.active && item.categoryId === 'oil' && item.name.replace(/ \(Loose\)$/, '').toLowerCase() === oilName.toLowerCase();
+
+export function TransferToStoreDialog({ barrel, onClose, onSaved }: {
+  barrel: GodownBarrel | null; onClose: () => void; onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [items, setItems] = useState<Item[]>([]);
+  const [itemId, setItemId] = useState('');
+  const [litres, setLitres] = useState('');
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!barrel) return;
+    // Default to everything in the barrel; a partly emptied barrel can move only some litres.
+    setLitres(String(Math.floor(barrel.levelL / 100) / 10));
+    setItemId(''); setNote(''); setErr(''); setBusy(false);
+    void api.listItems().then(setItems).catch(() => setItems([]));
+  }, [barrel]);
+
+  const oilItems = useMemo(
+    () => (barrel ? items.filter((i) => looseOilFor(i, barrel.oilName)) : []),
+    [items, barrel],
+  );
+  useEffect(() => {
+    if (!barrel) return;
+    setItemId((cur) => (oilItems.some((i) => i.id === cur) ? cur : oilItems[0]?.id ?? ''));
+  }, [barrel, oilItems]);
+
+  const item = oilItems.find((i) => i.id === itemId) ?? null;
+  const litresM = litresToMilli(litres);
+  const afterL = barrel ? barrel.levelL - litresM : 0;
+  const tooMuch = barrel !== null && litresM > barrel.levelL;
+
+  const save = async () => {
+    if (!barrel) return;
+    if (!item) { setErr(`No loose ${barrel.oilName} item to receive the oil. Add it in Items first.`); return; }
+    if (litresM <= 0) { setErr('Enter the litres to move to the store.'); return; }
+    if (litresM > barrel.levelL) { setErr(`${barrel.label} holds only ${fmtMilli(barrel.levelL)} L.`); return; }
+    setBusy(true); setErr('');
+    try {
+      const t = await api.transferToStore({ barrelId: barrel.id, itemId: item.id, litresL: litresM, note: note.trim() });
+      toast.show({
+        tone: 'success',
+        title: `${fmtMilli(t.litresL)} L moved to the store`,
+        detail: `${t.number} · ${barrel.label} to ${item.name}`,
+      });
+      onSaved(); onClose();
+    } catch (e) {
+      setErr(reason(e, 'Could not move the oil to the store.'));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog
+      open={barrel !== null} onOpenChange={(o) => !o && onClose()} size="md" title="Transfer to store"
+      description={barrel ? `${barrel.label} · ${barrel.oilName} · settled and ready` : undefined}
+      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<ArrowRightLeft size={15} />} kbd="Enter" disabled={busy || !item || tooMuch || litresM <= 0} onClick={() => void save()}>Transfer to store</Button></>}
+    >
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => { e.preventDefault(); void save(); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLSelectElement) e.preventDefault(); }}
+      >
+        {barrel && (
+          <div className="grid grid-cols-3 gap-2 rounded-card border border-line bg-surface-2 p-3">
+            <div>
+              <div className="text-[11px] text-muted">In the barrel</div>
+              <div className="num text-sm font-semibold text-ink">{fmtMilli(barrel.levelL)} L</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted">Moving now</div>
+              <div className="num text-sm font-semibold text-ink">{litresM > 0 ? `${fmtMilli(litresM)} L` : '—'}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted">Left in barrel</div>
+              <div className={cn('num text-sm font-semibold', afterL < 0 ? 'text-danger' : 'text-ink')}>{afterL >= 0 ? `${fmtMilli(afterL)} L` : `${fmtMilli(-afterL)} L short`}</div>
+            </div>
+          </div>
+        )}
+
+        <Select
+          label="Store loose-oil item" data-autofocus value={itemId} onChange={(e) => { setItemId(e.target.value); setErr(''); }}
+          options={oilItems.length ? oilItems.map((i) => ({ value: i.id, label: `${i.name} · ${fmtMilli(i.stock)} L in store` })) : [{ value: '', label: 'No matching loose-oil item' }]}
+          disabled={oilItems.length === 0}
+        />
+        {barrel && oilItems.length === 0 && (
+          <p className="text-xs text-warning">No active loose {barrel.oilName} item. Add it in Items, then come back — the oil can only go to a loose-oil item sold by the litre.</p>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Litres to move" hint={barrel ? `${barrel.label} holds ${fmtMilli(barrel.levelL)} L. Part of it can stay.` : undefined}>
+            <NumberInput decimals={1} value={litres} onValueChange={(v) => { setLitres(v); setErr(''); }} placeholder="0" />
+          </Field>
+          <div className="flex items-end">
+            <Button type="button" size="sm" onClick={() => setLitres(String(Math.floor((barrel?.levelL ?? 0) / 100) / 10))} disabled={!barrel}>All of it</Button>
+          </div>
+        </div>
+
+        <Input label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. barrel 3 settled, filled the counter barrel" />
+
+        <p className="text-xs text-subtle">The litres leave the godown barrel and are added to this item's store stock. Godown oil never appears in store or POS stock until this transfer.</p>
+        {tooMuch && <div className="rounded-control bg-warning-soft px-3 py-2 text-sm text-warning">The barrel holds {fmtMilli(barrel?.levelL ?? 0)} L. Move that much or less.</div>}
         {err && <ErrorBox>{err}</ErrorBox>}
         <button type="submit" className="hidden" />
       </form>

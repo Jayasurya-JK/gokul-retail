@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot  = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
+try { Start-Process -WindowStyle Hidden -FilePath powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $repoRoot 'tools\team-room\open-team-room.ps1')) } catch {}
 
 # --- Task file (resolved before changing directory, so relative paths work from the caller's folder)
 if (-not (Test-Path -LiteralPath $Task -PathType Leaf)) { throw "Task file not found: $Task" }

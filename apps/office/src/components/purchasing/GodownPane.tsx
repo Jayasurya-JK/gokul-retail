@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowRightLeft, Check, Flame, Pencil, Plus, RotateCcw, Scale, Timer, Truck, Warehouse } from 'lucide-react';
-import type { GodownBarrel, GodownDetail, GodownMove, GodownStatus, OutsourcedOil, SeedType } from '@gokul/data';
+import type { GodownBarrel, GodownDetail, GodownMove, GodownStatus, GodownTransfer, OutsourcedOil, SeedType } from '@gokul/data';
 import { Badge, Button, EmptyState, Money, cn, useRefreshOnFocus, type Tone } from '@gokul/ui';
 import { api } from '../../store';
 import { fmtDate, fmtDateYear, fmtMilli, fmtNum, seedColor, SectionLabel, KV } from './common';
-import { AddBarrelsDialog, EditBarrelDialog, OutsourcedOilDialog, StatusDialog, StickReadingDialog, type StatusAction } from './GodownDialogs';
+import {
+  AddBarrelsDialog, EditBarrelDialog, OutsourcedOilDialog, StatusDialog, StickReadingDialog, TransferToStoreDialog, type StatusAction,
+} from './GodownDialogs';
 
 // Production stock lives in the godown in litres: several pressing batches can fill one 200 L barrel, an
 // end-of-day measuring-stick reading is the truth, and a full barrel settles before its oil moves to the store.
@@ -134,13 +136,15 @@ function OilGroup({ oil, label, barrels, selId, onPick }: {
 }
 
 /* ---------------- detail side panel ---------------- */
-function DetailPanel({ detail, loading, onEdit, onStatus, onStick, onOutsourced }: {
+function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, onOutsourced, onTransfer }: {
   detail: GodownDetail | null;
   loading: boolean;
+  transfers: GodownTransfer[] | null;
   onEdit: (b: GodownBarrel) => void;
   onStatus: (b: GodownBarrel, action: StatusAction) => void;
   onStick: (b: GodownBarrel) => void;
   onOutsourced: () => void;
+  onTransfer: (b: GodownBarrel) => void;
 }) {
   if (!detail) {
     return (
@@ -186,6 +190,9 @@ function DetailPanel({ detail, loading, onEdit, onStatus, onStick, onOutsourced 
           {barrel.status === 'settling' && (
             <Button size="sm" variant="primary" icon={<Check size={13} />} onClick={() => onStatus(barrel, 'ready')}>Mark ready</Button>
           )}
+          {barrel.status === 'ready' && barrel.levelL > 0 && (
+            <Button size="sm" variant="primary" icon={<ArrowRightLeft size={13} />} onClick={() => onTransfer(barrel)}>Transfer to store</Button>
+          )}
           {(barrel.status === 'settling' || barrel.status === 'ready') && (
             <Button size="sm" icon={<RotateCcw size={13} />} onClick={() => onStatus(barrel, 'reopen')}>Reopen</Button>
           )}
@@ -229,6 +236,30 @@ function DetailPanel({ detail, loading, onEdit, onStatus, onStick, onOutsourced 
                   {(r.note || r.by) && (
                     <div className="mt-1 text-[11px] text-subtle">{[r.note, r.by && `by ${r.by}`].filter(Boolean).join(' · ')}</div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5">
+          <SectionLabel right={<span className="font-normal normal-case tracking-normal">{transfers?.length ?? 0}</span>}>Moved to store</SectionLabel>
+          {transfers === null ? (
+            <p className="rounded-card border border-line px-3 py-3 text-xs text-muted">Loading transfers…</p>
+          ) : transfers.length === 0 ? (
+            <p className="rounded-card border border-dashed border-line px-3 py-3 text-xs text-subtle">
+              Nothing moved to the store from this barrel yet. Only a ready barrel can be transferred.
+            </p>
+          ) : (
+            <div className="divide-y divide-line/70 overflow-hidden rounded-card border border-line bg-surface">
+              {transfers.map((t) => (
+                <div key={t.id} className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-ink">{t.number}</span>
+                    <span className="num shrink-0 text-sm font-semibold text-success">{fmtMilli(t.litresL)} L</span>
+                  </div>
+                  <div className="truncate text-xs text-muted" title={t.itemName}>{t.itemName}</div>
+                  <div className="text-[11px] text-subtle">{fmtDateYear(t.date)}{t.note ? ` · ${t.note}` : ''}{t.by ? ` · ${t.by}` : ''}</div>
                 </div>
               ))}
             </div>
@@ -304,9 +335,10 @@ function OutsourcedList({ rows, onAdd }: { rows: OutsourcedOil[] | null; onAdd: 
 }
 
 /* ---------------- pane ---------------- */
-export function GodownPane() {
+export function GodownPane({ reloadKey = 0, onBarrels }: { reloadKey?: number; onBarrels?: (list: GodownBarrel[]) => void }) {
   const [barrels, setBarrels] = useState<GodownBarrel[] | null>(null);
   const [outsourced, setOutsourced] = useState<OutsourcedOil[] | null>(null);
+  const [transfers, setTransfers] = useState<GodownTransfer[] | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GodownDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -315,8 +347,12 @@ export function GodownPane() {
   const [statusTarget, setStatusTarget] = useState<{ barrel: GodownBarrel; action: StatusAction } | null>(null);
   const [sticking, setSticking] = useState<GodownBarrel | null>(null);
   const [outsourcing, setOutsourcing] = useState(false);
+  const [transferring, setTransferring] = useState<GodownBarrel | null>(null);
   const selRef = useRef<string | null>(null);
   const req = useRef(0);
+  // The Production page keeps the pressing form's barrel list in step with every change made here.
+  const onBarrelsRef = useRef(onBarrels);
+  onBarrelsRef.current = onBarrels;
 
   const loadDetail = useCallback(async (id: string) => {
     const mine = ++req.current;
@@ -330,16 +366,18 @@ export function GodownPane() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [list, out] = await Promise.all([api.listGodownBarrels(), api.listOutsourcedOil(20)]);
+    const [list, out, tr] = await Promise.all([api.listGodownBarrels(), api.listOutsourcedOil(20), api.listGodownTransfers(100)]);
     setBarrels(list);
     setOutsourced(out);
+    setTransfers(tr);
+    onBarrelsRef.current?.(list);
     const keep = selRef.current && list.some((b) => b.id === selRef.current) ? selRef.current : list[0]?.id ?? null;
     if (keep !== selRef.current) { selRef.current = keep; setSelId(keep); }
     if (keep) await loadDetail(keep);
     else { req.current += 1; setDetail(null); setDetailLoading(false); }
   }, [loadDetail]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh, reloadKey]);
   useRefreshOnFocus(() => { void refresh(); });
 
   const pick = useCallback((id: string) => {
@@ -354,6 +392,12 @@ export function GodownPane() {
     for (const b of barrels ?? []) map.set(b.oil, [...(map.get(b.oil) ?? []), b]);
     return OIL_ORDER.filter((oil) => map.has(oil)).map((oil) => ({ oil, label: map.get(oil)![0].oilName, barrels: map.get(oil)! }));
   }, [barrels]);
+
+  // The detail panel shows the last few transfers out of the selected barrel.
+  const barrelTransfers = useMemo(
+    () => (transfers === null || detail === null ? null : transfers.filter((t) => t.barrelId === detail.barrel.id).slice(0, 8)),
+    [transfers, detail],
+  );
 
   return (
     <>
@@ -385,10 +429,12 @@ export function GodownPane() {
           <DetailPanel
             detail={detail}
             loading={detailLoading || barrels === null}
+            transfers={barrelTransfers}
             onEdit={setEditing}
             onStatus={(barrel, action) => setStatusTarget({ barrel, action })}
             onStick={setSticking}
             onOutsourced={() => setOutsourcing(true)}
+            onTransfer={setTransferring}
           />
         )}
       </div>
@@ -398,6 +444,7 @@ export function GodownPane() {
       <StatusDialog target={statusTarget} onClose={() => setStatusTarget(null)} onSaved={() => void refresh()} />
       <StickReadingDialog barrel={sticking} onClose={() => setSticking(null)} onSaved={() => void refresh()} />
       <OutsourcedOilDialog open={outsourcing} barrels={barrels ?? []} onClose={() => setOutsourcing(false)} onSaved={() => void refresh()} />
+      <TransferToStoreDialog barrel={transferring} onClose={() => setTransferring(null)} onSaved={() => void refresh()} />
     </>
   );
 }

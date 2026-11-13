@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, Flame, TriangleAlert } from 'lucide-react';
-import { parseQty, pressingMetrics, type Barrel, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
-import { Badge, Button, Dialog, Field, Input, NumberInput, Select, cn, useToast } from '@gokul/ui';
+import {
+  parseQty, pressingMetrics, type GodownBarrel, type PressingBatch, type SeedProfile, type SeedType,
+} from '@gokul/data';
+import { Badge, Button, Dialog, Field, NumberInput, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { BarrelCard, fmtDate, fmtMilli, fmtNum, gradeTone, useKeys } from './common';
+import { fmtDate, fmtMilli, fmtNum, gradeTone, useKeys } from './common';
 
 const operators = ['Murugesan', 'Selvam', 'Kannan'];
 
 /* ---------------- new pressing batch ---------------- */
-export function PressingForm({ open, profiles, onClose, onSaved }: {
-  open: boolean; profiles: SeedProfile[]; onClose: () => void; onSaved: (b: PressingBatch) => void;
+export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
+  open: boolean; profiles: SeedProfile[]; barrels: GodownBarrel[]; onClose: () => void; onSaved: (b: PressingBatch) => void;
 }) {
   const toast = useToast();
   const [seed, setSeed] = useState<SeedType>('groundnut');
@@ -18,13 +20,18 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
   const [jag, setJag] = useState('');
   const [oil, setOil] = useState('');
   const [cake, setCake] = useState('');
+  const [machine, setMachine] = useState<'W' | 'R'>('W');
   const [chekku, setChekku] = useState('Chekku 1');
   const [operator, setOperator] = useState(operators[0]);
+  const [barrelId, setBarrelId] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) { setSeed('groundnut'); setSeedKg(''); setClean(''); setJag(''); setOil(''); setCake(''); setChekku('Chekku 1'); setOperator(operators[0]); setErr(''); }
+    if (open) {
+      setSeed('groundnut'); setSeedKg(''); setClean(''); setJag(''); setOil(''); setCake('');
+      setMachine('W'); setChekku('Chekku 1'); setOperator(operators[0]); setBarrelId(''); setErr('');
+    }
   }, [open]);
 
   const prof = profiles.find((p) => p.seed === seed);
@@ -35,11 +42,31 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
   const m = useMemo(() => pressingMetrics(input, prof), [input, prof]);
   const hasOutput = input.oilRawL > 0 && input.seedKg > 0;
 
+  // Only a barrel of the same oil that is still filling (or empty) can take this batch.
+  const fillable = useMemo(
+    () => barrels.filter((b) => b.active && b.oil === seed && (b.status === 'filling' || b.status === 'empty')),
+    [barrels, seed],
+  );
+  useEffect(() => {
+    if (!open) return;
+    setBarrelId((cur) => (fillable.some((b) => b.id === cur) ? cur : fillable[0]?.id ?? ''));
+  }, [open, fillable]);
+
+  const barrel = fillable.find((b) => b.id === barrelId) ?? null;
+  const freeL = barrel ? barrel.capacityL - barrel.levelL : 0;
+  const overFill = barrel !== null && input.oilRawL > freeL;
+
   const save = async () => {
-    setBusy(true);
+    if (!barrel) { setErr(`Choose the godown ${prof?.label ?? ''} barrel the oil goes into. Add one in the Godown tab if there is none.`); return; }
+    if (input.oilRawL > freeL) { setErr(`${barrel.label} has room for only ${fmtMilli(freeL)} L. Pick another barrel or record a stick reading first.`); return; }
+    setBusy(true); setErr('');
     try {
-      const b = await api.createPressingBatch({ ...input, chekku, operator });
-      toast.show({ tone: 'success', title: `Batch ${b.number} recorded`, detail: `${fmtMilli(b.oilRawL)} L raw ${b.oilName} is now settling.` });
+      const b = await api.createPressingBatch({ ...input, chekku, operator, machine, godownBarrelId: barrel.id });
+      toast.show({
+        tone: 'success',
+        title: `Batch ${b.number} recorded`,
+        detail: `${fmtMilli(b.oilRawL)} L raw ${b.oilName} into ${barrel.label}. It settles before the transfer to store.`,
+      });
       onSaved(b); onClose();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save the batch.'); } finally { setBusy(false); }
   };
@@ -51,7 +78,7 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
   return (
     <Dialog
       open={open} onOpenChange={(o) => !o && onClose()} size="lg" title="New pressing batch" description="Record what went into the chekku and what came out."
-      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy} onClick={() => void save()}>Save batch</Button></>}
+      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !barrel || overFill} onClick={() => void save()}>Save batch</Button></>}
     >
       <div className="grid grid-cols-[1fr_270px] gap-6">
         <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
@@ -79,9 +106,67 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
             )}
             <Field label="Raw oil out (L)"><NumberInput value={oil} onValueChange={(v) => { setOil(v); setErr(''); }} placeholder={prof ? sugg(input.seedKg > 0 ? m.expectedOilL : 100) : ''} /></Field>
             <Field label="Oil cake out (kg)"><NumberInput value={cake} onValueChange={setCake} placeholder="0" /></Field>
+            <div>
+              <span className="text-xs font-medium text-muted">Machine</span>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {(['W', 'R'] as const).map((k) => (
+                  <button
+                    key={k} type="button" onClick={() => setMachine(k)} aria-pressed={machine === k}
+                    className={cn('rounded-control border px-2.5 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-primary/50', machine === k ? 'border-primary bg-primary-soft' : 'border-line bg-surface hover:border-subtle')}
+                  >
+                    <div className="text-sm font-semibold text-ink">{k}</div>
+                    <div className="text-[11px] text-muted">{k === 'W' ? 'Wood-pressed' : 'Rotary'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
             <Select label="Chekku" value={chekku} onChange={(e) => setChekku(e.target.value)} options={['Chekku 1', 'Chekku 2', 'Chekku 3'].map((v) => ({ value: v, label: v }))} />
             <Select label="Operator" value={operator} onChange={(e) => setOperator(e.target.value)} options={operators.map((v) => ({ value: v, label: v }))} />
           </div>
+
+          <div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs font-medium text-muted">Godown barrel</span>
+              <span className="text-[11px] text-subtle">The oil stays in the godown; it reaches the shop only by Transfer to store.</span>
+            </div>
+            {fillable.length === 0 ? (
+              <p className="mt-1 rounded-control bg-warning-soft px-2.5 py-2 text-xs text-warning">
+                No filling or empty {prof?.label ?? ''} barrel in the godown. Add one in the Godown tab, or finish a settling barrel first.
+              </p>
+            ) : (
+              <div className="mt-1 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
+                {fillable.map((b) => {
+                  const free = b.capacityL - b.levelL;
+                  const tight = input.oilRawL > 0 && input.oilRawL > free;
+                  return (
+                    <button
+                      key={b.id} type="button" onClick={() => { setBarrelId(b.id); setErr(''); }} aria-pressed={barrelId === b.id}
+                      className={cn(
+                        'rounded-card border bg-surface px-3 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-primary/50',
+                        barrelId === b.id ? 'border-primary bg-primary-soft' : 'border-line hover:border-subtle',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-ink">{b.label}</span>
+                        <Badge tone={b.status === 'empty' ? 'neutral' : 'info'}>{b.status === 'empty' ? 'Empty' : 'Filling'}</Badge>
+                      </div>
+                      <div className="num mt-1 flex items-center justify-between gap-2 text-[11px] text-muted">
+                        <span>{fmtMilli(b.levelL)} / {fmtMilli(b.capacityL, 0)} L</span>
+                        <span className={cn(tight && 'font-semibold text-warning')}>{fmtMilli(free)} L free</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {overFill && barrel && (
+            <div className="flex items-start gap-2 rounded-control bg-warning-soft px-3 py-2 text-sm text-warning">
+              <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+              This batch has {fmtMilli(input.oilRawL)} L of oil but {barrel.label} has room for only {fmtMilli(freeL)} L. Pick another barrel.
+            </div>
+          )}
           {err && <div className="flex items-start gap-2 rounded-control bg-danger-soft px-3 py-2 text-sm text-danger"><TriangleAlert size={15} className="mt-0.5 shrink-0" />{err}</div>}
           <button type="submit" className="hidden" />
         </form>
@@ -102,6 +187,9 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
             <Row k="Oil expected">{input.seedKg > 0 ? `${fmtNum(m.expectedOilL)} L` : '--'}</Row>
             <Row k="Per 100 kg seed">{hasOutput ? `${fmtNum(m.litresPer100Kg)} L` : '--'}</Row>
             <Row k="Unaccounted loss">{hasOutput && input.cakeKg > 0 ? `${fmtNum(Math.max(0, m.lossKg))} kg (${fmtNum(Math.max(0, m.lossPct))}%)` : '--'}</Row>
+            <Row k="Machine">{machine === 'W' ? 'W · Wood-pressed' : 'R · Rotary'}</Row>
+            <Row k="Godown barrel">{barrel ? barrel.label : '--'}</Row>
+            <Row k="Room left">{barrel ? `${fmtMilli(freeL)} L` : '--'}</Row>
             <Row k="Ready to filter">{settleOn ? fmtDate(settleOn) : '--'}</Row>
           </dl>
           {hasOutput && m.grade !== 'good' && (
@@ -117,65 +205,4 @@ export function PressingForm({ open, profiles, onClose, onSaved }: {
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return <div className="flex items-center justify-between gap-2 py-1.5"><dt className="text-muted">{k}</dt><dd className="num text-right font-medium text-ink">{children}</dd></div>;
-}
-
-/* ---------------- move settled oil to a barrel ---------------- */
-export function MoveToBarrelDialog({ batch, barrels, onClose, onDone }: {
-  batch: PressingBatch | null; barrels: Barrel[]; onClose: () => void; onDone: (b: PressingBatch) => void;
-}) {
-  const toast = useToast();
-  const [clear, setClear] = useState('');
-  const [barrelId, setBarrelId] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-  const saveRef = useRef<() => void>(() => undefined);
-  useKeys((e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveRef.current(); } }, !!batch, true);
-
-  useEffect(() => {
-    if (!batch) return;
-    setClear(String(Math.round((batch.oilRawL * 0.965) / 100) / 10));
-    setErr('');
-    const fit = barrels.find((b) => b.seed === batch.seed && b.capacityL - b.levelL >= batch.oilRawL * 0.9) ?? barrels.find((b) => b.seed === null);
-    setBarrelId(fit?.id ?? null);
-  }, [batch, barrels]);
-  if (!batch) return null;
-
-  const clearMilli = parseQty(clear) ?? 0;
-  const ok = (b: Barrel) => (b.seed === null || b.seed === batch.seed) && b.capacityL - b.levelL >= clearMilli;
-  const barrel = barrels.find((b) => b.id === barrelId);
-  const sediment = batch.oilRawL - clearMilli;
-
-  const save = async () => {
-    if (!barrelId) { setErr('Choose a barrel.'); return; }
-    setBusy(true);
-    try {
-      const b = await api.moveBatchToBarrel({ batchId: batch.id, barrelId, clearOilL: clearMilli });
-      toast.show({ tone: 'success', title: 'Oil moved to barrel', detail: `${fmtMilli(clearMilli)} L ${b.oilName} into ${b.barrelLabel}. Loose stock updated.` });
-      onDone(b); onClose();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not move the oil.'); } finally { setBusy(false); }
-  };
-  saveRef.current = () => void save();
-
-  return (
-    <Dialog
-      open onOpenChange={(o) => !o && onClose()} size="md" title="Filter and move to barrel" description={`${batch.number}, ${batch.seedLabel}, ${fmtMilli(batch.oilRawL)} L raw oil`}
-      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !barrelId} onClick={() => void save()}>Move oil</Button></>}
-    >
-      <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Clear oil after filtering (L)"><NumberInput data-autofocus value={clear} onValueChange={(v) => { setClear(v); setErr(''); }} onFocus={(e) => e.currentTarget.select()} /></Field>
-          <Input label="Sediment (kasadu) left" readOnly value={`${fmtMilli(Math.max(0, sediment))} L (${fmtNum(batch.oilRawL ? (Math.max(0, sediment) / batch.oilRawL) * 100 : 0)}%)`} />
-        </div>
-        <div>
-          <span className="text-xs font-medium text-muted">Barrel (one oil per barrel)</span>
-          <div className="mt-1 grid grid-cols-4 gap-2">
-            {barrels.map((b) => <BarrelCard key={b.id} barrel={b} selected={barrelId === b.id} disabled={!ok(b)} onClick={() => setBarrelId(b.id)} />)}
-          </div>
-        </div>
-        {barrel && <div className="rounded-card border border-line bg-surface-2 px-3 py-2 text-sm text-muted"><span className="font-medium text-ink">{barrel.label}</span> will hold <span className="num font-semibold text-ink">{fmtMilli(barrel.levelL + clearMilli)} L</span> of 200 L after this.</div>}
-        {err && <div className="flex items-start gap-2 rounded-control bg-danger-soft px-3 py-2 text-sm text-danger"><TriangleAlert size={15} className="mt-0.5 shrink-0" />{err}</div>}
-        <button type="submit" className="hidden" />
-      </form>
-    </Dialog>
-  );
 }

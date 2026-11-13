@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, Factory, Flame, PackageOpen, Plus, SlidersHorizontal, Warehouse } from 'lucide-react';
-import { type Barrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
+import { Factory, Flame, PackageOpen, Plus, SlidersHorizontal, Warehouse } from 'lucide-react';
+import { type Barrel, type GodownBarrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
-import { PressingForm, MoveToBarrelDialog } from '../components/purchasing/PressingForm';
+import { PressingForm } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
 import { NormsEditor } from '../components/purchasing/NormsEditor';
 import { GodownPane } from '../components/purchasing/GodownPane';
@@ -43,7 +43,7 @@ function YieldTrend({ batches, seed, selectedId, norm }: { batches: PressingBatc
 }
 
 /* ---------------- batch detail ---------------- */
-function BatchDetail({ b, all, profiles, onMove }: { b: PressingBatch; all: PressingBatch[]; profiles: SeedProfile[]; onMove: () => void }) {
+function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all: PressingBatch[]; profiles: SeedProfile[]; onOpenGodown: () => void }) {
   const m = b.metrics;
   const phase = phaseInfo[b.phase];
   const base = m.netSeedKg + b.jaggeryKg / 1000;
@@ -60,7 +60,9 @@ function BatchDetail({ b, all, profiles, onMove }: { b: PressingBatch; all: Pres
           <div>
             <div className="flex items-center gap-2 text-md font-semibold text-ink">{b.number}<Badge tone={phase.tone}>{phase.label}</Badge></div>
             <div className="mt-0.5 text-sm text-muted">{b.seedLabel} to {b.oilName}</div>
-            <div className="text-xs text-subtle">{fmtDateYear(b.date)}, {fmtTime(b.date)} - {b.chekku} - {b.operator}</div>
+            <div className="text-xs text-subtle">
+              {fmtDateYear(b.date)}, {fmtTime(b.date)} - {(b.machine ?? 'W') === 'R' ? 'R · Rotary' : 'W · Wood-pressed'} - {b.chekku} - {b.operator}
+            </div>
           </div>
         </div>
         <div className="mt-3 flex items-end justify-between">
@@ -98,14 +100,17 @@ function BatchDetail({ b, all, profiles, onMove }: { b: PressingBatch; all: Pres
           <Line k="Oil cake out">{fmtMilli(b.cakeKg)} kg</Line>
           <Line k="Clear oil after settling" strong>{b.clearOilL !== null ? `${fmtMilli(b.clearOilL)} L` : 'Not filtered yet'}</Line>
           {b.sedimentL !== null && <Line k="Sediment (kasadu)">{fmtMilli(b.sedimentL)} L ({fmtNum((b.sedimentL / b.oilRawL) * 100)}%)</Line>}
-          <Line k="Barrel">{b.barrelLabel ?? '-'}</Line>
+          <Line k="Godown barrel" strong>{b.godownBarrelLabel ?? '—'}</Line>
+          {b.barrelLabel && <Line k="Old store barrel">{b.barrelLabel}</Line>}
         </dl>
 
-        {b.phase !== 'in-barrel' && (
+        {b.phase !== 'in-barrel' && b.phase !== 'in-godown' && (
           <div className="mt-4 rounded-card border border-line bg-surface-2 p-3">
-            <div className="text-sm font-medium text-ink">{b.phase === 'ready' ? 'Settled and ready to filter' : `Settling until ${fmtDate(b.settleReadyOn)}`}</div>
-            <p className="mt-0.5 text-xs text-muted">{b.phase === 'ready' ? 'Filter off the kasadu and move the clear oil into a barrel.' : 'You can move it earlier if the oil is already clear.'}</p>
-            <Button className="mt-2" size="sm" variant={b.phase === 'ready' ? 'primary' : 'secondary'} icon={<ArrowRightLeft size={14} />} onClick={onMove}>Move to barrel</Button>
+            <div className="text-sm font-medium text-ink">Oil not in a godown barrel</div>
+            <p className="mt-0.5 text-xs text-muted">
+              This batch was recorded before oil went straight into a godown barrel. New batches fill a barrel from the pressing form, and oil reaches the shop only by Transfer to store.
+            </p>
+            <Button className="mt-2" size="sm" icon={<Warehouse size={14} />} onClick={onOpenGodown}>Open Godown</Button>
           </div>
         )}
 
@@ -203,19 +208,22 @@ export function Production() {
   const [batches, setBatches] = useState<PressingBatch[]>([]);
   const [runs, setRuns] = useState<PackRun[]>([]);
   const [barrels, setBarrels] = useState<Barrel[]>([]);
+  const [godownBarrels, setGodownBarrels] = useState<GodownBarrel[]>([]);
+  const [godownKey, setGodownKey] = useState(0);
   const [profiles, setProfiles] = useState<SeedProfile[]>([]);
   const [selBatch, setSelBatch] = useState<string | null>(null);
   const [selRun, setSelRun] = useState<string | null>(null);
   const [seedFilter, setSeedFilter] = useState('all');
   const [phaseFilter, setPhaseFilter] = useState('all');
   const [newBatch, setNewBatch] = useState(false);
-  const [moving, setMoving] = useState<PressingBatch | null>(null);
   const [newPack, setNewPack] = useState(false);
   const [packBarrel, setPackBarrel] = useState<string | null>(null);
 
   const load = useCallback(async (opts?: { batch?: string; run?: string }) => {
-    const [b, r, br, p] = await Promise.all([api.listPressingBatches(), api.listPackRuns(), api.listBarrels(), api.listSeedProfiles()]);
-    setBatches(b); setRuns(r); setBarrels(br); setProfiles(p);
+    const [b, r, br, p, g] = await Promise.all([
+      api.listPressingBatches(), api.listPackRuns(), api.listBarrels(), api.listSeedProfiles(), api.listGodownBarrels(),
+    ]);
+    setBatches(b); setRuns(r); setBarrels(br); setProfiles(p); setGodownBarrels(g);
     setSelBatch((c) => opts?.batch ?? c ?? b[0]?.id ?? null);
     setSelRun((c) => opts?.run ?? c ?? r[0]?.id ?? null);
   }, []);
@@ -278,11 +286,11 @@ export function Production() {
               data={shown} columns={pressCols} getRowId={(r) => r.id} selectedId={selBatch} onSelect={(r) => setSelBatch(r.id)} rowHeight={44}
               empty={<EmptyState icon={<Flame size={22} />} title="No batches match" hint="Change the seed or stage filter, or record a new pressing batch." />}
             />
-            {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onMove={() => setMoving(batch)} />}
+            {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onOpenGodown={() => setTab('godown')} />}
           </div>
         </TabPanel>
         <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
-          <GodownPane />
+          <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} />
         </TabPanel>
         <TabPanel value="packing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <FilterBar trailing={<span>{runs.length} packing runs</span>}>
@@ -301,8 +309,11 @@ export function Production() {
         </TabPanel>
       </Tabs>
 
-      <PressingForm open={newBatch} profiles={profiles} onClose={() => setNewBatch(false)} onSaved={(b) => { setTab('pressing'); void load({ batch: b.id }); }} />
-      <MoveToBarrelDialog batch={moving} barrels={barrels} onClose={() => setMoving(null)} onDone={(b) => void load({ batch: b.id })} />
+      <PressingForm
+        open={newBatch} profiles={profiles} barrels={godownBarrels}
+        onClose={() => setNewBatch(false)}
+        onSaved={(b) => { setTab('pressing'); setGodownKey((k) => k + 1); void load({ batch: b.id }); }}
+      />
       <PackForm open={newPack} barrels={barrels} initialBarrelId={packBarrel} onClose={() => setNewPack(false)} onSaved={(r) => { setTab('packing'); void load({ run: r.id }); }} />
     </>
   );
