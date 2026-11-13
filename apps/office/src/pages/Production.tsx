@@ -11,28 +11,28 @@ import { PressingGrid } from '../components/purchasing/PressingGrid';
 import { JobWorkPane } from '../components/purchasing/JobWorkPane';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
-  BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, gradeTone, phaseInfo, SectionLabel, seedColor, useKeys,
+  BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, normPer100, phaseInfo, SectionLabel, seedColor, signedPct, useKeys, vsNormText, yieldTextCls, yieldTone,
 } from '../components/purchasing/common';
 
 /* ---------------- yield trend (bars per batch, norm line) ---------------- */
 function YieldTrend({ batches, seed, selectedId, norm }: { batches: PressingBatch[]; seed: SeedType; selectedId: string; norm: number }) {
   const list = batches.filter((b) => b.seed === seed).slice(0, 10).reverse();
   if (list.length < 2) return <div className="py-4 text-center text-xs text-subtle">Not enough batches yet.</div>;
-  const lo = Math.min(norm, ...list.map((b) => b.metrics.yieldPct)) - 2;
-  const hi = Math.max(norm, ...list.map((b) => b.metrics.yieldPct)) + 1;
+  const lo = Math.min(norm, ...list.map((b) => b.metrics.litresPer100Kg)) - 2;
+  const hi = Math.max(norm, ...list.map((b) => b.metrics.litresPer100Kg)) + 1;
   const h = 84;
   const y = (v: number) => h - ((v - lo) / (hi - lo)) * h;
   return (
     <div>
       <div className="relative" style={{ height: h }}>
         <div className="absolute inset-x-0 border-t border-dashed border-subtle" style={{ top: y(norm) }} />
-        <span className="absolute right-0 rounded bg-surface px-1 text-[10px] font-medium text-muted" style={{ top: y(norm) - 7 }}>Norm {fmtNum(norm)}%</span>
+        <span className="absolute right-0 rounded bg-surface px-1 text-[10px] font-medium text-muted" style={{ top: y(norm) - 7 }}>Norm {fmtNum(norm)}</span>
         <div className="flex h-full items-end gap-1.5 pr-14">
           {list.map((b) => (
-            <div key={b.id} className="group relative flex h-full flex-1 items-end" title={`${b.number}: ${fmtNum(b.metrics.yieldPct)}%`}>
+            <div key={b.id} className="group relative flex h-full flex-1 items-end" title={`${b.number}: ${fmtNum(b.metrics.litresPer100Kg)} L / 100 kg`}>
               <div
-                className={cn('w-full rounded-t-sm', b.id === selectedId ? 'ring-2 ring-primary/40' : '', b.metrics.grade === 'good' ? 'bg-success' : b.metrics.grade === 'low' ? 'bg-warning' : 'bg-danger')}
-                style={{ height: Math.max(4, h - y(b.metrics.yieldPct)) }}
+                className={cn('w-full rounded-t-sm', b.id === selectedId ? 'ring-2 ring-primary/40' : '', yieldTone(b.metrics.variancePct) === 'success' ? 'bg-success' : yieldTone(b.metrics.variancePct) === 'warning' ? 'bg-warning' : 'bg-danger')}
+                style={{ height: Math.max(4, h - y(b.metrics.litresPer100Kg)) }}
               />
             </div>
           ))}
@@ -48,11 +48,17 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
   const m = b.metrics;
   const phase = phaseInfo[b.phase];
   const base = m.netSeedKg + b.jaggeryKg / 1000;
+  const jagKg = b.jaggeryKg / 1000;
+  const lossKg = Math.max(0, m.lossKg);
+  const cakeKg = b.cakeKg / 1000;
+  // Oil cake is a by-product, never a loss. Loss (moisture, foots) is only red above a normal range (about 10% of the seed, verify with the owner).
+  const lossBad = m.lossPct > 10;
   const parts = [
-    { l: 'Oil', v: m.oilKg, cls: 'bg-primary' },
-    { l: 'Oil cake', v: b.cakeKg / 1000, cls: 'bg-warning' },
-    { l: 'Loss', v: Math.max(0, m.lossKg), cls: 'bg-danger' },
+    { l: 'Oil', v: m.oilKg, cls: 'bg-primary', main: `${fmtNum(b.oilRawL / 1000)} L`, sub: `(${fmtNum(m.oilKg)} kg)` },
+    { l: 'Oil cake', v: cakeKg, cls: 'bg-info', main: `${fmtNum(cakeKg)} kg`, sub: '' },
+    { l: 'Loss (moisture, foots)', v: lossKg, cls: lossBad ? 'bg-danger' : 'bg-line-strong', main: `${fmtNum(lossKg)} kg`, sub: `(${fmtNum(m.lossPct)}%)` },
   ];
+  const norm100 = normPer100(m);
   const prof = profiles.find((p) => p.seed === b.seed);
   return (
     <div className="flex h-full w-[360px] shrink-0 flex-col border-l border-line bg-surface">
@@ -66,31 +72,35 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
             </div>
           </div>
         </div>
-        <div className="mt-3 flex items-end justify-between">
-          <div>
-            <div className="text-xs text-muted">Yield (oil weight / clean seed)</div>
-            <div className="flex items-baseline gap-2">
-              <span className={cn('num text-3xl font-semibold', m.grade === 'good' ? 'text-success' : m.grade === 'low' ? 'text-warning' : 'text-danger')}>{fmtNum(m.yieldPct)}%</span>
-              <Badge tone={gradeTone[m.grade]}>{m.variancePct >= 0 ? '+' : ''}{fmtNum(m.variancePct)}% vs norm</Badge>
-            </div>
+        <div className="mt-3" title={`Oil weight is ${fmtNum(m.yieldPct)}% of the clean seed`}>
+          <div className="text-xs text-muted">Yield</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className={cn('num text-3xl font-semibold', yieldTextCls(m.variancePct))}>{fmtNum(m.litresPer100Kg)}</span>
+            <span className="text-sm font-medium text-muted">L / 100 kg</span>
           </div>
-          <div className="text-right text-xs text-muted"><div>Norm {fmtNum(m.normPct)}%</div><div className="num">{fmtNum(m.litresPer100Kg)} L per 100 kg</div></div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+            <span className="num">Norm {fmtNum(norm100)} L / 100 kg</span>
+            <Badge tone={yieldTone(m.variancePct)}>{vsNormText(m.variancePct)}</Badge>
+          </div>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        <SectionLabel>Where the seed went</SectionLabel>
+        <SectionLabel right={<span className="num font-normal normal-case tracking-normal">seed in {fmtNum(m.netSeedKg)} kg{jagKg > 0 ? `, vellam ${fmtNum(jagKg)} kg` : ''}</span>}>Where the seed went</SectionLabel>
         <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-3">
           {parts.map((p) => <div key={p.l} className={p.cls} style={{ width: `${(p.v / base) * 100}%` }} />)}
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2">
           {parts.map((p) => (
-            <div key={p.l}>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted"><span className={cn('h-2 w-2 rounded-full', p.cls)} />{p.l}</div>
-              <div className="num text-sm font-semibold text-ink">{fmtNum(p.v)} kg</div>
-              <div className="num text-[11px] text-subtle">{fmtNum((p.v / base) * 100)}%</div>
+            <div key={p.l} className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[11px] leading-tight text-muted"><span className={cn('h-2 w-2 shrink-0 rounded-full', p.cls)} />{p.l}</div>
+              <div className="num text-sm font-semibold text-ink">{p.main}</div>
+              {p.sub && <div className="num text-[11px] text-subtle">{p.sub}</div>}
             </div>
           ))}
         </div>
+        <p className="num mt-2 text-xs text-muted">
+          Seed {fmtNum(m.netSeedKg)} kg{jagKg > 0 ? ` + vellam ${fmtNum(jagKg)} kg` : ''} = oil {fmtNum(m.oilKg)} + cake {fmtNum(cakeKg)} + loss {fmtNum(lossKg)} kg
+        </p>
 
         <dl className="mt-4 divide-y divide-line/70 text-sm">
           <Line k="Seed taken">{fmtMilli(b.seedKg)} kg</Line>
@@ -117,7 +127,7 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
 
         <div className="mt-5">
           <SectionLabel right={<span className="font-normal normal-case tracking-normal">last 10 {b.seedLabel.split(' ')[0]} batches</span>}>Yield trend</SectionLabel>
-          <YieldTrend batches={all} seed={b.seed} selectedId={b.id} norm={prof ? (prof.density / prof.kgPerL) * 100 : m.normPct} />
+          <YieldTrend batches={all} seed={b.seed} selectedId={b.id} norm={prof ? 100 / prof.kgPerL : normPer100(m)} />
         </div>
       </div>
     </div>
@@ -138,14 +148,17 @@ const pressCols: ColumnDef<PressingBatch>[] = [
   },
   { id: 'in', header: 'Seed in', accessorFn: (r) => r.seedKg, meta: { w: '76px', align: 'right', num: true }, cell: (c) => `${fmtMilli(c.row.original.seedKg, 0)} kg` },
   { id: 'oil', header: 'Raw oil', accessorFn: (r) => r.oilRawL, meta: { w: '76px', align: 'right', num: true }, cell: (c) => `${fmtMilli(c.row.original.oilRawL)} L` },
-  { id: 'yield', header: 'Yield', accessorFn: (r) => r.metrics.yieldPct, meta: { w: '64px', align: 'right', num: true }, cell: (c) => `${fmtNum(c.row.original.metrics.yieldPct)}%` },
   {
-    id: 'vs', header: 'vs norm', accessorFn: (r) => r.metrics.variancePct, meta: { w: '80px', align: 'right' },
-    cell: (c) => { const m = c.row.original.metrics; return <Badge tone={gradeTone[m.grade]}>{m.variancePct >= 0 ? '+' : ''}{fmtNum(m.variancePct)}%</Badge>; },
+    id: 'yield', header: 'L / 100 kg', accessorFn: (r) => r.metrics.litresPer100Kg, meta: { w: '88px', align: 'right', num: true },
+    cell: (c) => <span title={`Oil weight ${fmtNum(c.row.original.metrics.yieldPct)}% of the seed`}>{fmtNum(c.row.original.metrics.litresPer100Kg)}</span>,
   },
-  { id: 'op', header: 'Operator', accessorFn: (r) => r.operator, meta: { w: '110px' }, cell: (c) => <span className="truncate text-ink">{c.row.original.operator || '-'}</span> },
   {
-    id: 'barrel', header: 'Godown barrel', accessorFn: (r) => r.godownBarrelLabel ?? '', meta: { w: '120px' },
+    id: 'vs', header: 'vs norm', accessorFn: (r) => r.metrics.variancePct, meta: { w: '84px', align: 'right' },
+    cell: (c) => { const m = c.row.original.metrics; return <Badge tone={yieldTone(m.variancePct)}>{signedPct(m.variancePct)}</Badge>; },
+  },
+  { id: 'op', header: 'Operator', accessorFn: (r) => r.operator, meta: { w: '100px' }, cell: (c) => <span className="truncate text-ink">{c.row.original.operator || '-'}</span> },
+  {
+    id: 'barrel', header: 'Godown barrel', accessorFn: (r) => r.godownBarrelLabel ?? '', meta: { w: '112px' },
     cell: (c) => <span className="truncate text-ink">{c.row.original.godownBarrelLabel ?? <span className="text-subtle">not in a barrel</span>}</span>,
   },
 ];

@@ -96,7 +96,7 @@ export function MillDailyPaper({ data, shop, info }: { data: MillDaily; shop: st
         </table>
         {rows.length > 0 && (
           <div className="mt-1 text-[10px] text-neutral-600">
-            Cleaning waste {fmtNum(data.totals.cleaningKg)} kg. Oil loss {fmtNum(data.totals.lossKg)} kg ({data.totals.lossPct.toFixed(2)}% of clean seed). Seed per litre {data.totals.kgSeedPerL.toFixed(2)} kg/L.
+            Cleaning waste {fmtNum(data.totals.cleaningKg)} kg. Loss (moisture, foots) {fmtNum(data.totals.lossKg)} kg ({data.totals.lossPct.toFixed(1)}% of clean seed). {pressPer100 === null ? '' : `Yield ${pressPer100.toFixed(1)} L / 100 kg.`}
           </div>
         )}
 

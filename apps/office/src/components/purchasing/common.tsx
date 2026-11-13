@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Droplets } from 'lucide-react';
-import type { Barrel, BatchPhase, PayStatus, SeedType, YieldGrade } from '@gokul/data';
+import type { Barrel, BatchPhase, PayStatus, PressingMetrics, SeedType, YieldGrade } from '@gokul/data';
 import { Badge, cn, type Tone } from '@gokul/ui';
 
 const dateFmt = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' });
@@ -30,6 +30,17 @@ export const payTone: Record<PayStatus, { tone: Tone; label: string }> = {
 export function PayBadge({ status }: { status: PayStatus }) {
   return <Badge tone={payTone[status].tone}>{payTone[status].label}</Badge>;
 }
+
+/**
+ * One yield unit everywhere: litres of oil from 100 kg of seed (one decimal). "vs norm" is the relative difference to the norm,
+ * green within 2% of it (or above), amber from 2% to 5% below, red below 5% under.
+ */
+export const yieldTone = (variancePct: number): Tone => (variancePct >= -2 ? 'success' : variancePct >= -5 ? 'warning' : 'danger');
+export const yieldTextCls = (variancePct: number, has = true) => (!has ? 'text-subtle' : variancePct >= -2 ? 'text-success' : variancePct >= -5 ? 'text-warning' : 'text-danger');
+/** The norm in L / 100 kg for a batch's seed */
+export const normPer100 = (m: PressingMetrics) => (m.netSeedKg > 0 ? (m.expectedOilL / m.netSeedKg) * 100 : 0);
+export const signedPct = (v: number) => `${v < 0 ? '\u2212' : '+'}${Math.abs(v).toFixed(1)}%`;
+export const vsNormText = (v: number) => `${signedPct(v)} ${v < 0 ? 'below' : 'above'} norm`;
 
 export const gradeTone: Record<YieldGrade, Tone> = { good: 'success', low: 'warning', poor: 'danger' };
 

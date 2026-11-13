@@ -59,6 +59,7 @@ export function MillDailyPage() {
   const rows = data ? millPressingRows(data) : [];
   const press = sumPressing(rows);
   const pressPer100 = press.seedKg > press.cleaningKg ? (press.oilL * 100) / (press.seedKg - press.cleaningKg) : null;
+  const l100 = data && data.totals.seedInKg > data.totals.cleaningKg ? (data.totals.oilL * 100) / (data.totals.seedInKg - data.totals.cleaningKg) : null;
   const oils = data ? activeOils(data) : [];
   const barrels = data?.barrels ?? [];
   const bt = sumBarrels(barrels);
@@ -105,8 +106,8 @@ export function MillDailyPage() {
           <StatTile label="Seed in" value={`${fmtNum(data.totals.seedInKg)} kg`} hint="clean seed to press" />
           <StatTile label="Oil out" value={`${fmtNum(data.totals.oilL)} L`} hint="from the press" />
           <StatTile label="Cake out" value={`${fmtNum(data.totals.cakeKg)} kg`} hint="punnakku made" />
-          <StatTile label="Seed per litre" value={data.totals.kgSeedPerL ? `${data.totals.kgSeedPerL.toFixed(2)} kg` : '-'} hint="lower is better" />
-          <StatTile label="Oil loss" value={data.totals.batches ? `${data.totals.lossPct.toFixed(2)}%` : '-'} hint={data.totals.batches ? `${fmtNum(data.totals.lossKg)} kg` : 'no pressings'} />
+          <StatTile label="Litres from 100 kg" value={l100 === null ? '-' : l100.toFixed(1)} hint="oil per 100 kg of clean seed" />
+          <StatTile label="Loss (moisture, foots)" value={data.totals.batches ? `${data.totals.lossPct.toFixed(1)}%` : '-'} hint={data.totals.batches ? `${fmtNum(data.totals.lossKg)} kg of seed` : 'no pressings'} />
         </div>
       )}
 
@@ -197,8 +198,8 @@ export function MillDailyPage() {
               </table>
               {rows.length > 0 && (
                 <div className="flex items-center justify-between border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted">
-                  <span>Cleaning waste {fmtNum(data.totals.cleaningKg)} kg. Oil loss {fmtNum(data.totals.lossKg)} kg of clean seed ({data.totals.lossPct.toFixed(2)}%).</span>
-                  <span className="font-semibold text-ink">{data.totals.kgSeedPerL ? `${data.totals.kgSeedPerL.toFixed(2)} kg seed per litre` : ''}</span>
+                  <span>Cleaning waste {fmtNum(data.totals.cleaningKg)} kg. Loss (moisture, foots) {fmtNum(data.totals.lossKg)} kg of clean seed ({data.totals.lossPct.toFixed(1)}%).</span>
+                  <span className="font-semibold text-ink">{l100 === null ? '' : `${l100.toFixed(1)} L / 100 kg`}</span>
                 </div>
               )}
             </Card>

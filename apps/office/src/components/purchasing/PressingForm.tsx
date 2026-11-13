@@ -5,7 +5,7 @@ import {
 } from '@gokul/data';
 import { Badge, Button, Dialog, Field, NumberInput, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { fmtDate, fmtMilli, fmtNum, gradeTone, useKeys } from './common';
+import { fmtDate, fmtMilli, fmtNum, normPer100, useKeys, vsNormText, yieldTextCls, yieldTone } from './common';
 
 const operators = ['Murugesan', 'Selvam', 'Kannan'];
 
@@ -173,19 +173,18 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
 
         <aside className="self-start rounded-card border border-line bg-surface-2 p-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted"><Flame size={13} />Live check</div>
-          <div className="mt-3 text-xs text-muted">Yield (oil weight / clean seed)</div>
-          <div className="flex items-baseline gap-2">
-            <span className={cn('num text-3xl font-semibold', !hasOutput ? 'text-subtle' : m.grade === 'good' ? 'text-success' : m.grade === 'low' ? 'text-warning' : 'text-danger')}>
-              {hasOutput ? `${fmtNum(m.yieldPct)}%` : '--'}
+          <div className="mt-3 text-xs text-muted">Yield (litres of oil from 100 kg of seed)</div>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className={cn('num text-3xl font-semibold', yieldTextCls(m.variancePct, hasOutput))}>
+              {hasOutput ? fmtNum(m.litresPer100Kg) : '--'}
             </span>
-            {hasOutput && <Badge tone={gradeTone[m.grade]}>{m.variancePct >= 0 ? '+' : ''}{fmtNum(m.variancePct)}% vs norm</Badge>}
+            <span className="text-sm text-muted">L / 100 kg</span>
+            {hasOutput && <Badge tone={yieldTone(m.variancePct)}>{vsNormText(m.variancePct)}</Badge>}
           </div>
           <dl className="mt-3 divide-y divide-line/70 text-sm">
-            <Row k="Norm yield">{fmtNum(m.normPct)}%</Row>
-            <Row k="Norm">{prof?.kgPerL} kg seed per L</Row>
+            <Row k="Norm">{fmtNum(normPer100(m))} L / 100 kg ({prof?.kgPerL} kg seed per L)</Row>
             <Row k="Clean seed pressed">{fmtNum(m.netSeedKg)} kg</Row>
             <Row k="Oil expected">{input.seedKg > 0 ? `${fmtNum(m.expectedOilL)} L` : '--'}</Row>
-            <Row k="Per 100 kg seed">{hasOutput ? `${fmtNum(m.litresPer100Kg)} L` : '--'}</Row>
             <Row k="Unaccounted loss">{hasOutput && input.cakeKg > 0 ? `${fmtNum(Math.max(0, m.lossKg))} kg (${fmtNum(Math.max(0, m.lossPct))}%)` : '--'}</Row>
             <Row k="Machine">{machine === 'W' ? 'W · Wood-pressed' : 'R · Rotary'}</Row>
             <Row k="Godown barrel">{barrel ? barrel.label : '--'}</Row>

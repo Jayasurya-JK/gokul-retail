@@ -42,11 +42,11 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
   const history = useMemo(() => Object.fromEntries(profiles.map((p) => {
     const list = recentBatches(batches, p.seed, recentN);
     const avg = recentAverage(batches, p.seed, recentN);
-    const yields = list.map((b) => b.metrics.yieldPct);
+    const yields = list.map((b) => b.metrics.litresPer100Kg);
     const h: SeedHistory = {
       count: list.length,
       avgKgPerL: avg?.kgSeedPerL ?? 0,
-      avgPct: avg?.yieldPct ?? 0,
+      avgPct: avg && avg.kgSeedPerL > 0 ? 100 / avg.kgSeedPerL : 0,
       min: yields.length > 0 ? Math.min(...yields) : 0,
       max: yields.length > 0 ? Math.max(...yields) : 0,
       spark: [...yields].reverse(),
@@ -99,11 +99,11 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Seed per litre of oil (kg)</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Oil weight (kg per L)</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Settling (days)</div>
-            <div className="text-right text-xs font-semibold uppercase tracking-wide text-muted">Norm yield</div>
+            <div className="text-right text-xs font-semibold uppercase tracking-wide text-muted">Norm (L / 100 kg)</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Your recent batches</div>
             {profiles.map((p) => {
               const r = rows[p.seed] ?? rowOf(p);
-              const pct = Number(r.kgPerL) > 0 ? (Number(r.density) / Number(r.kgPerL)) * 100 : 0;
+              const pct = Number(r.kgPerL) > 0 ? 100 / Number(r.kgPerL) : 0;
               const h = history[p.seed];
               return (
                 <div key={p.seed} className="contents">
@@ -111,7 +111,7 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
                   <NumberInput value={r.kgPerL} decimals={2} onValueChange={(v) => set(p.seed, 'kgPerL', v)} aria-label={`${p.label} seed per litre`} />
                   <NumberInput value={r.density} decimals={3} onValueChange={(v) => set(p.seed, 'density', v)} aria-label={`${p.label} oil weight`} />
                   <NumberInput value={r.settleDays} decimals={0} onValueChange={(v) => set(p.seed, 'settleDays', v)} aria-label={`${p.label} settling days`} />
-                  <div className="text-right"><Badge tone="info">{pct.toFixed(1)}%</Badge></div>
+                  <div className="text-right"><Badge tone="info">{pct.toFixed(1)}</Badge></div>
                   <div className="rounded-control border border-line bg-surface-2 px-2.5 py-1.5">
                     {!h || h.count < 3 ? (
                       <div className="flex min-h-[38px] items-center text-xs text-subtle">Not enough batches yet</div>
@@ -119,12 +119,12 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
                       <>
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0 text-xs leading-tight text-muted">
-                            Your average: <span className="num font-semibold text-ink">{fmtNum(h.avgPct)}%</span> over the last {h.count} batches
+                            Your average: <span className="num font-semibold text-ink">{fmtNum(h.avgPct)} L / 100 kg</span> over the last {h.count} batches
                           </div>
                           <Button size="sm" variant="ghost" className="shrink-0" onClick={() => applyAverage(p.seed, h.avgKgPerL)}>Use average</Button>
                         </div>
                         <div className="mt-0.5 flex items-center justify-between gap-2">
-                          <span className="num text-[11px] text-subtle">min {fmtNum(h.min)}% · max {fmtNum(h.max)}% · {h.avgKgPerL.toFixed(2)} kg seed/L</span>
+                          <span className="num text-[11px] text-subtle">min {fmtNum(h.min)} · max {fmtNum(h.max)} L / 100 kg · {h.avgKgPerL.toFixed(2)} kg seed/L</span>
                           <Sparkline values={h.spark} />
                         </div>
                       </>
@@ -135,7 +135,7 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
             })}
           </div>
           <p className="mt-4 text-xs text-subtle">
-            Norm yield is oil weight divided by seed weight. A batch more than 3% under its norm is shown as low yield, more than 6% as poor.
+            The norm is the litres of oil expected from 100 kg of seed (100 divided by the seed per litre). A batch is shown amber when it is 2 to 5% below its norm and red when it is more than 5% below.
             Each batch keeps the norm that was in force when it was pressed, so past yields never change when you edit these.
           </p>
         </Card>

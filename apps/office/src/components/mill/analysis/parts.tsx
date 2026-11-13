@@ -9,7 +9,7 @@ export const signedPct = (v: number) => `${v > 0 ? '+' : v < 0 ? '-' : ''}${Math
 export const rupees = (paise: number) => formatRupees(paise, { decimals: false });
 const shortDay = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
-const varianceTone = (v: number, threshold: number) => (v < -threshold ? 'text-danger' : v < 0 ? 'text-warning' : 'text-success');
+const varianceTone = (v: number, _threshold: number) => (v >= -2 ? 'text-success' : v >= -5 ? 'text-warning' : 'text-danger');
 const th = 'h-8 px-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted whitespace-nowrap';
 const td = 'px-2 py-1 text-right text-sm text-ink num whitespace-nowrap';
 

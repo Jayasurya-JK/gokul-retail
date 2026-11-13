@@ -3,7 +3,7 @@ import { Check, Plus, Trash2 } from 'lucide-react';
 import { parseQty, pressingMetrics, type GodownBarrel, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import { Badge, Button, Kbd, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { fmtNum, gradeTone } from './common';
+import { fmtNum, normPer100, signedPct, yieldTone } from './common';
 
 interface Row { operator: string; seed: SeedType; machine: 'W' | 'R'; kg: string; oil: string; cake: string; jag: string; barrel: string }
 
@@ -120,15 +120,15 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
         <table className="w-full table-fixed">
           <thead>
             <tr>
-              <th className={cn(th, 'w-[124px]')}>Operator</th>
-              <th className={cn(th, 'w-[104px]')}>Seed</th>
-              <th className={cn(th, 'w-[104px]')}>Machine</th>
+              <th className={cn(th, 'w-[132px]')}>Operator</th>
+              <th className={cn(th, 'w-[120px]')}>Seed</th>
+              <th className={cn(th, 'w-[112px]')}>Machine</th>
               <th className={cn(th, 'w-[84px] text-right')}>Seed kg</th>
               <th className={cn(th, 'w-[84px] text-right')}>Oil L</th>
               <th className={cn(th, 'w-[84px] text-right')}>Cake kg</th>
               <th className={cn(th, 'w-[84px] text-right')}>Vellam kg</th>
-              <th className={cn(th, 'w-[168px]')}>Godown barrel</th>
-              <th className={th}>Yield vs norm</th>
+              <th className={cn(th, 'w-[184px]')}>Godown barrel</th>
+              <th className={th}>Yield (L / 100 kg) vs norm</th>
               <th className="w-9" />
             </tr>
           </thead>
@@ -166,14 +166,15 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
                   <td className="p-0.5">
                     <select data-cell={`${i}-7`} className={cell} value={r.barrel} onChange={(e) => set(i, { barrel: e.target.value })} onKeyDown={(e) => onKey(e, i, 7)} aria-label={`Row ${i + 1} godown barrel`}>
                       {opts.length === 0 && <option value="">No barrel filling</option>}
-                      {opts.map((b) => <option key={b.id} value={b.id}>{b.label} ({fmtNum((b.capacityL - b.levelL) / 1000, 0)} L free)</option>)}
+                      {opts.map((b) => <option key={b.id} value={b.id}>{b.label} · {fmtNum((b.capacityL - b.levelL) / 1000, 0)} L free</option>)}
                     </select>
                   </td>
                   <td className="px-2 py-0.5 text-sm">
                     {m ? (
                       <span className="flex items-center gap-2">
-                        <span className="num text-ink">{fmtNum(m.litresPer100Kg)} L/100 kg</span>
-                        <Badge tone={gradeTone[m.grade]}>{m.variancePct >= 0 ? '+' : ''}{fmtNum(m.variancePct)}%</Badge>
+                        <span className="num text-ink">{fmtNum(m.litresPer100Kg)} L / 100 kg</span>
+                        <Badge tone={yieldTone(m.variancePct)} >{signedPct(m.variancePct)}</Badge>
+                        <span className="num hidden text-xs text-subtle 2xl:inline">norm {fmtNum(normPer100(m))}</span>
                       </span>
                     ) : <span className="text-subtle">-</span>}
                   </td>
