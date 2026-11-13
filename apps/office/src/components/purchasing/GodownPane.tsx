@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowRightLeft, Flame, Scale, Truck, Warehouse } from 'lucide-react';
-import type { GodownBarrel, GodownDetail, GodownMove, GodownStatus, SeedType } from '@gokul/data';
-import { Badge, EmptyState, cn, useRefreshOnFocus, type Tone } from '@gokul/ui';
+import { ArrowRightLeft, Check, Flame, Pencil, Plus, RotateCcw, Scale, Timer, Truck, Warehouse } from 'lucide-react';
+import type { GodownBarrel, GodownDetail, GodownMove, GodownStatus, OutsourcedOil, SeedType } from '@gokul/data';
+import { Badge, Button, EmptyState, Money, cn, useRefreshOnFocus, type Tone } from '@gokul/ui';
 import { api } from '../../store';
 import { fmtDate, fmtDateYear, fmtMilli, fmtNum, seedColor, SectionLabel, KV } from './common';
+import { AddBarrelsDialog, EditBarrelDialog, OutsourcedOilDialog, StatusDialog, StickReadingDialog, type StatusAction } from './GodownDialogs';
 
 // Production stock lives in the godown in litres: several pressing batches can fill one 200 L barrel, an
 // end-of-day measuring-stick reading is the truth, and a full barrel settles before its oil moves to the store.
-// This pane is read-only for now; add / settle / reading / transfer come in the next tasks.
+// Add / edit barrels, settling, stick readings and bought (outsourced) oil are all done from here.
 
 const DAY = 86400000;
 const OIL_ORDER: SeedType[] = ['groundnut', 'sesame', 'copra'];
@@ -133,7 +134,14 @@ function OilGroup({ oil, label, barrels, selId, onPick }: {
 }
 
 /* ---------------- detail side panel ---------------- */
-function DetailPanel({ detail, loading }: { detail: GodownDetail | null; loading: boolean }) {
+function DetailPanel({ detail, loading, onEdit, onStatus, onStick, onOutsourced }: {
+  detail: GodownDetail | null;
+  loading: boolean;
+  onEdit: (b: GodownBarrel) => void;
+  onStatus: (b: GodownBarrel, action: StatusAction) => void;
+  onStick: (b: GodownBarrel) => void;
+  onOutsourced: () => void;
+}) {
   if (!detail) {
     return (
       <aside className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface">
@@ -169,6 +177,20 @@ function DetailPanel({ detail, loading }: { detail: GodownDetail | null; loading
         </div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-3">
           <div className={cn('h-full rounded-full', fillCls[barrel.status])} style={{ width: `${pct}%` }} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Button size="sm" icon={<Pencil size={13} />} onClick={() => onEdit(barrel)}>Edit</Button>
+          {barrel.status === 'filling' && (
+            <Button size="sm" variant="primary" icon={<Timer size={13} />} onClick={() => onStatus(barrel, 'settle')}>Start settling</Button>
+          )}
+          {barrel.status === 'settling' && (
+            <Button size="sm" variant="primary" icon={<Check size={13} />} onClick={() => onStatus(barrel, 'ready')}>Mark ready</Button>
+          )}
+          {(barrel.status === 'settling' || barrel.status === 'ready') && (
+            <Button size="sm" icon={<RotateCcw size={13} />} onClick={() => onStatus(barrel, 'reopen')}>Reopen</Button>
+          )}
+          <Button size="sm" icon={<Scale size={13} />} onClick={() => onStick(barrel)}>Stick reading</Button>
+          <Button size="sm" icon={<Truck size={13} />} onClick={onOutsourced}>Bought oil</Button>
         </div>
       </div>
 
@@ -247,12 +269,52 @@ function DetailPanel({ detail, loading }: { detail: GodownDetail | null; loading
   );
 }
 
+/* ---------------- bought (outsourced) oil ---------------- */
+function OutsourcedList({ rows, onAdd }: { rows: OutsourcedOil[] | null; onAdd: () => void }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-ink"><Truck size={14} className="text-muted" />Bought oil (outsourced)</div>
+        <Button size="sm" variant="ghost" icon={<Plus size={13} />} onClick={onAdd}>Record purchase</Button>
+      </div>
+      {rows === null ? (
+        <div className="rounded-card border border-line bg-surface px-3 py-2 text-xs text-muted">Loading bought oil…</div>
+      ) : rows.length === 0 ? (
+        <p className="rounded-card border border-dashed border-line px-3 py-3 text-xs text-subtle">No oil bought from outside mills yet.</p>
+      ) : (
+        <div className="divide-y divide-line/70 overflow-hidden rounded-card border border-line bg-surface">
+          {rows.map((o) => (
+            <div key={o.id} className="flex items-center gap-3 px-3 py-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-info-soft text-info"><Truck size={13} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-ink">{o.supplierName}</div>
+                <div className="truncate text-[11px] text-muted">{o.number} · {fmtDateYear(o.date)} · {o.oilName} → {o.barrelLabel}</div>
+                {o.note && <div className="truncate text-[11px] text-subtle" title={o.note}>{o.note}</div>}
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="num text-sm font-semibold text-ink">{fmtMilli(o.litresL)} L</div>
+                <div className="num text-[11px] text-muted"><Money paise={o.cost} /></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ---------------- pane ---------------- */
 export function GodownPane() {
   const [barrels, setBarrels] = useState<GodownBarrel[] | null>(null);
+  const [outsourced, setOutsourced] = useState<OutsourcedOil[] | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GodownDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<GodownBarrel | null>(null);
+  const [statusTarget, setStatusTarget] = useState<{ barrel: GodownBarrel; action: StatusAction } | null>(null);
+  const [sticking, setSticking] = useState<GodownBarrel | null>(null);
+  const [outsourcing, setOutsourcing] = useState(false);
   const selRef = useRef<string | null>(null);
   const req = useRef(0);
 
@@ -268,8 +330,9 @@ export function GodownPane() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const list = await api.listGodownBarrels();
+    const [list, out] = await Promise.all([api.listGodownBarrels(), api.listOutsourcedOil(20)]);
     setBarrels(list);
+    setOutsourced(out);
     const keep = selRef.current && list.some((b) => b.id === selRef.current) ? selRef.current : list[0]?.id ?? null;
     if (keep !== selRef.current) { selRef.current = keep; setSelId(keep); }
     if (keep) await loadDetail(keep);
@@ -293,23 +356,48 @@ export function GodownPane() {
   }, [barrels]);
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
-        {barrels === null ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted">Loading godown barrels…</div>
-        ) : barrels.length === 0 ? (
-          <div className="flex h-full items-center justify-center p-6">
-            <EmptyState icon={<Warehouse size={22} />} title="No godown barrels yet" hint="Barrels for groundnut, sesame and coconut oil will appear here once they are added." />
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {groups.map((g) => (
-              <OilGroup key={g.oil} oil={g.oil} label={g.label} barrels={g.barrels} selId={selId} onPick={pick} />
-            ))}
-          </div>
+    <>
+      <div className="flex min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
+          {barrels === null ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted">Loading godown barrels…</div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-ink">Godown barrels</div>
+                  <div className="text-xs text-muted">Pressed and bought oil, measured in litres.</div>
+                </div>
+                <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => setAdding(true)}>Add barrels</Button>
+              </div>
+              {barrels.length === 0 ? (
+                <EmptyState icon={<Warehouse size={22} />} title="No godown barrels yet" hint="Press Add barrels to start, then each barrel takes the oil from pressing or an outside mill." />
+              ) : (
+                groups.map((g) => (
+                  <OilGroup key={g.oil} oil={g.oil} label={g.label} barrels={g.barrels} selId={selId} onPick={pick} />
+                ))
+              )}
+              <OutsourcedList rows={outsourced} onAdd={() => setOutsourcing(true)} />
+            </div>
+          )}
+        </div>
+        {barrels !== null && barrels.length === 0 ? null : (
+          <DetailPanel
+            detail={detail}
+            loading={detailLoading || barrels === null}
+            onEdit={setEditing}
+            onStatus={(barrel, action) => setStatusTarget({ barrel, action })}
+            onStick={setSticking}
+            onOutsourced={() => setOutsourcing(true)}
+          />
         )}
       </div>
-      {barrels !== null && barrels.length === 0 ? null : <DetailPanel detail={detail} loading={detailLoading || barrels === null} />}
-    </div>
+
+      <AddBarrelsDialog open={adding} existing={barrels ?? []} onClose={() => setAdding(false)} onSaved={() => void refresh()} />
+      <EditBarrelDialog barrel={editing} onClose={() => setEditing(null)} onSaved={() => void refresh()} />
+      <StatusDialog target={statusTarget} onClose={() => setStatusTarget(null)} onSaved={() => void refresh()} />
+      <StickReadingDialog barrel={sticking} onClose={() => setSticking(null)} onSaved={() => void refresh()} />
+      <OutsourcedOilDialog open={outsourcing} barrels={barrels ?? []} onClose={() => setOutsourcing(false)} onSaved={() => void refresh()} />
+    </>
   );
 }
