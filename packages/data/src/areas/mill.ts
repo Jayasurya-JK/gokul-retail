@@ -39,8 +39,10 @@ export interface MillOpRow {
   cakeKg: number;
   /** vellam (palm jaggery) used with sesame, milli-kg */
   jaggeryKg: number;
-  /** Pressing batch made when the sheet was closed */
+  /** Pressing batch made when the sheet was closed, or when the row was moved to Production */
   batchNumber?: string;
+  /** The row was moved into Production as a real batch (draft sheets only) */
+  imported?: boolean;
 }
 
 export interface MillCustRow {
@@ -121,6 +123,20 @@ export interface MillSheetInput {
   physical: Partial<Record<MillStockKey, number>>;
 }
 
+/** The day sheet: the automatic daily report plus supervisor, note and the optional evening count. Same shape as an old sheet, with no entry rows. */
+export interface MillDay extends MillSheet {
+  /** Rows of an old manual draft for this day that have not been moved to Production yet */
+  legacyOpenRows: number;
+}
+
+export interface MillDayInput {
+  day: string;
+  supervisor: string;
+  note: string;
+  /** Counted stock by key (seeds, punnaku, vellam, malli); a missing key means not counted */
+  physical: Partial<Record<MillStockKey, number>>;
+}
+
 export interface MillSheetSummary {
   day: string;
   status: 'draft' | 'closed';
@@ -137,6 +153,12 @@ export interface MillApi {
   /** Posts the sheet and makes it read-only. Needs a manager PIN because it adjusts stock. */
   closeMillSheet(input: { day: string; managerPin?: string }): Promise<MillSheet>;
   listMillSheets(limit?: number): Promise<MillSheetSummary[]>;
+  /** The day sheet's count lines (expected stock, counted, difference) */
+  getMillDay(day: string): Promise<MillDay>;
+  /** Saves supervisor, note and counts. Nothing touches stock. A closed day cannot be saved. */
+  saveMillDay(input: MillDayInput): Promise<MillDay>;
+  /** Posts the counted differences as stock adjustments and freezes the day. Needs a manager PIN. */
+  closeMillDay(input: { day: string; managerPin?: string }): Promise<MillDay>;
 }
 
 /** The machine-less key of a seed and machine ("coco" has no W/R split). */
@@ -176,6 +198,7 @@ export function createMillMock(store: MockStore): MillApi {
   const closed = new Map<string, MillSheet>();
   const drafts = new Map<string, MillSheetInput>();
   let billSeq = 48700;
+  const dayMeta = new Map<string, { supervisor: string; note: string; physical: Partial<Record<MillStockKey, number>> }>();
 
   const settings = (): MillSettings => store.mill ?? DEFAULT_SETTINGS;
   const soldOf = (key: MillStockKey, day: string): number => {
@@ -223,13 +246,14 @@ export function createMillMock(store: MockStore): MillApi {
     });
     return {
       day, status, supervisor: inp.supervisor, note: inp.note, settings: clone(s),
-      opRows: inp.opRows.map((r, i) => ({ ...r, id: `mo${i + 1}`, batchNumber: status === 'closed' ? `PB-26-${String(40 + i + hash(day) % 20).padStart(6, '0')}` : '' })),
+      opRows: inp.opRows.map((r, i) => ({ ...r, id: `mo${legacyId(day, i)}`, imported: store.legacyImported?.has(String(legacyId(day, i))) ?? false, batchNumber: status === 'closed' ? `PB-26-${String(40 + i + hash(day) % 20).padStart(6, '0')}` : '' })),
       custRows, punnakuRows: inp.punnakuRows.map((r, i) => ({ ...r, id: `mp${i + 1}`, supplierName: store.suppliers.find((x) => x.id === r.supplierId)?.name ?? '' })),
       stock: compute(day, inp), aravaiCharge: custRows.reduce((a, r) => a + (r.charge ?? 0), 0),
       closedAt: closedMeta?.at ?? null, closedBy: closedMeta?.by ?? '', approvedBy: closedMeta?.approvedBy ?? '',
     };
   };
 
+  const legacyId = (day: string, i: number) => Number(day.slice(5).replace('-', '')) * 100 + i + 1;
   const empty = (day: string): MillSheetInput => ({ day, supervisor: '', note: '', opRows: [], custRows: [], punnakuRows: [], physical: {} });
 
   const validate = (inp: MillSheetInput) => {
@@ -279,7 +303,15 @@ export function createMillMock(store: MockStore): MillApi {
     [{ customerId: c(7), seed: 'groundnut', machine: 'W', seedKg: 50000, oilL: 19000, cakeKg: 28000, cakeMode: 'kept' }],
     [{ punnaku: 'coco', qtyKg: 60000 }, { punnaku: 'kadalai_w', qtyKg: 90000 }], { kadalai_r: 1500 });
 
-  return {
+  // Two old manual drafts (nothing was ever posted for them), shown read-only in the Old sheets archive.
+  const draftDay = (back: number, ops: MillSheetInput['opRows'], note: string) => {
+    const d = new Date(); d.setDate(d.getDate() - back);
+    drafts.set(dayKey(d), { day: dayKey(d), supervisor: 'Mohan', note, opRows: ops, custRows: [], punnakuRows: [], physical: {} });
+  };
+  draftDay(5, [op('Operator 1', 'groundnut', 'W', 100, 38, 58), op('Operator 2', 'sesame', 'W', 50, 18.5, 30, 5)], 'draft, never closed');
+  draftDay(4, [op('Operator 1', 'groundnut', 'R', 120, 45, 66)], 'draft, never closed');
+
+  const api: MillApi = {
     getMillSheet: async (day) => {
       const done = closed.get(day);
       if (done) return clone(done);
@@ -299,6 +331,36 @@ export function createMillMock(store: MockStore): MillApi {
       if (!m) throw new Error('Manager PIN is not correct');
       return clone(closeIt(day, m.name, m.name));
     },
+    getMillDay: async (day) => {
+      const done = closed.get(day);
+      if (done) return { ...clone(done), legacyOpenRows: 0 };
+      const d = drafts.get(day);
+      const inp = { ...empty(day), supervisor: dayMeta.get(day)?.supervisor ?? '', note: dayMeta.get(day)?.note ?? '', physical: dayMeta.get(day)?.physical ?? {} };
+      const v = view(day, 'draft', inp);
+      for (const l of v.stock) { if (l.group === 'seed') { const s = store.seedStock?.(l.key as 'groundnut' | 'sesame' | 'copra'); if (s) { l.opening = s.stock; l.computed = s.stock + l.sold; if (l.physical !== null) l.variance = l.physical - l.computed; } } }
+      return { ...clone(v), opRows: [], legacyOpenRows: d ? d.opRows.filter((_, i) => !store.legacyImported?.has(String(legacyId(day, i)))).length : 0 };
+    },
+    saveMillDay: async (input) => {
+      if (closed.has(input.day)) throw new Error('This day is closed. A closed day cannot be changed.');
+      if (input.day > dayKey(new Date())) throw new Error('A mill sheet cannot be for a future day.');
+      if (Object.keys(input.physical).some((k) => DEFS.find((d) => d.key === k)?.group === 'oil')) throw new Error('Oil is counted in the godown (stick reading), not on the day sheet.');
+      dayMeta.set(input.day, { supervisor: input.supervisor, note: input.note, physical: clone(input.physical) });
+      return api.getMillDay(input.day);
+    },
+    closeMillDay: async ({ day, managerPin }) => {
+      if (closed.has(day)) throw new Error('This day is already closed.');
+      const d = drafts.get(day);
+      if (d && d.opRows.some((_, i) => !store.legacyImported?.has(String(legacyId(day, i))))) throw new Error('This day still has rows from an old manual sheet. Move them to Production (Mill day sheet, Old sheets) before closing the day.');
+      if (!(managerPin ?? '').trim()) throw new Error('A manager PIN is needed to close the mill day (it adjusts stock)');
+      const m = store.users.find((u) => (u.role === 'owner' || u.role === 'manager') && u.pin === managerPin!.trim());
+      if (!m) throw new Error('Manager PIN is not correct');
+      const cur = await api.getMillDay(day);
+      const meta = dayMeta.get(day);
+      const sheet: MillSheet = { ...cur, status: 'closed', closedAt: new Date().toISOString(), closedBy: m.name, approvedBy: m.name, supervisor: meta?.supervisor ?? '', note: meta?.note ?? '' };
+      closed.set(day, sheet);
+      drafts.delete(day);
+      return { ...clone(sheet), legacyOpenRows: 0 };
+    },
     listMillSheets: async (limit = 60) => {
       const all: MillSheetSummary[] = [...closed.values()].map((s) => ({
         day: s.day, status: 'closed', supervisor: s.supervisor, closedAt: s.closedAt, aravaiCharge: s.aravaiCharge,
@@ -308,4 +370,5 @@ export function createMillMock(store: MockStore): MillApi {
       return all.sort((a, b) => b.day.localeCompare(a.day)).slice(0, limit);
     },
   };
+  return api;
 }

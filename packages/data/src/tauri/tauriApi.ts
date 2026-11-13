@@ -24,7 +24,7 @@ import type { ReportId, ReportParams, ReportResult } from '../areas/reports';
 import type {
   Expense, ExpenseCategory, ExpenseEdit, ExpenseInput, ExpenseList, ExpenseQuery, ExpenseVoid, VoidedLineInput,
 } from '../areas/expenses';
-import type { MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
+import type { MillDay, MillDayInput, MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
 import type { PaymodeReport, ReportQuery, SalesReport, Staff, StaffReportRow, StockReport } from '../areas/posreports';
 import type { MillAnalysis, MillAnalysisQuery } from '../areas/analysis';
 import type {
@@ -66,7 +66,7 @@ export const REAL_METHODS = [
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
   'saveSettingsBundle', 'testPrint', 'printDocument', 'printerStatus', 'backupNow', 'restoreBackup', 'runReport', 'backupStatus', 'logout',
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
-  'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
+  'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'getMillDay', 'saveMillDay', 'closeMillDay', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
   'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
   'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
   'listOutsourcedOil', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
@@ -238,6 +238,9 @@ export function createTauriApi(): Api {
     getMillSheet: (day: string) => call<MillSheet>('getMillSheet', day),
     saveMillSheet: (input: MillSheetInput) => call<MillSheet>('saveMillSheet', input),
     closeMillSheet: (input: { day: string; managerPin?: string }) => call<MillSheet>('closeMillSheet', input),
+    getMillDay: (day: string) => call<MillDay>('getMillDay', day),
+    saveMillDay: (input: MillDayInput) => call<MillDay>('saveMillDay', input),
+    closeMillDay: (input: { day: string; managerPin?: string }) => call<MillDay>('closeMillDay', input),
     listMillSheets: (limit?: number) => call<MillSheetSummary[]>('listMillSheets', limit ?? null),
 
     // ----- ProductionApi -----

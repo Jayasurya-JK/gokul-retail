@@ -193,3 +193,41 @@ fn the_pressing_grid_saves_all_rows_or_none_and_moves_old_draft_rows_once() {
     })
     .unwrap();
 }
+
+#[test]
+fn the_day_sheet_counts_and_closes_without_posting_batches_or_touching_old_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("gokul.db");
+    live_like_v13(&path);
+    let db = Db::open(&path).unwrap();
+    db.with(|c| {
+        let today = gokul_core::db::day_of(Local::now());
+        post_movement(c, &iso(Local::now()), "rm-gn", "purchase", 500_000, "test", "1", "seed", "Test")?;
+        let day = mill::get_day(c, &today)?;
+        assert_eq!(day["status"], "draft");
+        let gn = day["stock"].as_array().unwrap().iter().find(|l| l["key"] == "groundnut").unwrap().clone();
+        assert_eq!(gn["computed"], 500_000);
+        // counted 495 kg: a 5 kg shortage; the old drafts' rows are left alone by saving
+        let saved = mill::save_day(c, &de(json!({ "day": today, "supervisor": "Ravi", "note": "evening count", "physical": { "groundnut": 495_000 } })))?;
+        assert_eq!(saved["supervisor"], "Ravi");
+        let g2 = saved["stock"].as_array().unwrap().iter().find(|l| l["key"] == "groundnut").unwrap().clone();
+        assert_eq!(g2["variance"], -5_000);
+        assert_eq!(c.query_row::<i64, _, _>("SELECT COUNT(*) FROM mill_op_rows", [], |r| r.get(0))?, 2, "old draft rows untouched");
+        assert!(mill::save_day(c, &de(json!({ "day": today, "physical": { "oil_groundnut": 1000 } }))).is_err(), "oil is counted in the godown");
+        // closing posts only the difference as an adjustment, no batches
+        let batches = purchasing::list_pressing_batches(c)?.len();
+        let closed = mill::close_day(c, &de(json!({ "day": today })))?;
+        assert_eq!(closed["status"], "closed");
+        assert_eq!(purchasing::list_pressing_batches(c)?.len(), batches);
+        assert_eq!(c.query_row::<i64, _, _>("SELECT stock FROM items WHERE id='rm-gn'", [], |r| r.get(0))?, 495_000);
+        assert!(mill::close_day(c, &de(json!({ "day": today }))).is_err(), "already closed");
+        assert!(mill::save_day(c, &de(json!({ "day": today, "supervisor": "X" }))).is_err(), "closed is read-only");
+        assert_eq!(mill::get_day(c, &today)?["status"], "closed");
+        // a day that still has an old manual draft row cannot be closed until it is moved
+        let blocked = mill::close_day(c, &de(json!({ "day": "2026-11-12" })));
+        assert!(blocked.unwrap_err().to_string().contains("old manual sheet"));
+        assert_eq!(mill::get_day(c, "2026-11-12")?["legacyOpenRows"], 1);
+        Ok(())
+    })
+    .unwrap();
+}

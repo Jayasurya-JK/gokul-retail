@@ -158,9 +158,9 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "editExpense" => PermPin { perm: "canOpenDrawer", action: "edit_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "voidExpense" => PermPin { perm: "canOpenDrawer", action: "void_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "logVoidedLine" => VoidLine,
-        "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" | "getMillAnalysis" => Perm("canManageStock"),
+        "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" | "getMillAnalysis" | "getMillDay" | "saveMillDay" => Perm("canManageStock"),
         "addGodownBarrels" | "editGodownBarrel" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => Perm("canManageStock"),
-        "closeMillSheet" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
+        "closeMillSheet" | "closeMillDay" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         _ => Open,
     }
 }
@@ -188,9 +188,9 @@ fn describe(method: &str) -> &'static str {
         "voidExpense" => "void an expense",
         "logVoidedLine" => "remove a scanned line",
         "saveExpenseCategories" => "change expense categories",
-        "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" | "getMillAnalysis" => "use the mill sheet",
+        "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" | "getMillAnalysis" | "getMillDay" | "saveMillDay" => "use the mill sheet",
         "addGodownBarrels" | "editGodownBarrel" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => "record godown barrels and transfers",
-        "closeMillSheet" => "close the mill sheet (it adjusts stock)",
+        "closeMillSheet" | "closeMillDay" => "close the mill day (it adjusts stock)",
         _ => "do this",
     }
 }

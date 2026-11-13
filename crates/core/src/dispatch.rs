@@ -337,6 +337,9 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "getMillSheet" => ok(mill::get_sheet(c, &arg::<String>(a, 0, "day")?)?),
         "saveMillSheet" => ok(mill::save_sheet(c, &arg::<mill::SheetInput>(a, 0, "input")?)?),
         "closeMillSheet" => ok(mill::close_sheet(c, &arg::<mill::CloseInput>(a, 0, "input")?)?),
+        "getMillDay" => ok(mill::get_day(c, &arg::<String>(a, 0, "day")?)?),
+        "saveMillDay" => ok(mill::save_day(c, &arg::<mill::DayInput>(a, 0, "input")?)?),
+        "closeMillDay" => ok(mill::close_day(c, &arg::<mill::CloseInput>(a, 0, "input")?)?),
         "listMillSheets" => ok(mill::list_sheets(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(60))?),
 
         // ----- Scanner settings (the POS reads them) -----
@@ -386,7 +389,7 @@ pub const METHODS: &[&str] = &[
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
-    "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
+    "getMillSheet", "saveMillSheet", "closeMillSheet", "getMillDay", "saveMillDay", "closeMillDay", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
     "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",
     "listGodownBarrels", "getGodownBarrel", "addGodownBarrels", "editGodownBarrel", "setGodownStatus", "recordStickReading", "recordOutsourcedOil",
     "listOutsourcedOil", "transferToStore", "listGodownTransfers", "getMillDaily", "getMillAnalysis",

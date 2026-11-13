@@ -550,13 +550,13 @@ fn charge_for(kg_milli: i64, rate: i64) -> i64 {
 fn sheet_rows(conn: &Connection, day: &str, s: &MillSettings) -> Result<(Vec<Value>, Vec<Value>, Vec<Value>)> {
     let ops = {
         let mut st = conn.prepare(
-            "SELECT o.id,o.operator,o.seed,o.machine,o.seed_g,o.oil_ml,o.cake_g,o.jaggery_g,COALESCE(b.number,'') FROM mill_op_rows o
+            "SELECT o.id,o.operator,o.seed,o.machine,o.seed_g,o.oil_ml,o.cake_g,o.jaggery_g,COALESCE(b.number,''),o.imported FROM mill_op_rows o
              LEFT JOIN pressing_batches b ON b.id=o.batch_id WHERE o.day=?1 ORDER BY o.id",
         )?;
         let v = st
             .query_map([day], |r| {
                 Ok(json!({ "id": format!("mo{}", r.get::<_, i64>(0)?), "operator": r.get::<_, String>(1)?, "seed": r.get::<_, String>(2)?, "machine": r.get::<_, String>(3)?,
-                    "seedKg": r.get::<_, i64>(4)?, "oilL": r.get::<_, i64>(5)?, "cakeKg": r.get::<_, i64>(6)?, "jaggeryKg": r.get::<_, i64>(7)?, "batchNumber": r.get::<_, String>(8)? }))
+                    "seedKg": r.get::<_, i64>(4)?, "oilL": r.get::<_, i64>(5)?, "cakeKg": r.get::<_, i64>(6)?, "jaggeryKg": r.get::<_, i64>(7)?, "batchNumber": r.get::<_, String>(8)?, "imported": r.get::<_, i64>(9)? == 1 }))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         v
@@ -600,7 +600,8 @@ fn rows_as_input(day: &str, supervisor: &str, note: &str, ops: &[Value], custs: 
         day: day.to_string(),
         supervisor: supervisor.to_string(),
         note: note.to_string(),
-        op_rows: ops.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect(),
+        // a row already moved to Production is a real batch now: it must not be counted or posted a second time
+        op_rows: ops.iter().filter(|v| v["imported"] != json!(true)).filter_map(|v| serde_json::from_value(v.clone()).ok()).collect(),
         cust_rows: custs.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect(),
         punnaku_rows: puns.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect(),
         physical,
@@ -883,4 +884,134 @@ fn final_stock(conn: &Connection, day: &str, physical: &Map<String, Value>) -> R
         }));
     }
     Ok(out)
+}
+
+// =====================================================================
+// The day sheet (production redo): supervisor, note and an optional evening count on top of the automatic daily report.
+// It never touches the old manual-sheet rows (mill_op_rows, mill_cust_jobs, mill_punnaku_rows), which stay readable as an archive.
+// =====================================================================
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayInput {
+    pub day: String,
+    #[serde(default)]
+    pub supervisor: String,
+    #[serde(default)]
+    pub note: String,
+    /// Counted stock {key: milli-units} for seeds, punnaku, vellam and malli (oil is counted in the godown with the stick)
+    #[serde(default)]
+    pub physical: Map<String, Value>,
+}
+
+fn legacy_open_rows(conn: &Connection, day: &str) -> Result<i64> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM mill_op_rows WHERE day=?1 AND imported=0 AND batch_id IS NULL", [day], |r| r.get(0))?)
+}
+
+fn validate_counts(physical: &Map<String, Value>) -> Result<()> {
+    for (k, v) in physical {
+        let Some(d) = STOCK.iter().find(|d| d.key == k) else { return invalid(format!("Unknown stock line {k}.")) };
+        if d.group == "oil" {
+            return invalid("Oil is counted in the godown (stick reading), not on the day sheet.");
+        }
+        if v.as_i64().map(|n| n < 0).unwrap_or(true) {
+            return invalid(format!("{}: the counted quantity must be zero or more.", d.label));
+        }
+    }
+    Ok(())
+}
+
+/// The day's count sheet: expected stock for every line from the ledger, the counted stock, the difference. A closed day comes back frozen.
+pub fn get_day(conn: &Connection, day: &str) -> Result<Value> {
+    day_start(day)?;
+    let s = mill_settings(conn);
+    let row: Option<(String, String, String, String, Option<String>, Option<String>, String, String)> = conn
+        .query_row(
+            "SELECT status,supervisor,note,physical_json,snapshot_json,closed_at,closed_by,approved_by FROM mill_sheets WHERE day=?1",
+            [day],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
+        )
+        .optional()?;
+    if let Some((status, _, _, _, Some(snap), _, _, _)) = &row {
+        if status == "closed" {
+            if let Ok(mut v) = serde_json::from_str::<Value>(snap) {
+                v["legacyOpenRows"] = json!(0);
+                return Ok(v);
+            }
+        }
+    }
+    let (status, sup, note, physical, ca, cb, ab) = match row {
+        Some((st, sup, note, phys, _, ca, cb, ab)) => (st, sup, note, serde_json::from_str::<Map<String, Value>>(&phys).unwrap_or_default(), ca, cb, ab),
+        None => ("draft".into(), String::new(), String::new(), Map::new(), None, String::new(), String::new()),
+    };
+    let lines = compute_stock(conn, day, None)?;
+    let mut v = sheet_value(day, &status, &sup, &note, &s, vec![], vec![], vec![], stock_json(&lines, &physical), ca, &cb, &ab);
+    v["legacyOpenRows"] = json!(legacy_open_rows(conn, day)?);
+    Ok(v)
+}
+
+/// Save the supervisor, note and counts of a day that is not closed. Leaves every other table alone.
+pub fn save_day(conn: &mut Connection, i: &DayInput) -> Result<Value> {
+    day_start(&i.day)?;
+    validate_counts(&i.physical)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if sheet_status(&tx, &i.day)?.as_deref() == Some("closed") {
+        return invalid("This day is closed. A closed day cannot be changed.");
+    }
+    let now = iso(Local::now());
+    tx.execute(
+        "INSERT INTO mill_sheets(day,status,supervisor,note,physical_json,created_at,updated_at) VALUES(?1,'draft',?2,?3,?4,?5,?5)
+         ON CONFLICT(day) DO UPDATE SET supervisor=excluded.supervisor, note=excluded.note, physical_json=excluded.physical_json, updated_at=excluded.updated_at",
+        params![i.day, i.supervisor.trim(), i.note.trim(), serde_json::to_string(&i.physical)?, now],
+    )?;
+    audit(&tx, Local::now(), &db::actor_or(OFFICE), "update", "mill_day", &i.day, &format!("{} counted lines", i.physical.len()))?;
+    tx.commit()?;
+    get_day(conn, &i.day)
+}
+
+/// Close the day: every counted line that differs from the ledger is posted as a stock adjustment with a reason, and the sheet is frozen.
+/// Nothing else is posted: pressing and godown moves were already recorded as they happened.
+pub fn close_day(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
+    let day = c.day.clone();
+    day_start(&day)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if sheet_status(&tx, &day)?.as_deref() == Some("closed") {
+        return invalid("This day is already closed.");
+    }
+    if legacy_open_rows(&tx, &day)? > 0 {
+        return invalid("This day still has rows from an old manual sheet. Move them to Production (Mill day sheet, Old sheets) before closing the day.");
+    }
+    if sheet_status(&tx, &day)?.is_none() {
+        let now = iso(Local::now());
+        tx.execute("INSERT INTO mill_sheets(day,status,physical_json,created_at,updated_at) VALUES(?1,'draft','{}',?2,?2)", params![day, now])?;
+    }
+    let s = mill_settings(&tx);
+    let (supervisor, note, physical_json): (String, String, String) =
+        tx.query_row("SELECT supervisor,note,physical_json FROM mill_sheets WHERE day=?1", [&day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    let physical: Map<String, Value> = serde_json::from_str(&physical_json).unwrap_or_default();
+    let at = posting_time(&day);
+    let who = db::actor_or(OFFICE);
+    let lines = compute_stock(&tx, &day, None)?;
+    let mut posted = 0;
+    for (idx, l) in &lines {
+        let d = &STOCK[*idx];
+        let Some(counted) = physical.get(d.key).and_then(|v| v.as_i64()) else { continue };
+        let variance = counted - l.computed();
+        if variance == 0 || d.group == "oil" {
+            continue;
+        }
+        let Some(item) = item_id_for(&tx, d.key)? else { continue };
+        apply_adjustment(&tx, at, &item, "correction", variance, &format!("Mill sheet {day}: counted {} vs computed {}", counted / 1000, l.computed() / 1000), &who)?;
+        posted += 1;
+    }
+    let stock = final_stock(&tx, &day, &physical)?;
+    let now = iso(Local::now());
+    let sheet = sheet_value(&day, "closed", &supervisor, &note, &s, vec![], vec![], vec![], stock, Some(now.clone()), &who, &db::approver_or_empty());
+    tx.execute(
+        "UPDATE mill_sheets SET status='closed', snapshot_json=?1, closed_at=?2, closed_by=?3, approved_by=?4, updated_at=?2 WHERE day=?5",
+        params![sheet.to_string(), now, who, db::approver_or_empty(), day],
+    )?;
+    audit(&tx, Local::now(), &who, "close", "mill_day", &day, &format!("{posted} stock differences posted"))?;
+    tx.commit()?;
+    Ok(sheet)
 }
