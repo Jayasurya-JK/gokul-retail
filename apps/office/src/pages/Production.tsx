@@ -305,7 +305,7 @@ export function Production() {
           </div>
         </TabPanel>
         <TabPanel value="norms" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
-          <NormsEditor profiles={profiles} onSaved={() => void load()} />
+          <NormsEditor profiles={profiles} batches={batches} onSaved={() => void load()} />
         </TabPanel>
       </Tabs>
 

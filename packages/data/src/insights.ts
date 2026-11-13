@@ -74,9 +74,14 @@ export function groupBatches(batches: PressingBatch[], by: InsightBy): InsightRo
   return by === 'day' || by === 'month' ? rows.sort((a, b) => a.key.localeCompare(b.key)) : rows.sort((a, b) => b.seedKg - a.seedKg);
 }
 
+/** The last N batches of one seed that have a usable yield, newest first. */
+export function recentBatches(batches: PressingBatch[], seed: SeedType, n: number): PressingBatch[] {
+  return [...batches].filter((b) => b.seed === seed && b.metrics.kgSeedPerL > 0).sort((a, b) => b.date.localeCompare(a.date)).slice(0, n);
+}
+
 /** The owner's own average over the last N batches of one seed (newest first input is fine). Used to help set the norm. */
 export function recentAverage(batches: PressingBatch[], seed: SeedType, n: number): { count: number; kgSeedPerL: number; yieldPct: number } | null {
-  const list = [...batches].filter((b) => b.seed === seed && b.metrics.kgSeedPerL > 0).sort((a, b) => b.date.localeCompare(a.date)).slice(0, n);
+  const list = recentBatches(batches, seed, n);
   if (list.length === 0) return null;
   const r = summarise(seed, seed, list);
   return { count: list.length, kgSeedPerL: r.kgSeedPerL, yieldPct: r.yieldPct };
