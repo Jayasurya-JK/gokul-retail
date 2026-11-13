@@ -1,3 +1,4 @@
+import type { CreditNote } from './billops';
 import type { MillSettings } from './crm';
 import type { Expense, MockVoidedLine } from './expenses';
 import type { GodownMockState } from './production';
@@ -19,6 +20,8 @@ export interface MockStore {
   /** Set by the expenses mock; the reports mock reads them */
   expenses?: Expense[];
   voidedLines?: MockVoidedLine[];
+  /** Set by the bill ops mock; the shift summary reads today's notes for cash refunds */
+  creditNotes?: CreditNote[];
   /** Over this an expense needs a manager PIN (paise); kept in sync with Settings */
   expenseLimit?: number;
   mill?: MillSettings;

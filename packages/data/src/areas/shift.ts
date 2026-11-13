@@ -170,6 +170,11 @@ export function createShiftMock(store: MockStore): ShiftApi {
     const todayKey = new Date().toISOString().slice(0, 10);
     const todays = (store.expenses ?? []).filter((e) => e.status === 'active' && e.paidFrom === 'cash' && e.day === todayKey);
     const expensesCash = sum(todays.map((e) => e.amount));
+    // Cash handed back on returns, plus exchange credit paid out when the new bill was smaller (UPI refunds never touch the drawer).
+    const todayNotes = (store.creditNotes ?? []).filter((n) => sameDay(n.at, new Date()));
+    const returnCashRefunds = sum(todayNotes.filter((n) => n.refundMode === 'cash').map((n) => n.totals.grand));
+    const exchangeCashRefunds = sum(sold.map((b) => (b.exchangeRefund?.mode === 'cash' ? b.exchangeRefund.amount : 0)));
+    const cashRefunds = returnCashRefunds + exchangeCashRefunds;
     return {
       at: new Date().toISOString(),
       counter: store.settings.counter,
@@ -191,7 +196,8 @@ export function createShiftMock(store: MockStore): ShiftApi {
       sgst: sum(slabs.map((s) => s.sgst)),
       slabs,
       expensesCash, expensesCount: todays.length,
-      expectedCash: openingCash + byMode.cash + cashIn - cashOut - expensesCash,
+      cashRefunds,
+      expectedCash: openingCash + byMode.cash + cashIn - cashOut - cashRefunds - expensesCash,
     };
   };
 

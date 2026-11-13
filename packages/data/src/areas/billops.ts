@@ -104,6 +104,7 @@ const dayKey = (d: Date | string) => {
 export function createBillOpsMock(store: MockStore): BillOpsApi {
   const returnedByBill = new Map<string, Milli[]>();
   const notes: CreditNote[] = [];
+  store.creditNotes = notes;
   const cancels = new Map<string, CancelInfo>();
   const reprints = new Map<string, number>();
   let pendingExchange: CreditNote | null = null;

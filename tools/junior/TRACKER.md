@@ -18,3 +18,4 @@ Fix by: Haiku or Sonnet. Commit: the commit hash once the lead commits the work 
 | T08-blind-stocktake | tasks/T08-blind-stocktake.md | wip/r6 | flash | logs/T08-blind-stocktake-* | gate-passed | typecheck+lint 0; full review at end. | - | |
 | T09-items-supplier | tasks/T09-items-supplier.md | wip/r6 | flash | logs/T09-items-supplier-* | gate-passed | typecheck+lint 0; full review at end. | - | |
 | T10-norm-helper | tasks/T10-norm-helper.md | wip/r6 | flash | logs/T10-norm-helper-* | gate-passed | typecheck+lint 0; full review at end. | - | |
+| T11-mock-exchange | tasks/T11-mock-exchange.md | wip/r6 | flash | logs/T11-mock-exchange-* | gate-passed | typecheck+lint 0; full review at end. | - | |
