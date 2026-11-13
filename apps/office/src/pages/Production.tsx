@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Factory, Flame, PackageOpen, Plus, SlidersHorizontal, Warehouse } from 'lucide-react';
+import { Factory, Flame, PackageOpen, Plus, Warehouse } from 'lucide-react';
 import { type Barrel, type GodownBarrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
@@ -7,7 +7,7 @@ import {
 import { api } from '../store';
 import { PressingForm } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
-import { NormsEditor } from '../components/purchasing/NormsEditor';
+import { PressingGrid } from '../components/purchasing/PressingGrid';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
   BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, gradeTone, phaseInfo, SectionLabel, seedColor, useKeys,
@@ -142,7 +142,11 @@ const pressCols: ColumnDef<PressingBatch>[] = [
     id: 'vs', header: 'vs norm', accessorFn: (r) => r.metrics.variancePct, meta: { w: '80px', align: 'right' },
     cell: (c) => { const m = c.row.original.metrics; return <Badge tone={gradeTone[m.grade]}>{m.variancePct >= 0 ? '+' : ''}{fmtNum(m.variancePct)}%</Badge>; },
   },
-  { id: 'phase', header: 'Stage', accessorFn: (r) => r.phase, meta: { w: '120px' }, cell: (c) => { const r = c.row.original; const p = phaseInfo[r.phase]; return <Badge tone={p.tone}>{r.barrelLabel ?? p.label}</Badge>; } },
+  { id: 'op', header: 'Operator', accessorFn: (r) => r.operator, meta: { w: '110px' }, cell: (c) => <span className="truncate text-ink">{c.row.original.operator || '-'}</span> },
+  {
+    id: 'barrel', header: 'Godown barrel', accessorFn: (r) => r.godownBarrelLabel ?? '', meta: { w: '120px' },
+    cell: (c) => <span className="truncate text-ink">{c.row.original.godownBarrelLabel ?? <span className="text-subtle">not in a barrel</span>}</span>,
+  },
 ];
 
 /* ---------------- packing ---------------- */
@@ -202,6 +206,27 @@ function PackDetail({ r }: { r: PackRun }) {
   );
 }
 
+/* ---------------- godown chips on the Pressing tab: where the oil goes, and what is settling ---------------- */
+function GodownChips({ barrels, onOpen }: { barrels: GodownBarrel[]; onOpen: () => void }) {
+  const oils: { seed: SeedType; label: string }[] = [{ seed: 'groundnut', label: 'Groundnut' }, { seed: 'sesame', label: 'Sesame' }, { seed: 'copra', label: 'Coconut' }];
+  return (
+    <div className="flex items-center gap-2">
+      {oils.map(({ seed, label }) => {
+        const list = barrels.filter((b) => b.active && b.oil === seed && b.levelL > 0);
+        const litres = list.reduce((a, b) => a + b.levelL, 0);
+        const settling = list.filter((b) => b.status === 'settling').length;
+        const ready = list.filter((b) => b.status === 'ready').length;
+        return (
+          <button key={seed} type="button" onClick={onOpen} title="Open the Godown tab" className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-left text-xs hover:bg-surface-2">
+            <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[seed])} />{label} oil in godown</span>
+            <span className="num text-right"><span className="font-semibold text-ink">{fmtMilli(litres, 0)} L</span>{(settling > 0 || ready > 0) && <span className="ml-2 text-muted">{settling > 0 ? `${settling} settling` : ''}{settling > 0 && ready > 0 ? ', ' : ''}{ready > 0 ? `${ready} ready` : ''}</span>}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ---------------- page ---------------- */
 export function Production() {
   const [tab, setTab] = useState('pressing');
@@ -215,7 +240,7 @@ export function Production() {
   const [selBatch, setSelBatch] = useState<string | null>(null);
   const [selRun, setSelRun] = useState<string | null>(null);
   const [seedFilter, setSeedFilter] = useState('all');
-  const [phaseFilter, setPhaseFilter] = useState('all');
+  const [operators, setOperators] = useState<string[]>([]);
   const [newBatch, setNewBatch] = useState(false);
   const [newPack, setNewPack] = useState(false);
   const [packBarrel, setPackBarrel] = useState<string | null>(null);
@@ -228,10 +253,10 @@ export function Production() {
     setSelBatch((c) => opts?.batch ?? c ?? b[0]?.id ?? null);
     setSelRun((c) => opts?.run ?? c ?? r[0]?.id ?? null);
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); void api.getSettingsBundle().then((b) => setOperators(b.mill.operators)).catch(() => undefined); }, [load]);
   useRefreshOnFocus(() => { void load(); });
 
-  const shown = useMemo(() => batches.filter((b) => (seedFilter === 'all' || b.seed === seedFilter) && (phaseFilter === 'all' || b.phase === phaseFilter)), [batches, seedFilter, phaseFilter]);
+  const shown = useMemo(() => batches.filter((b) => seedFilter === 'all' || b.seed === seedFilter), [batches, seedFilter]);
   const batch = batches.find((b) => b.id === selBatch) ?? null;
   const run = runs.find((r) => r.id === selRun) ?? null;
 
@@ -240,7 +265,7 @@ export function Production() {
     const recent = batches.filter((b) => new Date(b.date).getTime() >= cut);
     const seed = recent.reduce((a, b) => a + b.seedKg, 0);
     const oil = recent.reduce((a, b) => a + b.oilRawL, 0);
-    return { n: recent.length, seed, oil, low: recent.filter((b) => b.metrics.grade !== 'good').length, ready: batches.filter((b) => b.phase === 'ready').length };
+    return { n: recent.length, seed, oil, low: recent.filter((b) => b.metrics.grade !== 'good').length };
   }, [batches]);
 
   const start = () => (tab === 'pressing' ? setNewBatch(true) : tab === 'packing' ? (setPackBarrel(null), setNewPack(true)) : undefined);
@@ -257,17 +282,19 @@ export function Production() {
       <PageHeader
         title="Production" icon={<Factory size={17} />}
         subtitle={`${month.n} pressing batches in 30 days, ${fmtMilli(month.oil, 0)} L oil from ${fmtMilli(month.seed, 0)} kg seed`}
-        actions={tab === 'norms' || tab === 'godown' ? undefined : (
-          <Button variant="primary" icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'New pressing batch' : 'New packing run'}</Button>
+        actions={tab === 'godown' ? undefined : (
+          <Button icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'Batch with details' : 'New packing run'}</Button>
         )}
       />
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4 py-3">
         <div className="min-w-0 flex-1">
-          <BarrelStrip
-            barrels={tab === 'godown' ? godownStrip : barrels}
-            selectedId={tab === 'godown' ? godownSelId : tab === 'pressing' ? batch?.barrelId : run?.barrelId}
-            onPick={tab === 'godown' ? (b) => setGodownSelId(b.id) : undefined}
-          />
+          {tab === 'pressing' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : (
+            <BarrelStrip
+              barrels={tab === 'godown' ? godownStrip : barrels}
+              selectedId={tab === 'godown' ? godownSelId : run?.barrelId}
+              onPick={tab === 'godown' ? (b) => setGodownSelId(b.id) : undefined}
+            />
+          )}
         </div>
         <div className="flex w-[248px] shrink-0 flex-col gap-1.5">
           {profiles.map((p) => (
@@ -284,15 +311,14 @@ export function Production() {
           { value: 'pressing', label: <><Flame size={14} />Pressing</>, count: batches.length },
           { value: 'godown', label: <><Warehouse size={14} />Godown</> },
           { value: 'packing', label: <><PackageOpen size={14} />Packing</>, count: runs.length },
-          { value: 'norms', label: <><SlidersHorizontal size={14} />Norms</> },
         ]}
       >
         <TabPanel value="pressing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
+          <PressingGrid profiles={profiles} barrels={godownBarrels} operators={operators} onSaved={(saved) => { setGodownKey((k) => k + 1); void load({ batch: saved[0]?.id }); }} />
           <FilterBar
-            trailing={<span>{month.ready > 0 && <span className="mr-3 font-medium text-info">{month.ready} ready to filter</span>}{month.low > 0 && <span className="mr-3 font-medium text-warning">{month.low} low yield in 30 days</span>}{shown.length} shown</span>}
+            trailing={<span>{month.low > 0 && <span className="mr-3 font-medium text-warning">{month.low} low yield in 30 days</span>}{shown.length} shown</span>}
           >
             <Select value={seedFilter} onChange={(e) => setSeedFilter(e.target.value)} options={[{ value: 'all', label: 'All seeds' }, ...profiles.map((p) => ({ value: p.seed, label: p.label }))]} />
-            <Select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value)} options={[{ value: 'all', label: 'Any stage' }, { value: 'settling', label: 'Settling' }, { value: 'ready', label: 'Ready to filter' }, { value: 'in-barrel', label: 'In barrel' }]} />
           </FilterBar>
           <div className="flex min-h-0 flex-1">
             <DataTable
@@ -316,9 +342,6 @@ export function Production() {
             />
             {run && <PackDetail r={run} />}
           </div>
-        </TabPanel>
-        <TabPanel value="norms" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
-          <NormsEditor profiles={profiles} batches={batches} onSaved={() => void load()} />
         </TabPanel>
       </Tabs>
 
