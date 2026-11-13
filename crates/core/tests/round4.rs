@@ -211,6 +211,26 @@ fn sales_and_paymode_reports_and_cost_privacy() {
 }
 
 #[test]
+fn reports_show_the_cashier_when_no_salesman_was_picked() {
+    let (_d, db) = mini_db();
+    // No F7 staff on this bill: the report must show Karthik, the cashier who made it, not "-".
+    db.with(|c| bills::save_bill(c, &draft_extras(two_lines(), BillExtras::default(), 0, "cash"))).unwrap();
+    let o = owner(&db);
+    let sales = call(&db, &o, "salesReport", json!([{}])).unwrap();
+    assert_eq!(sales["rows"][0]["staff"], "Karthik");
+    assert_eq!(sales["rows"][0]["cashier"], "Karthik");
+    let paymode = call(&db, &o, "paymodeReport", json!([{}])).unwrap();
+    assert_eq!(paymode["rows"][0]["staff"], "Karthik");
+
+    // A salesman picked on the bill still wins over the cashier.
+    db.with(|c| bills::save_bill(c, &draft_extras(two_lines(), BillExtras { staff: "Ravi".into(), ..Default::default() }, 0, "cash"))).unwrap();
+    let sales = call(&db, &o, "salesReport", json!([{}])).unwrap();
+    assert_eq!(sales["rows"][0]["staff"], "Ravi");
+    let paymode = call(&db, &o, "paymodeReport", json!([{}])).unwrap();
+    assert_eq!(paymode["rows"][0]["staff"], "Ravi");
+}
+
+#[test]
 fn staff_list_and_customer_profile_fields() {
     let (_d, db) = mini_db();
     let s = owner(&db);

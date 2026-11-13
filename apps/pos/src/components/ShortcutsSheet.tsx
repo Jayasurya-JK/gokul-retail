@@ -6,8 +6,8 @@ const GROUPS: { title: string; rows: [string, string[]][] }[] = [
   {
     title: 'Go to',
     rows: [
-      ['Point of Sale', ['Alt+1']], ['POS1 (second bill)', ['Alt+2']], ['POS2 (third bill)', ['Alt+3']], ['Bills (reprint, cancel)', ['Alt+4']],
-      ['Sales Report', ['Alt+5']], ['Paymode Report', ['Alt+6']], ['Stock', ['Alt+7']], ['Customer Profile', ['Alt+8']],
+      ['Point of Sale', ['Alt+1']], ['POS 1 (second bill)', ['Alt+2']], ['Bills (reprint, cancel)', ['Alt+4']],
+      ['Sales Report', ['Alt+5']], ['Paymode Report', ['Alt+6']], ['Stock', ['Alt+7']], ['Customer', ['Alt+8']],
       ['Returns and exchange', ['F10']], ['Expenses and cash', ['F9']], ['Day close', ['Ctrl+E']], ['User menu', ['Alt+U']],
       ['Lock the counter', ['Ctrl+L']], ['This sheet', ['F1']], ['Back to billing (from any other screen)', ['Esc']],
     ],
@@ -42,7 +42,7 @@ export function ShortcutsSheet({ open, onClose }: { open: boolean; onClose: () =
   const [showBar, setShowBar] = useKeyBar();
   const { pathname } = useLocation();
   const screen = useCurrentScreenKeys();
-  const onBilling = pathname === '/billing' || pathname === '/pos1' || pathname === '/pos2';
+  const onBilling = pathname === '/billing' || pathname === '/pos1';
   // This screen's own keys come first, then the keys that work everywhere.
   const go = GROUPS[0];
   const groups = onBilling

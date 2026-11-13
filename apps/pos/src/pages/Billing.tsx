@@ -20,14 +20,14 @@ import { printBillAfterSave, printWithToast } from '../printing';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
 import { beepError, useScanHandler } from '../scanner';
 
-type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx' | 'delivery' | 'staff' | 'recent' | 'manual' | 'cashDisc';
+type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx' | 'delivery' | 'staff' | 'recent' | 'manual';
 const FIELD_ORDER: EditField[] = ['qty', 'rate', 'disc'];
 
 export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const nav = useNavigate();
   const toast = useToast();
   const { user, settings, heldCount, setHeldCount } = useSession();
-  /* Point of Sale, POS1 and POS2 are three separate bills: this screen shows the one for its tab, the others keep their state. */
+  /* Point of Sale and POS 1 are two separate bills: this screen shows the one for its tab, the other keeps its state. */
   const useBilling = billingStores[slot];
   const B = useBilling();
   const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps } = B;
@@ -51,6 +51,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const [dismissed, setDismissed] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
   const [pinAsk, setPinAsk] = useState<{ message: string; payments: Payment[]; change: number; refund?: 'cash' | 'upi' } | null>(null);
+  /** Ctrl+K asks the summary panel to put the cursor in the inline cash-discount box. */
+  const [cashFocus, setCashFocus] = useState(0);
   const removed = useRef<{ line: BillLine; at: number } | null>(null);
 
   const itemMap = useMemo(() => {
@@ -361,12 +363,21 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     B.setWholesale(on, (id) => byId.get(id));
     toast.show({ tone: 'info', title: on ? 'Wholesale prices on' : 'Wholesale prices off', detail: on ? 'Items without a wholesale price keep the normal price.' : 'Back to normal prices.' });
   };
-  const setCashDiscount = (v: string) => {
-    const t = v.trim().replace('%', '');
-    const pct = t === '' ? 0 : Number(t);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Cash discount must be between 0% and 100%' }); return; }
-    B.setCashDisc(Math.round(pct * 100));
-    setDialog(null);
+  /** Inline cash discount: "50" is Rs 50 off the bill, "2.5%" is two and a half percent. Stored as percent x 100. */
+  const applyCashDiscount = (v: string) => {
+    const t = v.trim();
+    if (!t || t === '0') { B.setCashDisc(0); return; }
+    if (t.endsWith('%')) {
+      const pct = Number(t.slice(0, -1));
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Cash discount must be between 0% and 100%' }); return; }
+      B.setCashDisc(Math.round(pct * 100));
+      return;
+    }
+    const net = lines.reduce((s, l) => s + l.amount, 0);
+    const amt = parsePaise(t);
+    if (net <= 0) { toast.show({ tone: 'info', title: 'Add items before a cash discount' }); return; }
+    if (amt === null || amt < 0) { toast.show({ tone: 'error', title: 'Type an amount like 50, or a percent like 2.5%' }); return; }
+    B.setCashDisc(Math.min(10000, Math.round((amt * 10000) / net)));
   };
   const reprintBill = (b: { id: string; number: string }) => {
     void api.recordReprint(b.id, user?.name ?? '').catch(() => undefined);
@@ -386,7 +397,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (e.ctrlKey && e.key.toLowerCase() === 'e') { e.preventDefault(); nav('/day-close'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); if (selected >= 0) startEdit('disc'); return; }
-    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setDialog('cashDisc'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setCashFocus((n) => n + 1); return; }
     if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'w') { e.preventDefault(); toggleWholesale(); return; }
     if (e.ctrlKey && e.key.toLowerCase() === 'p') {
       e.preventDefault();
@@ -477,7 +488,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay}
           onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} exchangeCredit={exchangeCredit} due={due} refundDue={refundDue} onDropExchange={() => setDialog('dropEx')} onApplyDiscount={applyBillDiscount} billNo={billNo}
           slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
-          onCashDisc={() => setDialog('cashDisc')} onClearCashDisc={() => B.setCashDisc(0)}
+          focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
           delivery={delivery} onDelivery={() => setDialog('delivery')} staff={staff} onStaff={() => setDialog('staff')}
         />
       }
@@ -544,18 +555,6 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <StaffDialog open={dialog === 'staff'} current={staff} onClose={() => setDialog(null)} onPick={(n) => { B.setStaff(n); setDialog(null); }} />
       <RecentBillsDialog open={dialog === 'recent'} onClose={() => setDialog(null)} onReprint={reprintBill} onOpenSales={() => { setDialog(null); nav('/sales'); }} />
       <ManualItemDialog open={dialog === 'manual'} onClose={() => setDialog(null)} onAdd={(l) => { B.addLine(l); setDialog(null); }} />
-      <PromptDialog
-        open={dialog === 'cashDisc'} title="Cash discount" label="Percent off the whole bill" hint="Type 2 for two percent, or 2.5%. It is on top of item discounts; GST is worked out on the lower value."
-        initial={cashDiscBps ? String(cashDiscBps / 100) : ''}
-        preview={(typed) => {
-          const pct = Number(typed.trim().replace('%', '') || 0);
-          const bps = Number.isFinite(pct) ? Math.max(0, Math.min(10000, Math.round(pct * 100))) : 0;
-          const cd = cashDiscount(lines, bps);
-          const after = computeTotalsWithDelivery(lines, billDiscount + cd, settings?.roundToRupee ?? true, delivery.charge, deliveryGst);
-          return <span className="flex items-center justify-between"><span>Cash discount <b className="num">{formatRupees(cd)}</b></span><span>New total <b className="num text-md">{formatRupees(after.grand)}</b></span></span>;
-        }}
-        onClose={() => setDialog(null)} onSubmit={setCashDiscount}
-      />
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />

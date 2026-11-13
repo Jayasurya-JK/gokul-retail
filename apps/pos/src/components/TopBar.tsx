@@ -9,23 +9,22 @@ import { DropMenu, type MenuEntry } from './BillToolbar';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/* The top bar always shows names. Four tabs stay in the bar; the less used reports and lists sit in the More menu, labelled.
-   Alt+1..8 reach every one of them (the key is shown beside each name). */
+/* The top bar always shows names. Six tabs stay in the bar; the less used lists sit in the More menu, labelled.
+   Alt+1..8 reach every one of them (the key is shown beside each name). Alt+3 went with the removed POS2 slot. */
 const TABS = [
-  { label: 'Point of Sale', path: '/billing', icon: ShoppingCart, match: ['/billing'] },
-  { label: 'POS1', path: '/pos1', icon: ReceiptIndianRupee, match: ['/pos1'] },
-  { label: 'POS2', path: '/pos2', icon: ReceiptIndianRupee, match: ['/pos2'] },
-  { label: 'Bills', path: '/sales', icon: ReceiptIndianRupee, match: ['/sales', '/history'] },
+  { label: 'Point of Sale', path: '/billing', kbd: 'Alt+1', icon: ShoppingCart, match: ['/billing'] },
+  { label: 'POS 1', path: '/pos1', kbd: 'Alt+2', icon: ReceiptIndianRupee, match: ['/pos1'] },
+  { label: 'Bills', path: '/sales', kbd: 'Alt+4', icon: ReceiptIndianRupee, match: ['/sales', '/history'] },
+  { label: 'Customer', path: '/customers', kbd: 'Alt+8', icon: UserRound, match: ['/customers'] },
+  { label: 'Sales Report', path: '/reports/sales', kbd: 'Alt+5', icon: BarChart3, match: ['/reports/sales'] },
+  { label: 'Paymode Report', path: '/reports/paymode', kbd: 'Alt+6', icon: CreditCard, match: ['/reports/paymode'] },
 ] as const;
 
 interface MoreItem { label: string; path?: string; kbd?: string; icon: LucideIcon; match: string[]; divider?: boolean }
 
 /** The More menu. Items without a path are actions (Keyboard shortcuts opens the F1 sheet). */
 const MORE: MoreItem[] = [
-  { label: 'Sales Report', path: '/reports/sales', kbd: 'Alt+5', icon: BarChart3, match: ['/reports/sales'] },
-  { label: 'Paymode Report', path: '/reports/paymode', kbd: 'Alt+6', icon: CreditCard, match: ['/reports/paymode'] },
   { label: 'Stock', path: '/reports/stock', kbd: 'Alt+7', icon: Package, match: ['/reports/stock'] },
-  { label: 'Customer Profile', path: '/customers', kbd: 'Alt+8', icon: UserRound, match: ['/customers'] },
   { label: 'Returns and exchange', path: '/returns', kbd: 'F10', icon: Undo2, match: ['/returns'], divider: true },
   { label: 'Expenses and cash', path: '/cash', kbd: 'F9', icon: Wallet, match: ['/cash'] },
   { label: 'Day close', path: '/day-close', kbd: 'Ctrl+E', icon: Moon, match: ['/day-close'] },
@@ -34,17 +33,16 @@ const MORE: MoreItem[] = [
   { label: 'Keyboard shortcuts', kbd: 'F1', icon: Keyboard, match: [] },
 ];
 
-/** Every navigable screen by its Alt number (Alt+1..8): the four tabs, then the first four More items */
-const SCREENS: string[] = ['/billing', '/pos1', '/pos2', '/sales', '/reports/sales', '/reports/paymode', '/reports/stock', '/customers'];
-/** The three bill screens: Esc from any other screen comes back to the main one */
-export const BILL_PATHS = ['/billing', '/pos1', '/pos2'];
+/** Every navigable screen by its Alt number (Alt+1..8). Alt+3 is gone with POS2. */
+const SCREENS: (string | null)[] = ['/billing', '/pos1', null, '/sales', '/reports/sales', '/reports/paymode', '/reports/stock', '/customers'];
+/** The two bill screens: Esc from any other screen comes back to the main one */
+export const BILL_PATHS = ['/billing', '/pos1'];
 
 export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () => void; onCloseDay?: () => void; minimal?: boolean }) {
   const printer = usePrinterStatus();
   const openLines: Record<string, number> = {
     '/billing': billingStores.pos((s) => s.lines.length),
     '/pos1': billingStores.pos1((s) => s.lines.length),
-    '/pos2': billingStores.pos2((s) => s.lines.length),
   };
   const { user, shift, settings, heldCount, signOut } = useSession();
   const nav = useNavigate();
@@ -126,11 +124,11 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       {brand}
       <span className="mx-2 h-6 w-px shrink-0 bg-white/10" />
       <nav className="flex h-full min-w-0 flex-1 items-stretch gap-0.5 overflow-hidden" aria-label="Main menu">
-        {TABS.map((m, i) => {
+        {TABS.map((m) => {
           const active = (m.match as readonly string[]).includes(pathname);
           const Icon = m.icon;
           return (
-            <Tooltip key={m.path} label={m.label} kbd={`Alt+${i + 1}`}>
+            <Tooltip key={m.path} label={m.label} kbd={m.kbd}>
               <button
                 onClick={() => nav(m.path)} tabIndex={-1}
                 className={cn(

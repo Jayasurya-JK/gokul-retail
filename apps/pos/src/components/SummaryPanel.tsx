@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ReceiptIndianRupee, Truck, UserRound, UserRoundCheck, X, XCircle } from 'lucide-react';
 import type { BillTotals, CreditNote, Customer, CustomerWallet } from '@gokul/data';
 import type { Delivery } from '../store';
 import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees } from '@gokul/data';
 import { Button, Kbd, Money, cn } from '@gokul/ui';
-import { plural } from '../plural';
 
 function CustStat({ k, v, tone }: { k: string; v: string; tone?: 'warning' }) {
   return (
@@ -15,11 +14,23 @@ function CustStat({ k, v, tone }: { k: string; v: string; tone?: 'warning' }) {
   );
 }
 
-function Row({ label, hint, children, tone }: { label: string; hint?: string; children: React.ReactNode; tone?: 'success' | 'muted' }) {
+/** One shared grid for every money row: label left, input just left of the amount column, amount right. */
+const ROW_GRID = 'grid h-8 grid-cols-[minmax(0,1fr)_104px_88px_20px] items-center gap-x-1.5 text-sm';
+
+function GridRow({ label, hint, onLabel, box, amount, clear, tone }: {
+  label: React.ReactNode; hint?: string; onLabel?: () => void; box?: React.ReactNode; amount: React.ReactNode; clear?: React.ReactNode;
+  tone?: 'success' | 'muted';
+}) {
+  const labelCls = cn('flex min-w-0 items-center gap-1.5 text-left', tone === 'success' ? 'text-success' : 'text-muted');
+  const inner = <><span className="truncate">{label}</span>{hint && <Kbd>{hint}</Kbd>}</>;
   return (
-    <div className="flex items-baseline justify-between py-[3px] text-base">
-      <span className="flex items-center gap-1.5 text-muted">{label}{hint && <Kbd>{hint}</Kbd>}</span>
-      <span className={cn('num font-medium', tone === 'success' && 'text-success', tone === 'muted' && 'text-muted')}>{children}</span>
+    <div className={ROW_GRID}>
+      {onLabel
+        ? <button type="button" tabIndex={-1} onClick={onLabel} className={cn(labelCls, '-mx-1.5 rounded px-1.5 hover:bg-primary-soft hover:text-primary')}>{inner}</button>
+        : <span className={labelCls}>{inner}</span>}
+      <span className="flex min-w-0 justify-end">{box}</span>
+      <span className={cn('num text-right font-medium', tone === 'success' ? 'text-success' : tone === 'muted' ? 'text-muted' : 'text-ink')}>{amount}</span>
+      <span className="flex justify-end">{clear}</span>
     </div>
   );
 }
@@ -51,7 +62,7 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, onCashDisc, onClearCashDisc, delivery, onDelivery, staff, onStaff }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, delivery, onDelivery, staff, onStaff }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
@@ -61,11 +72,13 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   /** Exchange credit carried into this bill, what is left to pay after it, and what goes back to the customer when the bill is smaller */
   exchange: CreditNote | null; exchangeCredit: number; due: number; refundDue: number; onDropExchange: () => void;
   slotLabel?: string; wholesale?: boolean;
-  /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K) */
-  cashDisc: number; cashDiscBps: number; onCashDisc: () => void; onClearCashDisc: () => void;
+  /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K). The box applies a rupee amount or a percent. */
+  cashDisc: number; cashDiscBps: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
   delivery: Delivery; onDelivery: () => void;
   staff: string; onStaff: () => void;
 }) {
+  const cashRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (focusCashDisc > 0) { cashRef.current?.focus(); cashRef.current?.select(); } }, [focusCashDisc]);
   const itemDisc = totals.discount - cashDisc;
   const goods = totals.gross - delivery.charge;
   const pct = goods > 0 && itemDisc > 0 ? Math.round((itemDisc / goods) * 1000) / 10 : 0;
@@ -133,90 +146,78 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
         </div>
       )}
 
-      <div className="mx-4 mt-2 flex shrink-0 items-center justify-between border-b border-line pb-2 text-sm text-muted">
+      <div className="mx-4 mt-1.5 flex shrink-0 items-center justify-between border-b border-line pb-1.5 text-xs text-muted">
         <span>Items <b className="num text-ink">{totals.itemCount}</b></span>
         <span>Quantity <b className="num text-ink">{formatQty(totals.qtyCount, totals.qtyCount % 1000 !== 0)}</b></span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-2">
-        <Row label="Subtotal"><Money paise={goods} /></Row>
-        <div className="flex items-center justify-between gap-2 py-[3px] text-base">
-          <span className={cn('flex items-center gap-1.5', itemDisc ? 'text-success' : 'text-muted')}>
-            {itemDisc ? `Discount ${pct}%` : 'Discount'}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <DiscountBox disabled={empty} onApply={onApplyDiscount} onMore={onDiscount} />
-            <span className={cn('num w-[84px] text-right font-medium', itemDisc ? 'text-success' : 'text-muted')}><Money paise={-itemDisc} /></span>
-            {itemDisc > 0 ? (
-              <button type="button" tabIndex={-1} onClick={onClearDiscount} title="Remove the discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
-            ) : <span className="w-5" />}
-          </span>
-        </div>
-        <div className="flex items-center justify-between py-[3px] text-base">
-          <button
-            type="button" tabIndex={-1} onClick={onCashDisc} title="Cash discount on the whole bill, on top of item discounts (Ctrl+K)"
-            className={cn('-mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-primary-soft hover:text-primary', cashDisc ? 'text-success' : 'text-muted')}
-          >
-            {cashDisc ? `Cash discount ${cashDiscBps / 100}%` : 'Cash discount'} <Kbd>Ctrl+K</Kbd>
-          </button>
-          <span className={cn('num flex items-center gap-1.5 font-medium', cashDisc ? 'text-success' : 'text-muted')}>
-            <Money paise={-cashDisc} />
-            {cashDisc > 0 && (
-              <button type="button" tabIndex={-1} onClick={onClearCashDisc} title="Remove the cash discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
-            )}
-          </span>
-        </div>
-        {delivery.charge > 0 && <Row label="Delivery charge" hint="F2"><Money paise={delivery.charge} /></Row>}
-        <div className="my-2 rounded-lg border border-line bg-surface-2 px-3 py-2">
-          <div className="mb-1 grid grid-cols-[44px_1fr_1fr_1fr] gap-x-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
-            <span>GST</span><span className="text-right">Taxable</span><span className="text-right">CGST</span><span className="text-right">SGST</span>
-          </div>
-          {totals.slabs.length === 0 && <div className="py-0.5 text-sm text-subtle">No tax yet</div>}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-1.5">
+        <GridRow label="Subtotal" amount={<Money paise={goods} />} />
+        <GridRow
+          label={itemDisc ? `Discount ${pct}%` : 'Discount'} tone={itemDisc ? 'success' : undefined}
+          box={<AmountBox disabled={empty} onApply={onApplyDiscount} onEmpty={onDiscount} placeholder="₹ or %" ariaLabel="Discount in rupees, or percent like 5%" />}
+          amount={<Money paise={-itemDisc} />}
+          clear={itemDisc > 0
+            ? <button type="button" tabIndex={-1} onClick={onClearDiscount} title="Remove the discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
+            : undefined}
+        />
+        <GridRow
+          label={cashDisc ? `Cash discount ${cashDiscBps / 100}%` : 'Cash discount'} hint="Ctrl+K" tone={cashDisc ? 'success' : undefined}
+          onLabel={() => { cashRef.current?.focus(); cashRef.current?.select(); }}
+          box={<AmountBox inputRef={cashRef} disabled={empty} onApply={onApplyCashDisc} placeholder="₹ or %" ariaLabel="Cash discount in rupees, or percent like 5%" title="Cash discount on the whole bill, on top of item discounts" />}
+          amount={<Money paise={-cashDisc} />}
+          clear={cashDisc > 0
+            ? <button type="button" tabIndex={-1} onClick={onClearCashDisc} title="Remove the cash discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
+            : undefined}
+        />
+        {delivery.charge > 0 && <GridRow label="Delivery charge" hint="F2" amount={<Money paise={delivery.charge} />} />}
+        <div className="my-1.5 rounded-md border border-line bg-surface-2 px-2 py-1">
+          {totals.slabs.length === 0 && <div className="py-0.5 text-xs text-subtle">No tax yet</div>}
           {totals.slabs.map((s) => (
-            <div key={s.rate} className="grid grid-cols-[44px_1fr_1fr_1fr] gap-x-2 py-0.5 text-sm num">
-              <span className="font-medium text-ink">{s.rate}%</span>
+            <div key={s.rate} className="grid grid-cols-[34px_1fr_1fr_1fr] gap-x-1.5 text-[11px] leading-4 num">
+              <span className="font-semibold text-ink">{s.rate}%</span>
               <span className="text-right text-muted">{formatPaise(s.taxable)}</span>
-              <span className="text-right text-ink">{formatPaise(s.cgst)}</span>
-              <span className="text-right text-ink">{formatPaise(s.sgst)}</span>
+              <span className="text-right text-ink"><span className="text-subtle">C </span>{formatPaise(s.cgst)}</span>
+              <span className="text-right text-ink"><span className="text-subtle">S </span>{formatPaise(s.sgst)}</span>
             </div>
           ))}
         </div>
-        {totals.roundOff !== 0 && <Row label="Round off" tone="muted"><Money paise={totals.roundOff} sign decimals /></Row>}
+        {totals.roundOff !== 0 && <GridRow label="Round off" tone="muted" amount={<Money paise={totals.roundOff} sign decimals />} />}
 
         {exchange && (
-          <div className="mb-3 mt-2 rounded-lg border border-info/30 bg-info-soft px-3 py-2">
-            <div className="flex items-baseline justify-between gap-2 text-sm font-medium text-info">
-              <span className="min-w-0">Exchange credit <span className="text-xs font-normal text-muted">(from <span className="num">{exchange.billNumber}</span>)</span></span>
+          <div className="mb-1.5 mt-1 rounded-md border border-info/30 bg-info-soft px-2.5 py-1.5">
+            <div className="flex items-baseline justify-between gap-2 text-xs font-medium text-info">
+              <span className="min-w-0 truncate">Exchange credit <span className="text-[10px] font-normal text-muted">(from <span className="num">{exchange.billNumber}</span>)</span></span>
               <b className="num shrink-0"><Money paise={exchangeCredit} /></b>
             </div>
-            <div className="mt-1 flex items-baseline justify-between text-sm text-ink">
+            <div className="mt-0.5 flex items-baseline justify-between text-xs text-ink">
               <span className="text-muted">New items</span>
               <b className="num"><Money paise={totals.grand} /></b>
             </div>
-            <div className="mt-1.5 flex items-baseline justify-between border-t border-info/25 pt-1.5">
+            <div className="mt-1 flex items-baseline justify-between border-t border-info/25 pt-1">
               {empty ? (
-                <span className="text-sm text-muted">Add the new items the customer wants</span>
+                <span className="text-xs text-muted">Add the new items the customer wants</span>
               ) : refundDue > 0 ? (
                 <>
-                  <span className="text-sm font-semibold text-warning">Refund to customer</span>
-                  <b className="num text-md text-warning"><Money paise={refundDue} /></b>
+                  <span className="text-xs font-semibold text-warning">Refund to customer</span>
+                  <b className="num text-sm text-warning"><Money paise={refundDue} /></b>
                 </>
               ) : due > 0 ? (
                 <>
-                  <span className="text-sm font-semibold text-ink">Customer pays</span>
-                  <b className="num text-md text-ink"><Money paise={due} /></b>
+                  <span className="text-xs font-semibold text-ink">Customer pays</span>
+                  <b className="num text-sm text-ink"><Money paise={due} /></b>
                 </>
               ) : (
-                <span className="text-sm font-semibold text-success">Credit covers the bill exactly</span>
+                <span className="text-xs font-semibold text-success">Credit covers the bill exactly</span>
               )}
             </div>
-            {refundDue > 0 && !empty && <div className="mt-1 text-xs text-muted">Cash or UPI is chosen in payment. A manager PIN is asked.</div>}
+            {refundDue > 0 && !empty && <div className="mt-0.5 text-[11px] leading-snug text-muted">Cash or UPI is chosen in payment. A manager PIN is asked.</div>}
             <button
               type="button" tabIndex={-1} onClick={onDropExchange}
-              className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-danger/40 bg-surface text-xs font-semibold text-danger transition-colors hover:bg-danger-soft"
+              className="mt-1 flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-danger/40 bg-surface text-[11px] font-semibold text-danger transition-colors hover:bg-danger-soft"
               title="Take only the exchange credit off this bill. The items stay."
             >
-              <XCircle size={14} /> Remove exchange <Kbd>Ctrl+Del</Kbd>
+              <XCircle size={13} /> Remove exchange <Kbd>Ctrl+Del</Kbd>
             </button>
           </div>
         )}
@@ -230,16 +231,13 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             <b className="num">{formatRupees(lastBill.total, { decimals: false })}</b>
           </div>
         )}
-        <div className={cn('rounded-xl px-4 pb-3 pt-2.5 transition-colors', empty ? 'bg-surface-3 text-muted' : 'bg-chrome text-white')}>
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">
-            <span>Grand total</span>
-            <span className="num">{plural(totals.itemCount, 'item')}</span>
-          </div>
-          <div className="num text-right font-semibold leading-[1.05] tracking-tight" style={{ fontSize: 'clamp(40px, 3.6vw, 56px)' }}>
+        <div className={cn('flex items-center justify-between gap-3 rounded-lg px-3.5 py-1.5 transition-colors', empty ? 'bg-surface-3 text-muted' : 'bg-chrome text-white')}>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">Grand total</span>
+          <span className="num font-semibold leading-none tracking-tight" style={{ fontSize: 36 }}>
             <Money paise={totals.grand} softPaise />
-          </div>
+          </span>
         </div>
-        <Button variant="primary" size="lg" block className="mt-2.5 !h-[52px] !text-lg" onClick={onPay} kbd="F12" disabled={empty}>
+        <Button variant="primary" size="lg" block className="mt-2 !h-[48px] !text-base" onClick={onPay} kbd="F12" disabled={empty}>
           Pay now
         </Button>
       </div>
@@ -247,20 +245,26 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   );
 }
 
-/** Discount typed in the panel itself: "50" is rupees, "5%" is percent. Enter applies; the small % / rupee buttons just fill the box. */
-function DiscountBox({ disabled, onApply, onMore }: { disabled?: boolean; onApply: (v: string) => void; onMore: () => void }) {
+/** Discount typed in the panel itself: "50" is rupees, "5%" is percent. Enter or Apply applies it; empty clears it. */
+function AmountBox({ disabled, onApply, onEmpty, placeholder, ariaLabel, title, inputRef }: {
+  disabled?: boolean; onApply: (v: string) => void; onEmpty?: () => void; placeholder: string; ariaLabel: string; title?: string;
+  inputRef?: React.RefObject<HTMLInputElement>;
+}) {
   const [v, setV] = useState('');
-  const go = () => { if (v.trim() !== '') { onApply(v); setV(''); document.querySelector<HTMLInputElement>('[data-scan-input]')?.focus(); } };
+  const go = () => {
+    if (v.trim() !== '') { onApply(v); setV(''); document.querySelector<HTMLInputElement>('[data-scan-input]')?.focus(); }
+    else onEmpty?.();
+  };
   return (
-    <span className={cn('flex h-7 items-center overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20', disabled && 'opacity-50')}>
+    <span className={cn('flex h-7 w-full min-w-0 items-center overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20', disabled && 'opacity-50')}>
       <input
-        value={v} disabled={disabled} inputMode="decimal" placeholder="Rs or %" aria-label="Discount in rupees, or percent like 5%"
+        ref={inputRef} value={v} disabled={disabled} inputMode="decimal" placeholder={placeholder} aria-label={ariaLabel} title={title}
         onChange={(e) => setV(e.target.value.replace(/[^\d.%]/g, ''))}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') { setV(''); (e.target as HTMLInputElement).blur(); } }}
-        className="num h-full w-[74px] bg-transparent px-2 text-right text-sm font-medium text-ink placeholder:font-normal placeholder:text-subtle"
+        className="num h-full min-w-0 flex-1 bg-transparent px-1.5 text-right text-[13px] font-medium text-ink placeholder:font-normal placeholder:text-subtle"
       />
-      <button type="button" tabIndex={-1} disabled={disabled} onClick={() => { if (v.trim()) go(); else onMore(); }} title="Apply the discount (Enter). Empty: open the full discount box (Shift+F5)"
-        className="flex h-full items-center border-l border-line bg-surface-2 px-2 text-xs font-semibold text-primary hover:bg-primary-soft">Apply</button>
+      <button type="button" tabIndex={-1} disabled={disabled} onClick={go} title={title ? `${title} (Enter)` : 'Apply (Enter)'}
+        className="flex h-full shrink-0 items-center border-l border-line bg-surface-2 px-1.5 text-[10px] font-semibold text-primary hover:bg-primary-soft">Apply</button>
     </span>
   );
 }

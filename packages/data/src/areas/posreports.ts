@@ -111,7 +111,9 @@ export function createPosReportsMock(store: MockStore): PosReportsApi {
         });
         const costTotal = lines.reduce((s, l) => s + (l.cost ?? 0), 0);
         return {
-          id: b.id, number: b.number, at: b.at, customerName: b.customerName, staff: b.staff ?? '', cashier: b.cashier, status: b.status,
+          id: b.id, number: b.number, at: b.at, customerName: b.customerName,
+          // No salesman picked (F7): show the cashier who made the bill, never a blank staff cell.
+          staff: b.staff || b.cashier, cashier: b.cashier, status: b.status,
           qty: b.totals.qtyCount, items: b.totals.itemCount, total: b.totals.grand, net: b.totals.taxable, gst: b.totals.gst,
           discount: b.totals.discount, cashDisc: b.cashDisc ?? 0, deliveryCharge: b.deliveryCharge ?? 0, remarks: b.remarks ?? '',
           wholesale: !!b.wholesale, profit: b.totals.taxable - costTotal, lines,
@@ -123,7 +125,7 @@ export function createPosReportsMock(store: MockStore): PosReportsApi {
     paymodeReport: (q) => {
       const { from, to } = range(q);
       const rows: PaymodeRow[] = store.bills.filter((b) => inRange(b, from, to) && (!q?.staff || b.staff === q.staff)).slice().reverse().slice(0, 5000).map((b) => ({
-        id: b.id, number: b.number, at: b.at, customerName: b.customerName, staff: b.staff ?? '', total: b.totals.grand,
+        id: b.id, number: b.number, at: b.at, customerName: b.customerName, staff: b.staff || b.cashier, total: b.totals.grand,
         cash: mode(b, 'cash'), upi: mode(b, 'upi'), card: mode(b, 'card'), credit: mode(b, 'credit'),
         wallet: mode(b, 'credit_note'), points: mode(b, 'points'), sodexo: mode(b, 'sodexo'),
       }));

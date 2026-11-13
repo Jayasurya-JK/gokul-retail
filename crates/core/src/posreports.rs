@@ -91,6 +91,10 @@ pub fn sales_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
         let id: i64 = r.get(0)?;
         let (qty, grand, taxable, gst, disc): (i64, i64, i64, i64, i64) = (r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?);
         let cost_total: i64 = r.get(17)?;
+        // No salesman was picked (F7) on the bill: the person at the counter who made it is the staff shown.
+        let staff: String = r.get(4)?;
+        let cashier: String = r.get(5)?;
+        let staff = if staff.trim().is_empty() { cashier.clone() } else { staff };
         let profit = taxable - cost_total;
         let lines = lines_st
             .query_map([id], |l| {
@@ -111,7 +115,7 @@ pub fn sales_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
         t_profit += profit;
         rows.push(json!({
             "id": format!("b{id}"), "number": r.get::<_, String>(1)?, "at": r.get::<_, String>(2)?, "customerName": r.get::<_, String>(3)?,
-            "staff": r.get::<_, String>(4)?, "cashier": r.get::<_, String>(5)?, "status": r.get::<_, String>(6)?,
+            "staff": staff, "cashier": cashier, "status": r.get::<_, String>(6)?,
             "qty": qty, "total": grand, "net": taxable, "gst": gst, "discount": disc, "cashDisc": r.get::<_, i64>(12)?,
             "deliveryCharge": r.get::<_, i64>(13)?, "remarks": r.get::<_, String>(14)?, "items": r.get::<_, i64>(15)?,
             "wholesale": r.get::<_, i64>(16)? != 0, "profit": profit, "lines": lines,
@@ -128,7 +132,7 @@ pub fn sales_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
 pub fn paymode_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
     let (from, to) = range(q);
     let mut st = conn.prepare(
-        "SELECT b.id,b.number,b.at,b.customer_name,b.staff,b.grand,
+        "SELECT b.id,b.number,b.at,b.customer_name,b.staff,b.cashier,b.grand,
            COALESCE(SUM(CASE WHEN p.mode='cash' THEN p.amount END),0),
            COALESCE(SUM(CASE WHEN p.mode='upi' THEN p.amount END),0),
            COALESCE(SUM(CASE WHEN p.mode='card' THEN p.amount END),0),
@@ -145,13 +149,16 @@ pub fn paymode_report(conn: &Connection, q: &ReportQuery) -> Result<Value> {
     let mut tot = [0i64; 8];
     let mut rs = st.query(params![from, to, staff])?;
     while let Some(r) = rs.next()? {
-        let amounts: Vec<i64> = (5..13).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<_>>()?;
+        let amounts: Vec<i64> = (6..14).map(|i| r.get::<_, i64>(i)).collect::<rusqlite::Result<_>>()?;
         for (t, a) in tot.iter_mut().zip(&amounts) {
             *t += a;
         }
+        let staff: String = r.get(4)?;
+        let cashier: String = r.get(5)?;
+        let staff = if staff.trim().is_empty() { cashier } else { staff };
         rows.push(json!({
             "id": format!("b{}", r.get::<_, i64>(0)?), "number": r.get::<_, String>(1)?, "at": r.get::<_, String>(2)?,
-            "customerName": r.get::<_, String>(3)?, "staff": r.get::<_, String>(4)?,
+            "customerName": r.get::<_, String>(3)?, "staff": staff,
             "total": amounts[0], "cash": amounts[1], "upi": amounts[2], "card": amounts[3], "credit": amounts[4],
             "wallet": amounts[5], "points": amounts[6], "sodexo": amounts[7],
         }));

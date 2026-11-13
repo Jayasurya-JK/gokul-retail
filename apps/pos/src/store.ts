@@ -145,21 +145,21 @@ function makeBillingStore() {
 }
 
 /**
- * Three independent bills: the main Point of Sale tab and the parallel POS1 and POS2 tabs. Each keeps its own lines,
- * customer, discounts, staff and delivery while another tab is in front.
+ * Two independent bills: the main Point of Sale tab and POS 1. Each keeps its own lines, customer, discounts, staff and
+ * delivery while the other tab is in front.
  */
-export const billingStores = { pos: makeBillingStore(), pos1: makeBillingStore(), pos2: makeBillingStore() };
+export const billingStores = { pos: makeBillingStore(), pos1: makeBillingStore() };
 export type BillSlot = keyof typeof billingStores;
-export const SLOTS: BillSlot[] = ['pos', 'pos1', 'pos2'];
-export const SLOT_LABEL: Record<BillSlot, string> = { pos: 'Point of Sale', pos1: 'POS1', pos2: 'POS2' };
+export const SLOTS: BillSlot[] = ['pos', 'pos1'];
+export const SLOT_LABEL: Record<BillSlot, string> = { pos: 'Point of Sale', pos1: 'POS 1' };
 /** The main bill (the Customers screen starts a bill here) */
 export const useBilling = billingStores.pos;
-/** Lines open across all three bills (the lock screen warns about them) */
+
+/** Lines open across both bills (the lock screen warns about them) */
 export function useOpenLines(): number {
   const a = billingStores.pos((s) => s.lines.length);
   const b = billingStores.pos1((s) => s.lines.length);
-  const c = billingStores.pos2((s) => s.lines.length);
-  return a + b + c;
+  return a + b;
 }
 
 /* ---------- today's sales (status bar) ---------- */

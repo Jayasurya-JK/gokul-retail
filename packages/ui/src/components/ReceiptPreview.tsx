@@ -102,7 +102,7 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
   return (
     <div
       className={cn(
-        'relative mx-auto w-[302px] select-text overflow-hidden bg-white px-4 py-5 font-mono text-[11.5px] leading-[1.45] text-neutral-900 shadow-pop',
+        'relative mx-auto w-[302px] shrink-0 select-text overflow-hidden bg-white px-4 py-5 font-mono text-[11.5px] leading-[1.45] text-neutral-900 shadow-pop',
         className,
       )}
       style={{ clipPath: 'polygon(0 0,100% 0,100% calc(100% - 6px),97% 100%,94% calc(100% - 6px),91% 100%,88% calc(100% - 6px),85% 100%,82% calc(100% - 6px),79% 100%,76% calc(100% - 6px),73% 100%,70% calc(100% - 6px),67% 100%,64% calc(100% - 6px),61% 100%,58% calc(100% - 6px),55% 100%,52% calc(100% - 6px),49% 100%,46% calc(100% - 6px),43% 100%,40% calc(100% - 6px),37% 100%,34% calc(100% - 6px),31% 100%,28% calc(100% - 6px),25% 100%,22% calc(100% - 6px),19% 100%,16% calc(100% - 6px),13% 100%,10% calc(100% - 6px),7% 100%,4% calc(100% - 6px),1% 100%,0 calc(100% - 6px))' }}

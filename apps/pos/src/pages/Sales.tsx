@@ -399,13 +399,16 @@ export function Sales() {
             )}
           </div>
           {showReceipt && settings && (!showingNotes || selNote) && (
-            <aside className="flex w-[340px] shrink-0 flex-col overflow-y-auto border-l border-line bg-surface-3 px-3 py-4">
-              <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
+            <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden border-l border-line bg-surface-3 px-3 pt-3">
+              <div className="mb-2 shrink-0 text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
                 {showingNotes ? 'Credit note preview - 80 mm' : 'Receipt preview - 80 mm'}
               </div>
-              {showingNotes
-                ? selNote && <ReceiptPreview data={noteReceipt(selNote)} settings={settings} shop={receiptCfg} />
-                : detail && <ReceiptPreview data={{ ...billReceipt(detail, receiptCfg), ...walletBits }} settings={settings} shop={receiptCfg} />}
+              {/* The whole receipt scrolls inside this panel; the torn bottom edge stays after the last line. */}
+              <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+                {showingNotes
+                  ? selNote && <ReceiptPreview data={noteReceipt(selNote)} settings={settings} shop={receiptCfg} />
+                  : detail && <ReceiptPreview data={{ ...billReceipt(detail, receiptCfg), ...walletBits }} settings={settings} shop={receiptCfg} />}
+              </div>
             </aside>
           )}
         </section>

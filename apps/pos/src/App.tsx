@@ -31,7 +31,6 @@ export function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/billing" element={<Guard><Billing slot="pos" /></Guard>} />
             <Route path="/pos1" element={<Guard><Billing slot="pos1" /></Guard>} />
-            <Route path="/pos2" element={<Guard><Billing slot="pos2" /></Guard>} />
             <Route path="/reports/sales" element={<Guard><SalesReportPage /></Guard>} />
             <Route path="/reports/paymode" element={<Guard><PaymodeReportPage /></Guard>} />
             <Route path="/reports/stock" element={<Guard><StockPage /></Guard>} />
