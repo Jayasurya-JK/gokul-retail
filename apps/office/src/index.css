@@ -13,10 +13,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Print: only the mill sheet paper leaves the screen (Print / Save as PDF in the preview). */
+/* Print: only the paper leaves the screen (Print / Save as PDF in the preview). On screen the paper sits inside a
+   Dialog; in print we drop the app shell and the dialog chrome so the paper starts at the page top and can run
+   onto further pages (a long count sheet, for example) instead of being clipped by the dialog's fixed height. */
 @media print {
+  html, body, #root { height: auto !important; overflow: visible !important; }
+  /* Radix dialogs portal into <body>, so hiding the app root leaves only the print preview. */
+  #root { display: none !important; }
   body * { visibility: hidden !important; }
   .print-area, .print-area * { visibility: visible !important; }
-  .print-area { position: absolute; left: 0; top: 0; width: 100% !important; padding: 12mm !important; box-shadow: none !important; }
+  .g-overlay { position: static !important; display: block !important; background: none !important; }
+  .g-dialog {
+    position: static !important; display: block !important; width: auto !important;
+    max-height: none !important; max-width: none !important; overflow: visible !important; box-shadow: none !important;
+  }
+  .g-dialog > div { display: block !important; overflow: visible !important; padding: 0 !important; }
+  .g-dialog > [data-dialog-chrome] { display: none !important; }
+  .print-area { position: static !important; width: 100% !important; margin: 0 !important; padding: 12mm !important; box-shadow: none !important; }
+  /* Stock take: keep each supplier block on one page where it fits, break between groups when it does not,
+     and repeat the column header on every page a long block spills onto. */
+  .print-area .sheet-supplier { break-inside: avoid; page-break-inside: avoid; }
+  .print-area .sheet-supplier thead { display: table-header-group; }
+  .print-area .sheet-supplier tr { break-inside: avoid; page-break-inside: avoid; }
   @page { size: A4; margin: 0; }
 }

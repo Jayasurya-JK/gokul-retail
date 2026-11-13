@@ -85,8 +85,13 @@ export interface StockTakeLine {
   unit: UnitCode;
   loose: boolean;
   category: string;
+  /** System quantity at the time the sheet was started. Blind counts must not print or show this to the counter staff. */
   system: Milli;
   cost: Paise;
+  /** Selling price per unit, GST inclusive (the Price column on the count sheet). */
+  price: Paise;
+  supplierId?: string;
+  supplier?: string;
 }
 export interface StockTakeCount { itemId: string; counted: Milli }
 export interface StockTakeResult { adjusted: number; unchanged: number; netValue: Paise }
@@ -415,6 +420,7 @@ export function createCatalogMock(store: MockStore): CatalogApi {
     startStockTake: async (categoryId) =>
       items.filter((i) => i.active && (categoryId === 'all' || i.categoryId === categoryId)).map((i) => ({
         itemId: i.id, code: i.code, name: i.name, unit: i.unit, loose: i.loose, category: i.category, system: i.stock, cost: i.cost,
+        price: i.price, supplierId: i.supplierId, supplier: i.supplier,
       })),
     postStockTake: async (counts, note) => {
       let adjusted = 0; let unchanged = 0; let netValue = 0;

@@ -63,7 +63,7 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
             'flex flex-col overflow-hidden rounded-card bg-surface shadow-overlay', dialogSizes[size],
           )}
         >
-          <div className={cn('flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-3', hideHeader && 'sr-only')}>
+          <div data-dialog-chrome className={cn('flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-3', hideHeader && 'sr-only')}>
             <div className="min-w-0">
               <RDialog.Title className="text-md font-semibold text-ink">{title}</RDialog.Title>
               {description && <RDialog.Description className="mt-0.5 text-sm text-muted">{description}</RDialog.Description>}
@@ -73,7 +73,7 @@ export function Dialog({ open, onOpenChange, title, description, size = 'md', fo
             </RDialog.Close>
           </div>
           <div className={cn('min-h-0 flex-1 overflow-auto', bodyClassName ?? 'p-5')}>{children}</div>
-          {footer && <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-surface-2 px-5 py-3">{footer}</div>}
+          {footer && <div data-dialog-chrome className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-surface-2 px-5 py-3">{footer}</div>}
         </RDialog.Content>
         </RDialog.Overlay>
       </RDialog.Portal>

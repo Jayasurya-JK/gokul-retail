@@ -15,3 +15,4 @@ Fix by: Haiku or Sonnet. Commit: the commit hash once the lead commits the work 
 | T05 pressing + transfer | tasks/T05-pressing-transfer.md | wip/r6 | flash | logs/T05-* | done | 4 files, checks clean, old MoveToBarrel UI retired (backend kept). Godown barrel required on pressing - confirm with owner. | - | |
 | T06 mill daily (read-only) | tasks/T06-mill-daily.md | wip/r6 | flash | logs/T06-* | gate-passed | typecheck 0; full review at end of batch. | - | |
 | T07-insights | tasks/T07-insights.md | wip/r6 | flash | logs/T07-insights-* | gate-passed | typecheck+lint 0; full review at end. | - | |
+| T08-blind-stocktake | tasks/T08-blind-stocktake.md | wip/r6 | flash | logs/T08-blind-stocktake-* | gate-passed | typecheck+lint 0; full review at end. | - | |
