@@ -799,7 +799,7 @@ fn oil_item_id(conn: &Connection, oil_name: &str) -> Result<String> {
 
 const BATCH_SELECT: &str = "SELECT b.id,b.number,b.at,b.seed,b.seed_g,b.cleaning_loss_g,b.jaggery_g,b.oil_raw_ml,b.cake_g,b.chekku,b.operator,
     b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on,b.machine,
-    b.godown_barrel_id,gb.label
+    b.godown_barrel_id,gb.label,b.seed_cost_per_kg,b.jaggery_cost,b.source
     FROM pressing_batches b LEFT JOIN barrels br ON br.id=b.barrel_id LEFT JOIN godown_barrels gb ON gb.id=b.godown_barrel_id";
 
 fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -828,6 +828,7 @@ fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "clearOilL": r.get::<_, Option<i64>>(14)?, "sedimentL": r.get::<_, Option<i64>>(15)?, "barrelId": barrel,
         "barrelLabel": r.get::<_, Option<String>>(17)?, "movedOn": r.get::<_, Option<String>>(18)?, "machine": r.get::<_, String>(19)?,
         "godownBarrelId": godown, "godownBarrelLabel": r.get::<_, Option<String>>(21)?, "normKgPerL": kg_per_l, "oilKgPerL": density,
+        "seedCostPerKg": r.get::<_, Option<i64>>(22)?, "jaggeryCost": r.get::<_, Option<i64>>(23)?, "source": r.get::<_, String>(24)?,
         "metrics": pressing_metrics(seed_g, clean, jag, oil, cake, kg_per_l, density),
     }))
 }
@@ -947,6 +948,15 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
         None => None,
     };
     let norm = seed_norm(tx, &d.seed);
+    // The seed price and jaggery cost of the day, stamped so cost per litre uses the last purchase price.
+    let seed_cost: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [base.rm], |r| r.get(0))?;
+    let jaggery_cost: i64 = match &jaggery_id {
+        Some(j) => {
+            let c: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [j], |r| r.get(0))?;
+            (c * d.jaggery_kg + 500) / 1000
+        }
+        None => 0,
+    };
     let fy = fy_of(now);
     let seq = next_seq(tx, PRESS_SERIES, &fy)?;
     let number = doc_number("PB", &fy, seq);
@@ -960,6 +970,7 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
         ],
     )?;
     let bid = tx.last_insert_rowid();
+    tx.execute("UPDATE pressing_batches SET seed_cost_per_kg=?1, jaggery_cost=?2 WHERE id=?3", params![seed_cost, jaggery_cost, bid])?;
     let at = iso(now);
     if let Some(g) = &godown {
         tx.execute("UPDATE pressing_batches SET godown_barrel_id=?1 WHERE id=?2", params![g, bid])?;

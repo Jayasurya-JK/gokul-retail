@@ -341,6 +341,11 @@ export interface PressingBatch extends PressingInput {
   /** Norm in force when it was pressed: kg of clean seed per litre, and kg per litre of the oil */
   normKgPerL?: number;
   oilKgPerL?: number;
+  /** Seed price per kg and jaggery cost stamped when pressed (paise). Absent on batches pressed before the stamp existed */
+  seedCostPerKg?: Paise | null;
+  jaggeryCost?: Paise | null;
+  /** entry = typed in Production, legacy-sheet = moved from an old manual mill sheet */
+  source?: 'entry' | 'legacy-sheet';
   metrics: PressingMetrics;
 }
 
