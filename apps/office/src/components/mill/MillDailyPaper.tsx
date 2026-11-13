@@ -1,4 +1,4 @@
-import { formatRupees, type MillDaily, type MillDailyBarrel } from '@gokul/data';
+import { formatRupees, type MillDaily, type MillDailyBarrel, type MillDay } from '@gokul/data';
 import { fmtQty, longDay } from './millUtil';
 import { activeOils, fmtNum, millPressingRows, rowLitresPer100, signed, sumBarrels, sumPressing, STATUS_LABEL } from './millDaily';
 
@@ -12,7 +12,8 @@ const empty = (cols: number, text: string) => <tr><td className={`${td} text-neu
  * The auto-filled mill day in the layout of the owner's paper form, black on white. Used only for printing;
  * every number on it was entered in Production, nothing is typed here.
  */
-export function MillDailyPaper({ data, shop }: { data: MillDaily; shop: string }) {
+export function MillDailyPaper({ data, shop, info }: { data: MillDaily; shop: string; info?: MillDay | null }) {
+  const counted = (info?.stock ?? []).filter((l) => l.physical !== null && l.group !== 'oil');
   const rows = millPressingRows(data);
   const press = sumPressing(rows);
   const pressPer100 = press.seedKg > press.cleaningKg ? (press.oilL * 100) / (press.seedKg - press.cleaningKg) : null;
@@ -30,11 +31,11 @@ export function MillDailyPaper({ data, shop }: { data: MillDaily; shop: string }
       <div className="flex items-start justify-between border-b-2 border-black pb-2">
         <div>
           <div className="text-[18px] font-bold tracking-wide">{shop.toUpperCase()}</div>
-          <div className="text-[12px]">Mill daily sheet</div>
+          <div className="text-[12px]">Mill day sheet</div>
         </div>
         <div className="text-right text-[12px]">
           <div className="font-semibold">{longDay(data.day)}</div>
-          <div className="text-[11px]">Filled from the Production entries - view only</div>
+          <div className="text-[11px]">Filled from the Production entries{info?.supervisor ? ` - Supervisor: ${info.supervisor}` : ''}</div>
         </div>
       </div>
 
@@ -182,10 +183,43 @@ export function MillDailyPaper({ data, shop }: { data: MillDaily; shop: string }
             )}
           </tbody>
         </table>
+
+        <h2 className={h2}>6. Oil cake (punnaku), kg</h2>
+        <table className="w-full border-collapse">
+          <thead><tr><th className={th}>Cake</th><th className={`${th} ${num}`}>Opening</th><th className={`${th} ${num}`}>Made</th><th className={`${th} ${num}`}>Sold</th><th className={`${th} ${num}`}>Other</th><th className={`${th} ${num}`}>Closing</th></tr></thead>
+          <tbody>
+            {data.cake.length === 0 && empty(6, 'No oil cake movement today.')}
+            {data.cake.map((c) => (
+              <tr key={c.key}>
+                <td className={td}>{c.label}</td><td className={`${td} ${num}`}>{fmtQty(c.opening)}</td><td className={`${td} ${num}`}>{c.made ? fmtQty(c.made) : '-'}</td>
+                <td className={`${td} ${num}`}>{c.sold ? fmtQty(c.sold) : '-'}</td><td className={`${td} ${num}`}>{c.other ? fmtQty(c.other) : '-'}</td>
+                <td className={`${td} ${num} font-semibold`}>{fmtQty(c.closing)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </>}
 
+      {counted.length > 0 && (
+        <>
+          <h2 className={h2}>7. Evening count</h2>
+          <table className="w-full border-collapse">
+            <thead><tr><th className={th}>Stock</th><th className={`${th} ${num}`}>Books say</th><th className={`${th} ${num}`}>Counted</th><th className={`${th} ${num}`}>Difference</th></tr></thead>
+            <tbody>
+              {counted.map((l) => (
+                <tr key={l.key}>
+                  <td className={td}>{l.label} ({l.unit})</td><td className={`${td} ${num}`}>{fmtQty(l.computed)}</td><td className={`${td} ${num}`}>{fmtQty(l.physical)}</td>
+                  <td className={`${td} ${num} font-semibold`}>{(l.variance ?? 0) === 0 ? 'matches' : signed(l.variance ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {info?.note && <div className="mt-3 text-[11px]">Note: {info.note}</div>}
+
       <div className="mt-10 flex justify-between text-[12px]">
-        <div className="w-56 border-t border-black pt-1">Supervisor</div>
+        <div className="w-56 border-t border-black pt-1">Supervisor{info?.supervisor ? `: ${info.supervisor}` : ''}</div>
         <div className="w-56 border-t border-black pt-1">Owner / manager</div>
       </div>
     </div>

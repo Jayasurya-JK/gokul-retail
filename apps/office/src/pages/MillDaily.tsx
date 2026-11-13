@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Eye, Factory, Printer } from 'lucide-react';
-import { formatRupees, type GodownStatus, type MillDaily } from '@gokul/data';
+import { CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Factory, FileClock, Lock, Printer } from 'lucide-react';
+import { formatRupees, type GodownStatus, type MillDaily, type MillDay } from '@gokul/data';
 import { Badge, Button, Card, Dialog, EmptyState, PageHeader, StatTile, cn, useRefreshOnFocus, type Tone } from '@gokul/ui';
 import { api } from '../store';
 import { isoDay } from '../components/crm/common';
@@ -9,6 +9,8 @@ import {
   STATUS_LABEL, activeOils, fmtNum, hasMillData, millPressingRows, rowLitresPer100, signed, sumBarrels, sumPressing,
 } from '../components/mill/millDaily';
 import { MillDailyPaper } from '../components/mill/MillDailyPaper';
+import { CountDialog } from '../components/mill/CountDialog';
+import { OldSheets } from '../components/mill/OldSheets';
 
 const statusTone: Record<GodownStatus, Tone> = { empty: 'neutral', filling: 'info', settling: 'warning', ready: 'success' };
 const shiftDay = (day: string, n: number) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + n); return isoDay(d); };
@@ -18,8 +20,8 @@ const num = 'text-right tabular-nums';
 const totalRow = 'border-t-2 border-line bg-surface-2 font-semibold';
 
 /**
- * The mill day as a report only: every number comes from what the operators already entered in Production.
- * Nothing can be typed here, and printing gives the owner's paper sheet.
+ * The mill day sheet: an automatic record, every number comes from what was already entered in Production and the Godown.
+ * Only the supervisor's name, a note and the optional evening count are typed (Count and close). Printing gives the paper sheet.
  */
 export function MillDailyPage() {
   const today = isoDay(new Date());
@@ -28,12 +30,16 @@ export function MillDailyPage() {
   const [shop, setShop] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
+  const [info, setInfo] = useState<MillDay | null>(null);
+  const [counting, setCounting] = useState(false);
+  const [old, setOld] = useState(false);
 
   useEffect(() => { void api.getSettings().then((s) => setShop(s.shopName)).catch(() => undefined); }, []);
 
   const load = useCallback(() => {
     void api.getMillDaily(day).then((d) => { setData(d); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the mill day'));
+    void api.getMillDay(day).then(setInfo).catch(() => setInfo(null));
   }, [day]);
   useEffect(() => { setData(null); load(); }, [load]);
   useRefreshOnFocus(load);
@@ -41,6 +47,7 @@ export function MillDailyPage() {
   useEffect(() => {
     const h = (e: globalThis.KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'p') { e.preventDefault(); setPreview(true); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'k' && e.shiftKey) { e.preventDefault(); setCounting(true); }
       else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); setDay((d) => shiftDay(d, -1)); }
       else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); setDay((d) => (d < today ? shiftDay(d, 1) : d)); }
       else if (preview && e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') { e.preventDefault(); window.print(); }
@@ -64,7 +71,7 @@ export function MillDailyPage() {
   return (
     <>
       <PageHeader
-        title="Mill daily sheet" icon={<ClipboardList size={17} />} subtitle={`${shop} - ${longDay(day)}`}
+        title="Mill day sheet" icon={<ClipboardList size={17} />} subtitle={`${shop} - ${longDay(day)}`}
         actions={
           <>
             <div className="flex items-center rounded-control border border-line-strong bg-surface">
@@ -72,12 +79,25 @@ export function MillDailyPage() {
               <label className="flex items-center gap-1.5 px-1 text-sm text-ink"><CalendarDays size={14} className="text-subtle" /><input type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} className="num h-9 w-[130px] bg-transparent text-sm outline-none" /></label>
               <button type="button" tabIndex={-1} disabled={day >= today} onClick={() => setDay(shiftDay(day, 1))} className="flex h-9 w-8 items-center justify-center text-muted hover:text-ink disabled:opacity-30" aria-label="Day after"><ChevronRight size={16} /></button>
             </div>
-            <Badge tone="info"><Eye size={11} /> View only</Badge>
+            {info?.status === 'closed' ? <Badge tone="success"><Lock size={11} /> Closed</Badge> : <Badge tone="info">Open</Badge>}
+            <Button icon={<FileClock size={15} />} onClick={() => setOld(true)}>Old sheets</Button>
+            <Button icon={<Lock size={15} />} onClick={() => setCounting(true)} kbd="Ctrl+Shift+K">{info?.status === 'closed' ? 'View count' : 'Count and close'}</Button>
             <Button icon={<Printer size={15} />} kbd="Ctrl+P" onClick={() => setPreview(true)}>Print</Button>
           </>
         }
       />
       {error && <div className="shrink-0 border-b border-danger/30 bg-danger-soft px-5 py-2 text-sm text-danger" role="alert">{error}</div>}
+
+      {info && (info.supervisor || info.note || info.stock.some((l) => l.physical !== null) || info.status === 'closed') && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-line bg-surface px-5 py-1.5 text-xs text-muted">
+          {info.supervisor && <span>Supervisor <span className="font-medium text-ink">{info.supervisor}</span></span>}
+          {info.stock.some((l) => l.physical !== null) && (
+            <span>Count: <span className="font-medium text-ink">{info.stock.filter((l) => l.physical !== null).length} lines counted</span>, {info.stock.filter((l) => (l.variance ?? 0) !== 0).length} with a difference</span>
+          )}
+          {info.note && <span className="truncate">Note: <span className="text-ink">{info.note}</span></span>}
+          {info.status === 'closed' && <span>Closed by <span className="font-medium text-ink">{info.closedBy}</span></span>}
+        </div>
+      )}
 
       {data && (
         <div className="grid shrink-0 grid-cols-6 gap-2 border-b border-line bg-bg px-4 py-2">
@@ -341,16 +361,43 @@ export function MillDailyPage() {
                 </tbody>
               </table>
             </Card>
+
+            <Card title={<Sec n={6} t="Oil cake (punnaku)" hint="kg. Made by the press, sold and the closing balance" />}>
+              <table className="w-full table-fixed">
+                <thead>
+                  <tr>
+                    <th className={cn(th, 'w-[210px]')}>Cake</th>
+                    {['Opening', 'Made', 'Sold', 'Other', 'Closing'].map((h) => <th key={h} className={cn(th, 'text-right')}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.cake.length === 0 && <tr><td colSpan={6} className="px-2 py-3 text-sm text-subtle">No oil cake movement today.</td></tr>}
+                  {data.cake.map((c) => (
+                    <tr key={c.key}>
+                      <td className={cn(td, 'font-medium')}>{c.label}</td>
+                      <td className={cn(td, num)}>{fmtQty(c.opening)}</td>
+                      <td className={cn(td, num)}>{c.made ? fmtQty(c.made) : '-'}</td>
+                      <td className={cn(td, num)}>{c.sold ? fmtQty(c.sold) : '-'}</td>
+                      <td className={cn(td, num)}>{c.other ? fmtQty(c.other) : '-'}</td>
+                      <td className={cn(td, num, 'font-semibold')}>{fmtQty(c.closing)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
           </div>
         )}
       </div>
+
+      <CountDialog open={counting} day={day} info={info} onClose={() => setCounting(false)} onChanged={(d) => { setInfo(d); load(); }} />
+      <OldSheets open={old} onClose={() => setOld(false)} onMoved={load} />
 
       <Dialog
         open={preview} onOpenChange={setPreview} size="xl" title="Print preview" description="The day at the mill on one A4 sheet. Choose Save as PDF in the print window to keep a copy."
         bodyClassName="bg-neutral-300 p-4"
         footer={<><Button onClick={() => setPreview(false)} kbd="Esc">Close</Button><Button variant="primary" icon={<Printer size={15} />} onClick={() => window.print()} kbd="Enter">Print or save as PDF</Button></>}
       >
-        {data && <MillDailyPaper data={data} shop={shop} />}
+        {data && <MillDailyPaper data={data} shop={shop} info={info} />}
       </Dialog>
     </>
   );
