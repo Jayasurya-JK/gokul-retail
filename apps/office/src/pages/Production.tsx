@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, Factory, Flame, PackageOpen, Plus, SlidersHorizontal } from 'lucide-react';
+import { ArrowRightLeft, Factory, Flame, PackageOpen, Plus, SlidersHorizontal, Warehouse } from 'lucide-react';
 import { type Barrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
@@ -8,6 +8,7 @@ import { api } from '../store';
 import { PressingForm, MoveToBarrelDialog } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
 import { NormsEditor } from '../components/purchasing/NormsEditor';
+import { GodownPane } from '../components/purchasing/GodownPane';
 import {
   BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, gradeTone, phaseInfo, SectionLabel, seedColor, useKeys,
 } from '../components/purchasing/common';
@@ -241,7 +242,7 @@ export function Production() {
       <PageHeader
         title="Production" icon={<Factory size={17} />}
         subtitle={`${month.n} pressing batches in 30 days, ${fmtMilli(month.oil, 0)} L oil from ${fmtMilli(month.seed, 0)} kg seed`}
-        actions={tab === 'norms' ? undefined : (
+        actions={tab === 'norms' || tab === 'godown' ? undefined : (
           <Button variant="primary" icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'New pressing batch' : 'New packing run'}</Button>
         )}
       />
@@ -260,6 +261,7 @@ export function Production() {
         value={tab} onValueChange={setTab} className="min-h-0 flex-1"
         tabs={[
           { value: 'pressing', label: <><Flame size={14} />Pressing</>, count: batches.length },
+          { value: 'godown', label: <><Warehouse size={14} />Godown</> },
           { value: 'packing', label: <><PackageOpen size={14} />Packing</>, count: runs.length },
           { value: 'norms', label: <><SlidersHorizontal size={14} />Norms</> },
         ]}
@@ -278,6 +280,9 @@ export function Production() {
             />
             {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onMove={() => setMoving(batch)} />}
           </div>
+        </TabPanel>
+        <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
+          <GodownPane />
         </TabPanel>
         <TabPanel value="packing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <FilterBar trailing={<span>{runs.length} packing runs</span>}>

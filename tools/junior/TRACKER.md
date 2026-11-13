@@ -9,3 +9,5 @@ Fix by: Haiku or Sonnet. Commit: the commit hash once the lead commits the work 
 |------|------|--------|-------|---------|--------|----------------|-----------------------|--------|
 | selftest | tools/junior/tasks/selftest.md | wip/r6 | flash | tools/junior/logs/selftest-20261113-173637.jsonl (not tracked) | done | Tooling check: data/import/REPORT.md read was DENIED; CLAUDE.md read OK; 3 turns. | - | - |
 | T01 fix typecheck | tasks/T01-fix-typecheck.md | wip/r6 | flash | logs/T01-fix-typecheck-20261113-174643 | done | 1st run failed (runner context bloat, fixed). 2nd run: 3 files/10 lines, typecheck 0, lint clean, tests ok (known flake). Reviewed by lead. | - | (this commit) |
+| T02 gap audit | tasks/T02-r6-gap-audit.md | wip/r6 | flash | logs/T02-* | done | Report reports/R6-gap.md: billing A1-A10 done, production B1-B9 UI missing. | - | |
+| T03 godown tab | tasks/T03-godown-tab.md | wip/r6 | flash | logs/T03-* | done | 2 files, typecheck 0, lint clean; visual check pending in final pass. | - | |
