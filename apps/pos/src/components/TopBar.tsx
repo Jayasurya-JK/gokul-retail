@@ -1,27 +1,41 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeftRight, BarChart3, ChevronDown, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, Receipt, ReceiptText, ShieldCheck, ShoppingCart, Undo2, UserRound, Users, Wallet,
-} from 'lucide-react';
+import { ArrowLeftRight, BarChart3, ChevronDown, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShieldCheck, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
 import { Kbd, Logo, Tooltip, cn } from '@gokul/ui';
 import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
-import { DropMenu } from './BillToolbar';
+import { DropMenu, type MenuEntry } from './BillToolbar';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** The window's tabs: the three bills first, then the reports and the customer list. Returns, Expenses and Day close live under "More". */
-const MENU = [
+/* The top bar always shows names. Four tabs stay in the bar; the less used reports and lists sit in the More menu, labelled.
+   Alt+1..8 reach every one of them (the key is shown beside each name). */
+const TABS = [
   { label: 'Point of Sale', path: '/billing', icon: ShoppingCart, match: ['/billing'] },
-  { label: 'POS1', path: '/pos1', icon: ReceiptText, match: ['/pos1'] },
-  { label: 'POS2', path: '/pos2', icon: ReceiptText, match: ['/pos2'] },
-  { label: 'Bills', path: '/sales', icon: Receipt, match: ['/sales', '/history'] },
-  { label: 'Sales Report', path: '/reports/sales', icon: BarChart3, match: ['/reports/sales'] },
-  { label: 'Paymode Report', path: '/reports/paymode', icon: CreditCard, match: ['/reports/paymode'] },
-  { label: 'Stock', path: '/reports/stock', icon: Package, match: ['/reports/stock'] },
-  { label: 'Customer Profile', path: '/customers', icon: Users, match: ['/customers'] },
+  { label: 'POS1', path: '/pos1', icon: ReceiptIndianRupee, match: ['/pos1'] },
+  { label: 'POS2', path: '/pos2', icon: ReceiptIndianRupee, match: ['/pos2'] },
+  { label: 'Bills', path: '/sales', icon: ReceiptIndianRupee, match: ['/sales', '/history'] },
 ] as const;
+
+interface MoreItem { label: string; path?: string; kbd?: string; icon: LucideIcon; match: string[]; divider?: boolean }
+
+/** The More menu. Items without a path are actions (Keyboard shortcuts opens the F1 sheet). */
+const MORE: MoreItem[] = [
+  { label: 'Sales Report', path: '/reports/sales', kbd: 'Alt+5', icon: BarChart3, match: ['/reports/sales'] },
+  { label: 'Paymode Report', path: '/reports/paymode', kbd: 'Alt+6', icon: CreditCard, match: ['/reports/paymode'] },
+  { label: 'Stock', path: '/reports/stock', kbd: 'Alt+7', icon: Package, match: ['/reports/stock'] },
+  { label: 'Customer Profile', path: '/customers', kbd: 'Alt+8', icon: UserRound, match: ['/customers'] },
+  { label: 'Returns and exchange', path: '/returns', kbd: 'F10', icon: Undo2, match: ['/returns'], divider: true },
+  { label: 'Expenses and cash', path: '/cash', kbd: 'F9', icon: Wallet, match: ['/cash'] },
+  { label: 'Day close', path: '/day-close', kbd: 'Ctrl+E', icon: Moon, match: ['/day-close'] },
+  { label: 'Staff report', path: '/reports/staff', icon: UserRoundCheck, match: ['/reports/staff'] },
+  { label: 'Lock counter', path: '/lock', kbd: 'Ctrl+L', icon: Lock, match: ['/lock'], divider: true },
+  { label: 'Keyboard shortcuts', kbd: 'F1', icon: Keyboard, match: [] },
+];
+
+/** Every navigable screen by its Alt number (Alt+1..8): the four tabs, then the first four More items */
+const SCREENS: string[] = ['/billing', '/pos1', '/pos2', '/sales', '/reports/sales', '/reports/paymode', '/reports/stock', '/customers'];
 /** The three bill screens: Esc from any other screen comes back to the main one */
 export const BILL_PATHS = ['/billing', '/pos1', '/pos2'];
 
@@ -39,37 +53,19 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
   const [keys, setKeys] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  /* The tab strip takes the space left of the fixed right-hand cluster. When the full labels do not fit it switches to
-     icon-only tabs (tooltips keep the names), so nothing ever overlaps or runs off the window. */
-  const navRef = useRef<HTMLElement>(null);
-  const fullWidth = useRef(0);
-  const [compact, setCompact] = useState(false);
-  useLayoutEffect(() => {
-    const el = navRef.current;
-    if (!el) return undefined;
-    const measure = () => {
-      if (!compact) fullWidth.current = el.scrollWidth;
-      const tooWide = fullWidth.current > el.clientWidth + 1;
-      if (tooWide !== compact) setCompact(tooWide);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  });
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 15000);
     return () => window.clearInterval(t);
   }, []);
 
-  /* Global keys: F1 sheet, Alt+1..6 menu, Alt+U user menu. Capture phase so a screen's own handler never double-fires them. */
+  /* Global keys: F1 sheet, Alt+1..8 screens, Alt+U user menu. Capture phase so a screen's own handler never double-fires them. */
   useEffect(() => {
     if (minimal) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === 'F1') { e.preventDefault(); e.stopPropagation(); setKeys((o) => !o); return; }
       if (keys && e.key !== 'Escape' && e.key !== 'Tab' && e.key !== ' ' && e.key !== 'Enter') { e.stopPropagation(); return; } // the sheet is modal: nothing leaks to the screen behind
-      if (e.altKey && !e.ctrlKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); nav(MENU[Number(e.key) - 1].path); }
+      if (e.altKey && !e.ctrlKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); const target = SCREENS[Number(e.key) - 1]; if (target) nav(target); }
       else if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'u') { e.preventDefault(); e.stopPropagation(); setMenu((o) => !o); }
       else if (menu && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false); }
       else if (e.key === 'Escape' && !keys && !BILL_PATHS.includes(pathname)) {
@@ -113,15 +109,24 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     );
   }
 
-  const go = (p: string) => { setMenu(false); nav(p); };
   const out = () => { setMenu(false); signOut(); nav('/login', { replace: true }); };
+
+  /* The More button names the screen you are on when that screen lives under More */
+  const current = MORE.find((m) => (m.match as readonly string[]).includes(pathname));
+  const moreItems: MenuEntry[] = MORE.map((m) => ({
+    label: m.label,
+    kbd: m.kbd,
+    icon: <m.icon size={15} />,
+    divider: m.divider,
+    onClick: () => (m.path ? nav(m.path) : setKeys(true)),
+  }));
 
   return (
     <>
       {brand}
-      <span className="mx-2 h-6 w-px bg-white/10" />
-      <nav ref={navRef} className="flex h-full min-w-0 flex-1 items-stretch gap-0.5 overflow-hidden" aria-label="Main menu">
-        {MENU.map((m, i) => {
+      <span className="mx-2 h-6 w-px shrink-0 bg-white/10" />
+      <nav className="flex h-full min-w-0 flex-1 items-stretch gap-0.5 overflow-hidden" aria-label="Main menu">
+        {TABS.map((m, i) => {
           const active = (m.match as readonly string[]).includes(pathname);
           const Icon = m.icon;
           return (
@@ -129,12 +134,12 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <button
                 onClick={() => nav(m.path)} tabIndex={-1}
                 className={cn(
-                  cn('relative flex shrink-0 items-center gap-2 whitespace-nowrap text-[13px] font-medium transition-colors', compact ? 'px-3' : 'px-2.5 min-[1450px]:px-3'),
+                  'relative flex shrink-0 items-center gap-2 whitespace-nowrap px-2.5 text-[13px] font-medium transition-colors min-[1450px]:px-3',
                   active ? 'text-white' : 'text-chrome-muted hover:bg-white/[0.06] hover:text-white',
                 )}
               >
-                <Icon size={compact ? 17 : 15} className={cn(compact ? 'block' : 'hidden min-[1450px]:block', active && 'text-yellow')} />
-                {!compact && m.label}
+                <Icon size={15} className={cn(active && 'text-yellow')} />
+                {m.label}
                 {openLines[m.path] > 0 && <span className="num rounded-full bg-yellow px-1.5 text-[10px] font-bold leading-4 text-chrome" title="Items on this bill">{openLines[m.path]}</span>}
                 {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
               </button>
@@ -144,17 +149,9 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       </nav>
 
       <div className="flex shrink-0 items-center">
-      {!BILL_PATHS.includes(pathname) && (
-        <Tooltip label="Back to billing" kbd="Esc">
-          <button onClick={() => nav('/billing')} tabIndex={-1} aria-label="Back to billing (Esc)" className="ml-3 hidden h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/15 px-2 text-xs font-medium text-white hover:bg-white/10 min-[1450px]:flex">
-            <ShoppingCart size={13} className="text-yellow" /> <span className="hidden min-[1800px]:inline">Back to billing</span> <Kbd tone="chrome">Esc</Kbd>
-          </button>
-        </Tooltip>
-      )}
-
       <button
         onClick={onHeld ?? (() => nav('/billing'))} tabIndex={-1}
-        className={cn('ml-2 flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors hover:bg-white/10', heldCount ? 'bg-accent/15 text-accent' : 'text-chrome-muted')}
+        className={cn('ml-2 flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs transition-colors hover:bg-white/10', heldCount ? 'bg-accent/15 text-accent' : 'text-chrome-muted')}
       >
         <Pause size={13} />
         <span className="num font-semibold">{heldCount}</span><span>held</span>
@@ -162,14 +159,8 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       </button>
 
       <DropMenu
-        label="More" icon={<ChevronDown size={14} />} variant="chrome"
-        items={[
-          { label: 'Returns and exchange', kbd: 'F10', icon: <Undo2 size={15} />, onClick: () => nav('/returns') },
-          { label: 'Expenses and cash', kbd: 'F9', icon: <Wallet size={15} />, onClick: () => nav('/cash') },
-          { label: 'Day close', kbd: 'Ctrl+E', icon: <Moon size={15} />, onClick: () => nav('/day-close') },
-          { label: 'Staff report', icon: <Users size={15} />, onClick: () => nav('/reports/staff') },
-          { label: 'Lock counter', kbd: 'Ctrl+L', icon: <Lock size={15} />, onClick: () => nav('/lock') },
-        ]}
+        label={current?.label ?? 'More'} icon={<ChevronDown size={14} />} variant="chrome" active={!!current}
+        items={moreItems} heading="More"
       />
 
       <div className="mx-1 flex items-center gap-0.5">
@@ -180,10 +171,6 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
           <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><ShieldCheck size={15} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-chrome" /></span>
         </Tooltip>
       </div>
-
-      <button onClick={() => setKeys(true)} tabIndex={-1} className="flex h-8 items-center gap-2 rounded-md border border-white/10 px-2.5 text-xs text-chrome-ink hover:bg-white/10">
-        <Keyboard size={14} className="text-chrome-muted" /> <span className="hidden min-[1500px]:inline">Shortcuts</span> <Kbd tone="chrome">F1</Kbd>
-      </button>
 
       <span className="num mx-3 text-[13px] font-medium text-chrome-ink">{pad(now.getHours())}:{pad(now.getMinutes())}</span>
 
@@ -202,7 +189,6 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <div className="flex items-center gap-1.5 font-semibold text-ink"><UserRound size={13} /> {user?.name}</div>
               <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? `${pad(opened.getHours())}:${pad(opened.getMinutes())}` : '--'} ({hrs}h {pad(mins)}m)</div>
             </div>
-            <MenuItem icon={<Lock size={15} />} label="Lock counter" kbd="Ctrl+L" onClick={() => go('/lock')} />
             <MenuItem icon={<ArrowLeftRight size={15} />} label="Switch user" onClick={out} />
             <MenuItem icon={<LogOut size={15} />} label="Sign out" onClick={out} danger />
           </div>

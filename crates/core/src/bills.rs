@@ -170,6 +170,9 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
         }
     }
     crate::loyalty::earn_for_bill(tx, draft.customer_id.as_deref(), &draft.payments, totals.grand, bill_id, &number, &cashier)?;
+    if let Some(rf) = ex.exchange_refund.as_ref().filter(|r| r.amount > 0) {
+        give_back_exchange_balance(tx, now, bill_id, &number, &cashier, draft.manager_pin.as_deref(), rf, shift_id)?;
+    }
     hit(fault, Fault::AfterPayments)?;
 
     {
@@ -222,8 +225,50 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             cash_disc_bps: ex.cash_disc_bps,
             cash_disc,
             remarks: ex.remarks.trim().into(),
+            exchange_refund: ex.exchange_refund.clone().filter(|r| r.amount > 0),
         },
     })
+}
+
+/// The new bill is smaller than the exchange credit: the rest of the credit goes back to the customer in cash or UPI.
+/// Same transaction as the bill; needs a manager PIN like any refund; cash reduces the drawer (X / Z report).
+fn give_back_exchange_balance(
+    tx: &Connection, now: DateTime<Local>, bill_id: i64, number: &str, by: &str, pin: Option<&str>, rf: &ExchangeRefund, shift_id: Option<i64>,
+) -> Result<()> {
+    if rf.mode != "cash" && rf.mode != "upi" {
+        return invalid("Choose cash or UPI for the refund");
+    }
+    let note: Option<(i64, i64, String)> = tx
+        .query_row("SELECT grand, used, refund_mode FROM credit_notes WHERE number=?1", [&rf.credit_note], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .optional()?;
+    let Some((grand, used, mode)) = note else { return invalid("Exchange credit note not found") };
+    if mode != "exchange" {
+        return invalid("This credit note is not an exchange credit");
+    }
+    // spend_credit_note already booked what this bill used; what is left is what goes back
+    if rf.amount != grand - used {
+        return invalid(format!("The refund must be exactly the credit left (Rs {}).", rs(grand - used)));
+    }
+    let pin = pin.map(str::trim).unwrap_or("");
+    let needs = crate::crm::needs_manager_pin(tx, by, "return", "canReturn")?;
+    let approver = if needs || !pin.is_empty() {
+        if pin.is_empty() {
+            return invalid("A manager PIN is needed to give back the exchange balance to the customer");
+        }
+        match crate::store::find_manager(tx, pin)? {
+            Some(m) => m.name,
+            None => return invalid("Manager PIN is not correct"),
+        }
+    } else {
+        by.to_string()
+    };
+    tx.execute("UPDATE credit_notes SET used=grand, consumed=1 WHERE number=?1", [&rf.credit_note])?;
+    tx.execute(
+        "INSERT INTO exchange_refunds(at,shift_id,bill_id,credit_note,mode,amount,by_name,approved_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![iso(now), shift_id, bill_id, rf.credit_note, rf.mode, rf.amount, by, approver],
+    )?;
+    audit(tx, now, by, "exchange_refund", "bill", number, &format!("{} given back from {} ({}), approved by {}", rs(rf.amount), rf.credit_note, rf.mode, approver))?;
+    Ok(())
 }
 
 pub const DELIVERY_ITEM: &str = "_delivery";
@@ -284,6 +329,7 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             cash_disc_bps: r.get(22)?,
             cash_disc: r.get(23)?,
             remarks: r.get(24)?,
+            exchange_refund: None,
         },
     })
 }
@@ -294,6 +340,7 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
     )?;
     let mut pays = conn.prepare_cached("SELECT mode,amount,ref FROM bill_payments WHERE bill_id=?1 ORDER BY id")?;
     let mut slabs = conn.prepare_cached("SELECT rate,taxable,cgst,sgst FROM bill_slabs WHERE bill_id=?1 ORDER BY rate")?;
+    let mut xr = conn.prepare_cached("SELECT credit_note,mode,amount FROM exchange_refunds WHERE bill_id=?1 LIMIT 1")?;
     for b in bills.iter_mut() {
         let id = parse_id("b", &b.id).unwrap_or(0);
         b.lines = lines
@@ -321,6 +368,9 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
                 Ok(p)
             })?
             .collect::<rusqlite::Result<_>>()?;
+        b.extras.exchange_refund = xr
+            .query_row([id], |r| Ok(ExchangeRefund { credit_note: r.get(0)?, mode: r.get(1)?, amount: r.get(2)? }))
+            .optional()?;
         b.totals.slabs = slabs
             .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)? }))?
             .collect::<rusqlite::Result<_>>()?;

@@ -610,7 +610,8 @@ pub fn list_adjustments(conn: &Connection) -> Result<Vec<Value>> {
 
 pub fn start_stock_take(conn: &Connection, category_id: &str) -> Result<Vec<Value>> {
     let mut st = conn.prepare(
-        "SELECT i.id,i.code,i.name,i.unit,i.loose,c.name,i.stock,i.cost FROM items i JOIN categories c ON c.id=i.category_id
+        "SELECT i.id,i.code,i.name,i.unit,i.loose,c.name,i.stock,i.cost,i.price,COALESCE(i.supplier_id,''),COALESCE(s.name,'') FROM items i JOIN categories c ON c.id=i.category_id
+         LEFT JOIN suppliers s ON s.id=i.supplier_id
          WHERE i.kind='item' AND i.service=0 AND i.active=1 AND (?1='all' OR i.category_id=?1) ORDER BY i.rowid",
     )?;
     let v = st
@@ -619,6 +620,7 @@ pub fn start_stock_take(conn: &Connection, category_id: &str) -> Result<Vec<Valu
                 "itemId": r.get::<_, String>(0)?, "code": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)?,
                 "unit": r.get::<_, String>(3)?, "loose": r.get::<_, i64>(4)? != 0, "category": r.get::<_, String>(5)?,
                 "system": r.get::<_, i64>(6)?, "cost": r.get::<_, i64>(7)?,
+                "price": r.get::<_, i64>(8)?, "supplierId": r.get::<_, String>(9)?, "supplier": r.get::<_, String>(10)?,
             }))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

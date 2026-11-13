@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Printer, Receipt, Search } from 'lucide-react';
+import { Download, Printer, ReceiptIndianRupee, Search } from 'lucide-react';
 import { billTitleFor, formatQty, formatRupees, printNumber, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, Tabs, TabPanel,
@@ -199,7 +199,7 @@ export function Sales() {
   return (
     <>
       <PageHeader
-        title="Bills" subtitle={`All counters · ${rows.length} bills in range`} icon={<Receipt size={17} />}
+        title="Bills" subtitle={`All counters · ${rows.length} bills in range`} icon={<ReceiptIndianRupee size={17} />}
         actions={<Button icon={<Download size={15} />} onClick={exportCsv} disabled={!rows.length}>Export CSV</Button>}
       />
       <FilterBar trailing={<span className="flex items-center gap-1.5">Press <Kbd>/</Kbd> to search</span>}>

@@ -158,7 +158,8 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "editExpense" => PermPin { perm: "canOpenDrawer", action: "edit_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "voidExpense" => PermPin { perm: "canOpenDrawer", action: "void_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "logVoidedLine" => VoidLine,
-        "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" => Perm("canManageStock"),
+        "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" => Perm("canManageStock"),
+        "addGodownBarrels" | "editGodownBarrel" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => Perm("canManageStock"),
         "closeMillSheet" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         _ => Open,
     }
@@ -187,7 +188,8 @@ fn describe(method: &str) -> &'static str {
         "voidExpense" => "void an expense",
         "logVoidedLine" => "remove a scanned line",
         "saveExpenseCategories" => "change expense categories",
-        "getMillSheet" | "saveMillSheet" | "listMillSheets" => "use the mill sheet",
+        "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" => "use the mill sheet",
+        "addGodownBarrels" | "editGodownBarrel" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => "record godown barrels and transfers",
         "closeMillSheet" => "close the mill sheet (it adjusts stock)",
         _ => "do this",
     }
@@ -404,6 +406,11 @@ fn check_bill(conn: &Connection, actor: &Actor, args: &[Value]) -> Result<Option
     if price_changed && (!actor.has("canEditPrices") || actor.pin_listed("price_override")) {
         reasons.push("change a price".into());
         perm = Some("canEditPrices");
+    }
+    // Giving the difference of an exchange back to the customer is a refund: same approval as a return.
+    if draft.extras.exchange_refund.as_ref().map(|r| r.amount > 0).unwrap_or(false) && (!actor.has("canReturn") || actor.pin_listed("return")) {
+        reasons.push("give back the exchange balance to the customer".into());
+        perm = perm.or(Some("canReturn"));
     }
     // One credit rule: limit 0 = credit not allowed, a positive limit = up to that much owed, -1 = no limit (owner's explicit choice).
     let credit: i64 = draft.payments.iter().filter(|p| p.mode == "credit").map(|p| p.amount).sum();

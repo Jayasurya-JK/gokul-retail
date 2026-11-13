@@ -26,6 +26,9 @@ import type {
 } from '../areas/expenses';
 import type { MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
 import type { PaymodeReport, ReportQuery, SalesReport, Staff, StaffReportRow, StockReport } from '../areas/posreports';
+import type {
+  AddBarrelsInput, EditBarrelInput, GodownBarrel, GodownDetail, GodownTransfer, MillDaily, OutsourcedInput, OutsourcedOil, StatusInput, StickInput, TransferInput,
+} from '../areas/production';
 
 /**
  * Calls the Rust backend (crates/core) through the single `gokul_call` Tauri command.
@@ -64,6 +67,8 @@ export const REAL_METHODS = [
   'listExpenseCategories', 'saveExpenseCategories', 'listExpenses', 'addExpense', 'editExpense', 'voidExpense', 'logVoidedLine',
   'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
   'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
+  'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
+  'listOutsourcedOil', 'transferToStore', 'listGodownTransfers', 'getMillDaily',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -232,6 +237,19 @@ export function createTauriApi(): Api {
     saveMillSheet: (input: MillSheetInput) => call<MillSheet>('saveMillSheet', input),
     closeMillSheet: (input: { day: string; managerPin?: string }) => call<MillSheet>('closeMillSheet', input),
     listMillSheets: (limit?: number) => call<MillSheetSummary[]>('listMillSheets', limit ?? null),
+
+    // ----- ProductionApi -----
+    listGodownBarrels: () => call<GodownBarrel[]>('listGodownBarrels'),
+    getGodownBarrel: (id: string) => call<GodownDetail>('getGodownBarrel', id),
+    addGodownBarrels: (input: AddBarrelsInput) => call<GodownBarrel[]>('addGodownBarrels', input),
+    editGodownBarrel: (input: EditBarrelInput) => call<GodownBarrel>('editGodownBarrel', input),
+    setGodownStatus: (input: StatusInput) => call<GodownBarrel>('setGodownStatus', input),
+    recordStickReading: (input: StickInput) => call<GodownBarrel>('recordStickReading', input),
+    recordOutsourcedOil: (input: OutsourcedInput) => call<OutsourcedOil>('recordOutsourcedOil', input),
+    listOutsourcedOil: (limit?: number) => call<OutsourcedOil[]>('listOutsourcedOil', limit ?? null),
+    transferToStore: (input: TransferInput) => call<GodownTransfer>('transferToStore', input),
+    listGodownTransfers: (limit?: number) => call<GodownTransfer[]>('listGodownTransfers', limit ?? null),
+    getMillDaily: (day: string) => call<MillDaily>('getMillDaily', day),
 
     // ----- ReportsApi -----
     runReport: (id: ReportId, params: ReportParams) => call<ReportResult>('runReport', id, params),

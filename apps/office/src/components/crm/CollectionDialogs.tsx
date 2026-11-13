@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Banknote, MessageCircle, Smartphone } from 'lucide-react';
+import { IndianRupee, MessageCircle, Smartphone } from 'lucide-react';
 import { formatRupees, type ReceivableRow } from '@gokul/data';
 import { Button, Dialog, Field, Input, Money, NumberInput } from '@gokul/ui';
 import { paiseToRupees, rupeesToPaise, Segmented } from './common';
@@ -54,7 +54,7 @@ export function RecordPaymentDialog({ row, open, onClose, onSave }: {
         </div>
         <div>
           <div className="mb-1 text-xs font-medium text-muted">Received as</div>
-          <Segmented<'cash' | 'upi'> value={mode} onChange={setMode} options={[{ value: 'cash', label: <span className="flex items-center gap-1.5"><Banknote size={14} /> Cash</span> }, { value: 'upi', label: <span className="flex items-center gap-1.5"><Smartphone size={14} /> UPI</span> }]} />
+          <Segmented<'cash' | 'upi'> value={mode} onChange={setMode} options={[{ value: 'cash', label: <span className="flex items-center gap-1.5"><IndianRupee size={14} /> Cash</span> }, { value: 'upi', label: <span className="flex items-center gap-1.5"><Smartphone size={14} /> UPI</span> }]} />
         </div>
         {mode === 'upi' && <Input label="UPI reference" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Last digits of UTR" className="num" />}
         <Input label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Paid by son, part payment" />

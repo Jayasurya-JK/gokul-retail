@@ -110,6 +110,23 @@ Staff are used to POSBean, so Gokul POS takes **inspiration** from it but **keep
 - **Points change only through bills:** they are earned on a sale, used in payment, and reversed when a bill is cancelled or returned. There is no manual add or remove, and the server refuses it. Opening balances were brought from POSBean on 7 Nov 2026.
 - **Expiry:** points expire **1 year after they were earned**. Each earning keeps its own expiry date, and points used are taken from the oldest first (FIFO). The opening balances' earn dates depend on the history check (`data/import/POINTS-HISTORY-CHECK.md`).
 
+## Round 5: cloud sync, online dashboard, full activity history (owner, 8 Nov 2026)
+Status: planned. **Nothing here is confirmed until it has been tested for weeks.**
+- **Principle:** Gokul POS and Office keep working fully offline on the local DB, and the internet is never required. Sync runs **one way, local → cloud**, in the background, whenever there is a connection. Changes are queued while offline and sent later.
+- **What syncs:** bills, payments, returns, cancels, stock movements **including adjustments and stock takes**, purchases, production and packing, expenses, credit and collections, points, **and master-data edits** (items, prices, barcodes, categories, brands, customers, suppliers, users, settings) **including deletions and deactivations**. Edits and deletes need a versioned change log, not just "new rows".
+- **Cloud:** one VPS in Mumbai (shortlist: Hostinger KVM 2, DigitalOcean BLR, AWS Lightsail Mumbai), running Postgres + a small Gokul API + the web dashboard behind HTTPS. Nightly encrypted off-site backup and VPS snapshots. The same VPS also hosts **Surya's Solar** (separate database and subdomain).
+- **Dashboard:** **app.gokuloils.in** (like app.suryassolar.com), served from the same server; no Vercel needed. Sales, payment modes, staff, stock, credit, points, expenses, reports and the activity history; works on phone and laptop.
+- **Access security:** each shop PC gets its own sync key (so only our PCs can send data); owner and managers log in to the dashboard with password + OTP; the database is never exposed to the internet.
+- **Complete activity history (audit trail)**, for POS and Office, staff and admin alike. Record **every** action:
+  - who, what, when, where (which PC/counter/app), and the **old → new values**
+  - create, edit, delete, deactivate
+  - sign-in, sign-out, lock and unlock, wrong PINs and lockouts, manager-PIN approvals and refusals
+  - price and discount overrides, voided lines, held and recalled bills, reprints, cancels, returns
+  - cash in/out, expenses, day open and close, stock adjustments and counts, settings changes, backups and restores, imports, sync runs
+  It can be searched and filtered in Office and on the dashboard by person, date, screen and action. It can't be edited or deleted (append-only).
+- **Testing before trusting sync:** weeks of side-by-side use, kill-network and power-cut tests mid-sync, duplicate and replay safety, and comparing cloud totals with local totals every day.
+- **Order:** (1) complete activity history locally → (2) VPS + cloud DB + backups → (3) one-way sync with daily totals check → (4) dashboard on app.gokuloils.in → (5) move Surya's Solar off Supabase free.
+
 ## Notes for later (from the owner, 7 Nov 2026)
 - **Packing pouch sizes (SSS Brand), in inches:** 50 g → 4×5, 100 g → 4×6, ¼ kg → 5×7, ½ kg → 6×8, 1 kg → 7×10. When packing runs are recorded, the matching pouch should be taken from packing-material stock automatically.
 - **TSC TE244 stickers:** 3 across, ribbon on. One blank row comes partly out after each print, which is the printer's tear-off position. Confirm the printer pulls it back on the next print; otherwise adjust the tear/feed settings.

@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, CornerUpLeft, HandCoins } from 'lucide-react';
+import { Ban, CheckCircle2, CornerUpLeft, IndianRupee } from 'lucide-react';
 import { billTitleFor, printNumber, type Bill, type BillDetail, type CreditNote, type PayMode, type ReceiptConfig, type RefundMode } from '@gokul/data';
 import { Badge } from '@gokul/ui';
 import type { ReceiptData } from '@gokul/ui';
@@ -35,7 +35,7 @@ export function StatusBadge({ bill, detail }: { bill: Bill; detail?: BillDetail 
   if (bill.status === 'cancelled') return <Badge tone="danger"><Ban size={11} /> Cancelled</Badge>;
   if (bill.status === 'returned') return <Badge tone="warning"><CornerUpLeft size={11} /> Returned</Badge>;
   if (detail && detail.returned.some((q) => q > 0)) return <Badge tone="warning"><CornerUpLeft size={11} /> Part returned</Badge>;
-  if (bill.status === 'credit') return <Badge tone="info"><HandCoins size={11} /> On credit</Badge>;
+  if (bill.status === 'credit') return <Badge tone="info"><IndianRupee size={11} /> On credit</Badge>;
   return <Badge tone="success"><CheckCircle2 size={11} /> Paid</Badge>;
 }
 

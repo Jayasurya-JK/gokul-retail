@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, Banknote, Check, CornerUpLeft, FileText, ScanBarcode, Smartphone, TriangleAlert } from 'lucide-react';
+import { ArrowLeftRight, IndianRupee, Check, CornerUpLeft, FileText, ScanBarcode, Smartphone, TriangleAlert } from 'lucide-react';
 import {
   RETURN_REASONS, billHasCredit, formatQty, formatRupees, isDecimalUnit, parseQty, quoteReturn,
   type Bill, type BillDetail, type CreditNote, type RefundMode,
@@ -18,7 +18,7 @@ import { StatusBadge, dateTimeOf, modeLabel, payLabel, timeOf } from '../compone
 type Dlg = null | 'preview' | 'done';
 interface Mode { id: RefundMode; label: string; hint: string; key: string; icon: JSX.Element }
 const MODES: Mode[] = [
-  { id: 'cash', label: 'Cash', hint: 'Give money back now', key: 'F5', icon: <Banknote size={16} /> },
+  { id: 'cash', label: 'Cash', hint: 'Give money back now', key: 'F5', icon: <IndianRupee size={16} /> },
   { id: 'upi', label: 'UPI', hint: 'Send back by UPI', key: 'F6', icon: <Smartphone size={16} /> },
   { id: 'credit_note', label: 'Credit note', hint: 'Customer keeps a note', key: 'F7', icon: <FileText size={16} /> },
   { id: 'exchange', label: 'Exchange', hint: 'Use on a new bill now', key: 'F8', icon: <ArrowLeftRight size={16} /> },

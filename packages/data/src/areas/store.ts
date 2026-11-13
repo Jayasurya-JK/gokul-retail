@@ -1,5 +1,7 @@
 import type { MillSettings } from './crm';
 import type { Expense, MockVoidedLine } from './expenses';
+import type { GodownMockState } from './production';
+import type { PressingBatch } from './purchasing';
 import type { Bill, Category, Customer, HeldBill, Item, ProductionBatch, Purchase, Settings, Supplier, User } from '../types';
 
 /** Shared in-memory state every area mock reads and writes. Mutate in place. */

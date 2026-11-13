@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Keyboard, Lock, Moon, ScanBarcode, Undo2, Users, Wallet } from 'lucide-react';
+import { ScanBarcode, XCircle } from 'lucide-react';
 import {
   cashDiscount, computeTotalsWithDelivery, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
-import { ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
+import { Kbd, ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { needsManagerPin } from '@gokul/data';
 import { api, billingStores, refreshTodaySales, SLOT_LABEL, useSession, type BillSlot, type Delivery } from '../store';
 import { plural } from '../plural';
@@ -50,7 +50,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const [hi, setHi] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
-  const [pinAsk, setPinAsk] = useState<{ message: string; payments: Payment[]; change: number } | null>(null);
+  const [pinAsk, setPinAsk] = useState<{ message: string; payments: Payment[]; change: number; refund?: 'cash' | 'upi' } | null>(null);
   const removed = useRef<{ line: BillLine; at: number } | null>(null);
 
   const itemMap = useMemo(() => {
@@ -72,9 +72,12 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     staff: staff || undefined, deliveryAddress: delivery.address || undefined, deliveryLocality: delivery.locality || undefined,
     deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDiscBps: cashDiscBps || undefined,
   });
-  /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). */
-  const exchangeUsed = exchange ? Math.min(exchange.totals.grand, totals.grand) : 0;
+  /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). A bigger credit than the bill is allowed:
+     the difference goes back to the customer (cash or UPI, manager PIN, audited), chosen in the payment window. */
+  const exchangeCredit = exchange ? exchange.balance ?? exchange.totals.grand : 0;
+  const exchangeUsed = exchange ? Math.min(exchangeCredit, totals.grand) : 0;
   const due = totals.grand - exchangeUsed;
+  const refundDue = exchange && totals.grand > 0 ? Math.max(0, exchangeCredit - totals.grand) : 0;
 
   /* Items and stock are read from the database again after every bill and whenever this window comes back to the front
      (Office may have received goods or adjusted stock meanwhile), and the item is re-read when it is added to the bill. */
@@ -90,7 +93,15 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     const left = it.stock - lines.filter((x) => x.itemId === l.itemId).reduce((s, x) => s + x.qty, 0);
     return { text: formatQty(left, it.loose), low: left <= 0 };
   }, [byId, lines]);
-  useEffect(() => { api.getPendingExchange().then(setExchange); }, []);
+  useEffect(() => {
+    void api.getPendingExchange().then((ex) => {
+      setExchange(ex);
+      // the customer of the returned bill is attached, so a removed credit goes back to their wallet and a refund has a name
+      if (ex?.customerId && !useBilling.getState().customer) {
+        void api.getCustomer(ex.customerId).then((c) => { if (c && !useBilling.getState().customer) useBilling.getState().setCustomer(c); }).catch(() => undefined);
+      }
+    });
+  }, [useBilling]);
   // store credit and loyalty points of the attached customer (refreshed after every bill)
   useEffect(() => {
     let live = true;
@@ -271,20 +282,17 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   };
   const openPay = () => {
     if (!lines.length) { toast.show({ tone: 'info', title: 'Add items before payment' }); return; }
-    if (exchange && totals.grand < exchange.totals.grand) {
-      toast.show({ tone: 'warning', title: 'Exchange credit is more than this bill', detail: `Add items worth ${formatRupees(exchange.totals.grand - totals.grand, { decimals: false })} more to use all of ${exchange.number}.` });
-      return;
-    }
     setEditNow(null); setDialog('pay');
   };
   /** What the backend wants approved (discount over the limit, changed price, credit over limit): ask for the PIN, then save again. */
-  const complete = async (payments: Payment[], change: number, pin?: string): Promise<string | null> => {
+  const complete = async (payments: Payment[], change: number, pin?: string, refundMode?: 'cash' | 'upi'): Promise<string | null> => {
     setSaving(true);
     try {
       const all: Payment[] = exchange && exchangeUsed > 0
         ? [{ mode: 'credit_note' as const, amount: exchangeUsed, ref: exchange.number }, ...payments]
         : payments;
-      const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin, ...extras() });
+      const exchangeRefund = exchange && refundMode && refundDue > 0 ? { mode: refundMode, amount: refundDue, creditNote: exchange.number } : undefined;
+      const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin, exchangeRefund, ...extras() });
       if (exchange) { await api.clearPendingExchange(); setExchange(null); }
       B.clear();
       lastBillId.current = bill.id;
@@ -296,12 +304,13 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       setDialog(null);
       toast.show({
         tone: 'success', title: `Bill ${bill.number} saved`,
-        detail: change > 0 ? `Give change ${formatRupees(change)}` : payments.map((p) => p.mode.toUpperCase()).join(' + ') + ' received',
+        detail: exchangeRefund ? `Give ${formatRupees(exchangeRefund.amount)} back to the customer (${exchangeRefund.mode.toUpperCase()})`
+          : change > 0 ? `Give change ${formatRupees(change)}` : payments.length ? payments.map((p) => p.mode.toUpperCase()).join(' + ') + ' received' : 'Paid by exchange credit',
       });
       return null;
     } catch (e) {
       const m = e instanceof Error ? e.message : '';
-      if (!pin && needsManagerPin(m)) { setPinAsk({ message: m, payments, change }); setDialog(null); return null; }
+      if (!pin && needsManagerPin(m)) { setPinAsk({ message: m, payments, change, refund: refundMode }); setDialog(null); return null; }
       if (pin) return m || 'Could not save the bill';
       toast.show({ tone: 'error', title: 'Could not save the bill', detail: m && !/database|disk|went wrong/i.test(m) ? m : 'Nothing was lost. Try Enter again.' });
       return null;
@@ -364,7 +373,6 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     void printWithToast('bill', b.id, { duplicate: true }, toast, `Duplicate of ${b.number} printed`);
   };
   const saveDelivery = (d: Delivery) => { B.setDelivery(d); setDialog(null); };
-  const showKeys = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true }));
 
   /* ---------- global keys (latest closure via ref) ---------- */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
@@ -426,6 +434,22 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
+  /** Whole-bill discount typed in the right panel: 50 = Rs 50 off, 5% = five percent off. Empty clears it. */
+  const applyBillDiscount = (v: string) => {
+    const net = lines.reduce((x, l) => x + l.amount, 0);
+    const d = v.trim();
+    if (d === '') { B.setBillDiscount(0); return; }
+    if (d.endsWith('%')) {
+      const pct = Number(d.slice(0, -1));
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Discount must be between 0% and 100%' }); return; }
+      B.setBillDiscount(Math.round((net * pct) / 100));
+    } else {
+      const amt = parsePaise(d);
+      if (amt === null) { toast.show({ tone: 'error', title: 'Type an amount like 50, or a percent like 5%' }); return; }
+      B.setBillDiscount(Math.min(amt, net));
+    }
+  };
+
   const pickCustomer = (c: Customer | null) => { B.setCustomer(c); setDialog(null); };
 
   const keys: FKey[] = [
@@ -451,7 +475,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       side={
         <SummaryPanel
           totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay}
-          onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} due={due} billNo={billNo}
+          onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} exchangeCredit={exchangeCredit} due={due} refundDue={refundDue} onDropExchange={() => setDialog('dropEx')} onApplyDiscount={applyBillDiscount} billNo={billNo}
           slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
           onCashDisc={() => setDialog('cashDisc')} onClearCashDisc={() => B.setCashDisc(0)}
           delivery={delivery} onDelivery={() => setDialog('delivery')} staff={staff} onStaff={() => setDialog('staff')}
@@ -463,15 +487,6 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
         onDelivery={() => setDialog('delivery')} onPay={openPay} onDelete={() => { removeSelected(); scanRef.current?.focus(); }}
         onRefresh={() => void refresh()} onManual={() => setDialog('manual')} onStaff={() => setDialog('staff')} onRecent={() => setDialog('recent')}
         onHold={() => void doHold()} onHeld={() => void openHeld()} onWholesale={toggleWholesale}
-        counterName={settings?.counter ?? 'Counter'}
-        tools={[
-          { label: 'Lock counter', kbd: 'Ctrl+L', icon: <Lock size={15} />, onClick: lock },
-          { label: 'Returns and exchange', kbd: 'F10', icon: <Undo2 size={15} />, onClick: () => nav('/returns') },
-          { label: 'Expenses and cash', kbd: 'F9', icon: <Wallet size={15} />, onClick: () => nav('/cash') },
-          { label: 'Day close', kbd: 'Ctrl+E', icon: <Moon size={15} />, onClick: () => nav('/day-close') },
-          { label: 'Staff report', icon: <Users size={15} />, onClick: () => nav('/reports/staff') },
-          { label: 'Keyboard shortcuts', kbd: 'F1', icon: <Keyboard size={15} />, onClick: showKeys },
-        ]}
       />
       {/* Scan bar */}
       <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
@@ -502,6 +517,12 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
             />
           )}
         </div>
+        <button
+          type="button" tabIndex={-1} disabled={!lines.length} onClick={() => setDialog('cancel')} title="Cancel this whole bill (Esc)"
+          className="flex h-11 shrink-0 items-center gap-2 rounded-xl border border-danger/40 bg-surface px-4 text-sm font-semibold text-danger transition-colors hover:bg-danger-soft disabled:cursor-default disabled:opacity-40 disabled:hover:bg-surface"
+        >
+          <XCircle size={17} /> Cancel bill <Kbd>Esc</Kbd>
+        </button>
       </div>
 
       <BillGrid
@@ -538,7 +559,11 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
-      <PaymentDialog open={dialog === 'pay'} total={due} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)} onComplete={(p, c) => void complete(p, c)} onCustomerUpdate={(c) => B.setCustomer(c)} />
+      <PaymentDialog
+        open={dialog === 'pay'} total={due} billTotal={totals.grand} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
+        exchange={exchange ? { credit: exchangeCredit, number: exchange.number, billNumber: exchange.billNumber } : null}
+        onComplete={(p, c, refund) => void complete(p, c, undefined, refund)} onCustomerUpdate={(c) => B.setCustomer(c)}
+      />
       <ManagerPinDialog
         open={voidAsk !== null} title="Manager approval to remove a line" message={voidAsk?.message ?? ''} confirmLabel="Approve and remove"
         onClose={() => setVoidAsk(null)}
@@ -557,18 +582,18 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <ManagerPinDialog
         open={pinAsk !== null} title="Manager approval" message={pinAsk?.message ?? ''} confirmLabel="Approve and save"
         onClose={() => { setPinAsk(null); setDialog('pay'); }}
-        onSubmit={(pin) => (pinAsk ? complete(pinAsk.payments, pinAsk.change, pin) : Promise.resolve(null))}
+        onSubmit={(pin) => (pinAsk ? complete(pinAsk.payments, pinAsk.change, pin, pinAsk.refund) : Promise.resolve(null))}
         onLocked={() => { useSession.getState().signOut(); nav('/login', { replace: true }); }}
       />
       <ConfirmDialog
-        open={dialog === 'cancel'} danger title="Cancel this bill?" confirmLabel="Cancel bill"
-        message={`${plural(lines.length, 'item')} worth ${formatRupees(totals.grand, { decimals: false })} will be cleared. Use F6 instead to hold it for later.`}
+        open={dialog === 'cancel'} danger title="Cancel this bill?" confirmLabel="Cancel this bill"
+        message={`The whole bill will be cleared: ${plural(lines.length, 'item')} worth ${formatRupees(totals.grand, { decimals: false })}${exchange ? `. The exchange credit ${exchange.number} is not used and stays with the customer` : ''}. Use F6 instead to hold it for later.`}
         onClose={() => setDialog(null)} onConfirm={() => { B.clear(); setDialog(null); toast.show({ tone: 'info', title: 'Bill cancelled' }); }}
       />
       <ConfirmDialog
-        open={dialog === 'dropEx'} danger title="Remove exchange credit?" confirmLabel="Remove credit"
-        message={exchange ? `${exchange.number} (${formatRupees(exchange.totals.grand, { decimals: false })}) will no longer be used on this bill. Do this only if the customer does not want to use it now.` : ''}
-        onClose={() => setDialog(null)} onConfirm={() => { void api.clearPendingExchange(); setExchange(null); setDialog(null); toast.show({ tone: 'info', title: 'Exchange credit removed' }); }}
+        open={dialog === 'dropEx'} danger title="Remove exchange credit only?" confirmLabel="Remove exchange credit only"
+        message={exchange ? `Only the exchange credit ${exchange.number} (${formatRupees(exchangeCredit, { decimals: false })}) is taken off this bill. The items on the bill stay. The credit note goes back to the customer as unused store credit.` : ''}
+        onClose={() => setDialog(null)} onConfirm={() => { void api.clearPendingExchange(); setExchange(null); setDialog(null); toast.show({ tone: 'info', title: 'Exchange credit removed', detail: 'The credit note stays with the customer, unused. The bill is unchanged.' }); }}
       />
       <PromptDialog
         open={dialog === 'billDisc'} title="Discount on whole bill" label="Discount amount or percent" hint="Type 50 for 50 rupees off, or 5% for five percent off."

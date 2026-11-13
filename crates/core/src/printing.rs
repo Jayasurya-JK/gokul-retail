@@ -485,6 +485,9 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
             }
         }
         d.line(edge);
+        if let Some(rf) = &b.extras.exchange_refund {
+            d.pair(&format!("Exchange balance refunded ({})", if rf.mode == "upi" { "UPI" } else { "Cash" }), money(rf.amount));
+        }
         if cash_paid > 0 {
             d.pair("Amount Received", money(cash_paid + change));
             d.pair("Balance Amount", money(change));

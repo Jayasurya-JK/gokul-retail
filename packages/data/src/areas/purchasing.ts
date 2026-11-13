@@ -266,9 +266,17 @@ export interface PressingMetrics {
   variancePct: number;
   expectedOilL: number;
   litresPer100Kg: number;
+  /** Seed in - oil (litres x kg per litre) - oil cake - cleaning waste. Oil cake is a product, not a loss. */
   lossKg: number;
   lossPct: number;
   grade: YieldGrade;
+  /** The seed balance, kg */
+  seedInKg: number;
+  cleaningKg: number;
+  cakeKg: number;
+  cakePct: number;
+  /** Clean seed per litre of oil, kg: compare with the norm */
+  kgSeedPerL: number;
 }
 
 export interface PressingInput {
@@ -303,10 +311,12 @@ export function pressingMetrics(input: PressingInput, norm?: { kgPerL: number; d
     netSeedKg, oilKg, yieldPct, normPct, variancePct, expectedOilL: netSeedKg / kgPerL,
     litresPer100Kg: netSeedKg > 0 ? (oilL / netSeedKg) * 100 : 0,
     lossKg, lossPct: netSeedKg > 0 ? (lossKg / netSeedKg) * 100 : 0, grade,
+    seedInKg: input.seedKg / 1000, cleaningKg: input.cleaningLossKg / 1000, cakeKg: input.cakeKg / 1000,
+    cakePct: netSeedKg > 0 ? (input.cakeKg / 1000 / netSeedKg) * 100 : 0, kgSeedPerL: oilL > 0 ? netSeedKg / oilL : 0,
   };
 }
 
-export type BatchPhase = 'settling' | 'ready' | 'in-barrel';
+export type BatchPhase = 'settling' | 'ready' | 'in-barrel' | 'in-godown';
 
 export interface PressingBatch extends PressingInput {
   id: string;
@@ -323,12 +333,23 @@ export interface PressingBatch extends PressingInput {
   barrelId: string | null;
   barrelLabel: string | null;
   movedOn: string | null;
+  /** W = wood-pressed (chekku), R = rotary */
+  machine?: 'W' | 'R';
+  /** The godown barrel the oil went into */
+  godownBarrelId?: string | null;
+  godownBarrelLabel?: string | null;
+  /** Norm in force when it was pressed: kg of clean seed per litre, and kg per litre of the oil */
+  normKgPerL?: number;
+  oilKgPerL?: number;
   metrics: PressingMetrics;
 }
 
 export interface PressingDraft extends PressingInput {
   chekku: string;
   operator: string;
+  machine?: 'W' | 'R';
+  /** The godown barrel the oil goes into (production stock, not the store) */
+  godownBarrelId?: string;
 }
 
 export interface MoveToBarrelDraft {
@@ -432,6 +453,7 @@ interface SupplierPaymentRec {
 interface BatchRec extends PressingInput {
   id: string; number: string; date: string; chekku: string; operator: string; settleReadyOn: string;
   clearOilL: Milli | null; sedimentL: Milli | null; barrelId: string | null; movedOn: string | null;
+  machine?: 'W' | 'R'; godownBarrelId?: string | null;
 }
 
 const R = (n: number) => Math.round(n * 100);
@@ -691,6 +713,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
   ];
   const barrelById = (id: string) => barrels.find((b) => b.id === id);
 
+  const godownFor: Record<SeedType, string[]> = { groundnut: ['GB-001', 'GB-002', 'GB-003'], sesame: ['GB-004', 'GB-005'], copra: ['GB-006', 'GB-007'] };
   const batchRecs: BatchRec[] = [];
   const operators = ['Murugesan', 'Selvam', 'Kannan'];
   const seedCycle: SeedType[] = ['groundnut', 'sesame', 'copra', 'groundnut', 'groundnut', 'sesame', 'copra', 'groundnut', 'sesame', 'groundnut', 'copra', 'sesame', 'groundnut', 'groundnut', 'copra', 'sesame'];
@@ -722,17 +745,21 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
       clearOilL: inBarrel ? Math.round((oilL - sed) * 1000) : null, sedimentL: inBarrel ? Math.round(sed * 1000) : null,
       barrelId: inBarrel ? pressedBarrels[seed][i % pressedBarrels[seed].length] : null,
       movedOn: inBarrel ? readyOn.toISOString() : null,
+      machine: i % 4 === 3 && seed !== 'copra' ? 'R' : 'W', godownBarrelId: godownFor[seed][i % godownFor[seed].length],
     });
   }
+  store.pressing = () => [...batchRecs].sort((a, b) => b.date.localeCompare(a.date)).map(enrichBatch);
   let batchSeq = batchRecs.length;
   let batchNo = 413;
 
   const enrichBatch = (b: BatchRec): PressingBatch => {
     const base = SEED_BASE[b.seed];
     const barrel = b.barrelId ? barrelById(b.barrelId) : undefined;
-    const phase: BatchPhase = b.barrelId ? 'in-barrel' : new Date(b.settleReadyOn).getTime() <= Date.now() ? 'ready' : 'settling';
+    const gb = b.godownBarrelId ? store.godown?.barrels.find((x) => x.id === b.godownBarrelId) : undefined;
+    const phase: BatchPhase = b.godownBarrelId ? 'in-godown' : b.barrelId ? 'in-barrel' : new Date(b.settleReadyOn).getTime() <= Date.now() ? 'ready' : 'settling';
     return {
       ...b, seedLabel: base.label, oilName: base.oilName, phase, barrelLabel: barrel?.label ?? null,
+      godownBarrelLabel: gb?.label ?? null, normKgPerL: base.kgPerL, oilKgPerL: base.density,
       metrics: pressingMetrics(b),
     };
   };
@@ -856,11 +883,20 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
       if (d.cleaningLossKg >= d.seedKg) throw new Error('Cleaning loss cannot be more than the seed weight.');
       if (d.seedKg > stock.stock) throw new Error(`Only ${(stock.stock / 1000).toFixed(0)} kg ${base.label} in the godown.`);
       if (d.jaggeryKg > 0 && jaggery && d.jaggeryKg > jaggery.stock) throw new Error('Not enough palm jaggery in stock.');
+      const gstate = store.godown;
+      const gb = d.godownBarrelId ? gstate?.barrels.find((x) => x.id === d.godownBarrelId) : undefined;
+      if (d.godownBarrelId) {
+        if (!gb) throw new Error('Choose a godown barrel.');
+        if (gb.oil !== d.seed) throw new Error(`${gb.label} holds ${SEED_BASE[gb.oil].label.split(' ')[0].toLowerCase()} oil. Choose a ${SEED_BASE[d.seed].label.split(' ')[0].toLowerCase()} barrel.`);
+        if (gb.status === 'settling' || gb.status === 'ready') throw new Error(`${gb.label} is ${gb.status} and cannot take fresh oil. Pick a barrel that is filling or empty.`);
+        if (gb.levelL + d.oilRawL > gb.capacityL) throw new Error(`${gb.label} has room for only ${((gb.capacityL - gb.levelL) / 1000).toFixed(1)} L.`);
+      }
       batchSeq += 1;
       const now = new Date();
       const rec: BatchRec = {
         ...d, id: `pb${batchSeq}`, number: `PB-${String(batchNo).padStart(4, '0')}`, date: now.toISOString(),
         settleReadyOn: new Date(now.getTime() + base.settleDays * DAY).toISOString(), clearOilL: null, sedimentL: null, barrelId: null, movedOn: null,
+        machine: d.machine ?? 'W', godownBarrelId: d.godownBarrelId ?? null,
       };
       batchNo += 1;
       batchRecs.push(rec);
@@ -868,6 +904,13 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
       if (d.jaggeryKg > 0 && jaggery) jaggery.stock -= d.jaggeryKg;
       const c = cake[d.seed];
       if (c) c.stock += d.cakeKg;
+      if (gb && gstate) {
+        gb.levelL += d.oilRawL;
+        gstate.moves.push({ at: now.toISOString(), kind: 'press', qtyL: d.oilRawL, note: `Oil from ${rec.number}`, by: 'Suresh Kumar', barrelId: gb.id });
+        gb.filledOn = gb.filledOn ?? now.toISOString();
+        gstate.stored.set(gb.id, 'filling');
+        gb.settleStartedOn = null;
+      }
       return enrichBatch(rec);
     },
     moveBatchToBarrel: async (d) => {

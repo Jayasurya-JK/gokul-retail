@@ -315,7 +315,7 @@ export function HeldDialog({ open, onClose, held, onPick }: { open: boolean; onC
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning-soft text-sm font-bold text-warning">{i + 1}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-base font-medium">{h.customerName}</span>
-              <span className="block text-xs text-muted num">{plural(h.lines.length, 'item')} - held {new Date(h.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="block text-xs text-muted num">Held bill {h.id.replace(/^h/, '#')} - {plural(h.lines.length, 'item')} - held {new Date(h.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
             </span>
             <span className="text-md font-semibold num"><Money paise={h.total} /></span>
           </div>

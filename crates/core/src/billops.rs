@@ -67,11 +67,12 @@ fn cn_from_row(r: &Row) -> rusqlite::Result<(i64, CreditNote)> {
             by: r.get(9)?,
             totals: serde_json::from_str(&totals_json).unwrap_or_default(),
             lines: vec![],
+            balance: r.get(11)?,
         },
     ))
 }
 
-const CN_COLS: &str = "c.id,c.number,c.at,c.bill_id,b.number,c.customer_id,c.customer_name,c.reason,c.refund_mode,c.by_name,c.totals_json";
+const CN_COLS: &str = "c.id,c.number,c.at,c.bill_id,b.number,c.customer_id,c.customer_name,c.reason,c.refund_mode,c.by_name,c.totals_json,c.grand-c.used";
 
 fn load_credit_notes(conn: &Connection, where_sql: &str, params: impl rusqlite::Params, limit: i64) -> Result<Vec<CreditNote>> {
     let mut st = conn.prepare_cached(&format!(
@@ -360,7 +361,17 @@ pub fn get_pending_exchange(conn: &Connection) -> Result<Option<CreditNote>> {
     Ok(load_credit_notes(conn, "c.refund_mode='exchange' AND c.consumed=0", [], 1)?.pop())
 }
 
+/// "Remove exchange credit only": the credit note is NOT thrown away. It turns into ordinary store credit of the customer
+/// (unused, spendable later from the wallet); only the link to the bill being made is dropped. Audited.
 pub fn clear_pending_exchange(conn: &Connection) -> Result<()> {
-    conn.execute("UPDATE credit_notes SET consumed=1 WHERE refund_mode='exchange' AND consumed=0", [])?;
+    let open: Vec<(String, i64)> = {
+        let mut st = conn.prepare("SELECT number, grand - used FROM credit_notes WHERE refund_mode='exchange' AND consumed=0")?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        rows
+    };
+    for (number, left) in open {
+        conn.execute("UPDATE credit_notes SET refund_mode='credit_note' WHERE number=?1", [&number])?;
+        audit(conn, Local::now(), "Counter", "release_exchange", "credit_note", &number, &format!("exchange credit removed from the bill; {left} paise stays as store credit"))?;
+    }
     Ok(())
 }

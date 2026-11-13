@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
-import { IndianRupee, Plus, Receipt, ShoppingBag, TrendingUp } from 'lucide-react';
+import { IndianRupee, Plus, ReceiptIndianRupee, ShoppingBag, TrendingUp } from 'lucide-react';
 import { formatQty, formatRupees, type Bill, type DashboardStats, type Item, type TopItem } from '@gokul/data';
 import { Badge, Button, Card, Money, PageHeader, StatTile, type Tone, useRefreshOnFocus } from '@gokul/ui';
 import { api } from '../store';
@@ -79,7 +79,7 @@ export function Dashboard() {
       <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1.15fr)_minmax(0,1fr)] gap-3 overflow-hidden p-4">
         <div className="grid grid-cols-4 gap-3">
           <StatTile label="Today's sales" icon={<IndianRupee size={14} />} value={<Money paise={stats.todaySales} decimals={false} />} hint={<>Yesterday <Money paise={stats.yesterdaySales} decimals={false} /> (full day)</>} />
-          <StatTile label="Bills today" icon={<Receipt size={14} />} value={stats.todayBills} hint={`Yesterday ${stats.yesterdayBills}`} />
+          <StatTile label="Bills today" icon={<ReceiptIndianRupee size={14} />} value={stats.todayBills} hint={`Yesterday ${stats.yesterdayBills}`} />
           <StatTile label="Average bill" icon={<TrendingUp size={14} />} value={<Money paise={stats.avgBill} decimals={false} />} delta={pct(stats.avgBill, stats.yesterdayAvg)} deltaLabel="vs yesterday" />
           <div className="flex flex-col justify-between rounded-card border border-line bg-surface px-4 py-3">
             <div className="text-xs font-medium text-muted">How customers paid today</div>

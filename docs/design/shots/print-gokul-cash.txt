@@ -15,8 +15,8 @@ Contact No : 98400 11111
 Address : 12, Gandhi Street, Kondur
 Points : 7.58
 ------------------------------------------------
-BILL NO : 26/00001             DATE : 07-11-2026
-Counter : Counter 1           TIME : 11:43:13 PM
+BILL NO : 26/00001             DATE : 13-11-2026
+Counter : Counter 1           TIME : 11:04:44 AM
 ------------------------------------------------
 PRODUCT            MRP    RATE    QTY        AMT
 ------------------------------------------------

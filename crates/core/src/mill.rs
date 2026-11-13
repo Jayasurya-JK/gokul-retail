@@ -194,7 +194,7 @@ fn ensure_all_items(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn item_id_for(conn: &Connection, key: &str) -> Result<Option<String>> {
+pub(crate) fn item_id_for(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(match key {
         "groundnut" => Some("rm-gn".to_string()),
         "sesame" => Some("rm-sesame".to_string()),
@@ -208,12 +208,12 @@ fn item_id_for(conn: &Connection, key: &str) -> Result<Option<String>> {
 
 // ---------- days ----------
 
-fn day_start(day: &str) -> Result<String> {
+pub(crate) fn day_start(day: &str) -> Result<String> {
     let d = NaiveDate::parse_from_str(day, "%Y-%m-%d").map_err(|_| crate::error::ApiError::Invalid("The date looks wrong.".into()))?;
     Ok(iso(Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()).earliest().unwrap_or_else(Local::now)))
 }
 
-fn day_end(day: &str) -> Result<String> {
+pub(crate) fn day_end(day: &str) -> Result<String> {
     let d = NaiveDate::parse_from_str(day, "%Y-%m-%d").map_err(|_| crate::error::ApiError::Invalid("The date looks wrong.".into()))? + Duration::days(1);
     Ok(iso(Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()).earliest().unwrap_or_else(Local::now)))
 }
@@ -745,6 +745,7 @@ pub fn close_sheet(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
                 chekku: format!("{} {}", if machine_of(&r.machine) == "R" { "Rotary" } else { "Chekku" }, r.operator.trim()),
                 operator: r.operator.trim().to_string(),
                 machine: machine_of(&r.machine),
+                godown_barrel_id: None,
             },
             at,
         )?;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Banknote, History, Sunrise } from 'lucide-react';
+import { IndianRupee, History, Sunrise } from 'lucide-react';
 import { USUAL_FLOAT, countedTotal, type DayStatus, type DenomCounts } from '@gokul/data';
 import { Button, Kbd, Money, PosLayout, cn, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
@@ -111,7 +111,7 @@ export function DayOpen() {
     >
       <div className="flex min-h-0 flex-1 flex-col bg-bg">
         <div className="flex h-[72px] shrink-0 items-center gap-3 border-b border-line bg-surface px-6">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><Banknote size={22} /></span>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><IndianRupee size={22} /></span>
           <div>
             <h1 className="text-lg font-semibold leading-6 text-ink">Open the day</h1>
             <p className="text-sm text-muted">Count the notes and coins in the drawer before the first bill.</p>

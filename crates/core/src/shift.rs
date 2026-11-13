@@ -201,6 +201,12 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         [&s.opened_at, end_iso],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
+    // Cash handed back because a new bill was smaller than the exchange credit it used (UPI refunds never touch the drawer).
+    let exchange_cash_refunds: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount),0) FROM exchange_refunds WHERE shift_id=?1 AND mode='cash'",
+        [s.id],
+        |r| r.get(0),
+    )?;
     // Cash paid back for bills sold in an earlier shift and cancelled during this one.
     let cash_cancel_refunds: i64 = conn.query_row(
         "SELECT COALESCE(SUM(p.amount),0) FROM bill_cancellations c JOIN bills b ON b.id=c.bill_id
@@ -264,11 +270,11 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         expenses_count,
         collections_cash,
         supplier_cash,
-        cash_refunds: cash_refunds + cash_cancel_refunds,
+        cash_refunds: cash_refunds + cash_cancel_refunds + exchange_cash_refunds,
         expenses_other,
         expenses_other_count,
         expense_lines,
-        expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds - expenses_cash,
+        expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds - exchange_cash_refunds - expenses_cash,
         by_mode,
     })
 }

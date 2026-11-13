@@ -9,6 +9,7 @@ import { createReportsMock } from './areas/reports';
 import { createExpensesMock } from './areas/expenses';
 import { createMillMock } from './areas/mill';
 import { createPosReportsMock } from './areas/posreports';
+import { createProductionMock } from './areas/production';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
 import { cashDiscount, computeTotalsWithDelivery } from './money';
 import { fuzzyFilter } from './fuzzy';
@@ -23,8 +24,14 @@ const dayKey = (d: Date | string) => {
 
 export function createMockApi(): Api {
   const items = buildItems();
+  // Preview only: give each item a default supplier by category so the supplier-wise views have something to show.
+  const SUPPLIER_BY_CATEGORY: Record<string, string> = { oil: 's1', cake: 's2', jag: 's5', ghee: 's6', dal: 's7', rice: 's7', spice: 's6', nuts: 's3', pack: 's8' };
+  for (const it of items) {
+    if (it.supplierId === undefined) it.supplierId = SUPPLIER_BY_CATEGORY[it.categoryId];
+  }
   const customers = buildCustomers();
   const suppliers = buildSuppliers();
+  for (const it of items) if (it.supplierId && !it.supplier) it.supplier = suppliers.find((s) => s.id === it.supplierId)?.name;
   const purchases = buildPurchases(items, suppliers);
   const production = buildProduction();
   const bills: Bill[] = buildBills(items, customers);
@@ -92,6 +99,7 @@ export function createMockApi(): Api {
         lines, totals, payments: draft.payments, status: credit ? 'credit' : 'paid',
         staff: draft.staff ?? '', deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: delivery,
         wholesale: !!draft.wholesale, cashDiscBps: draft.cashDiscBps ?? 0, cashDisc, remarks: draft.remarks ?? '',
+        exchangeRefund: draft.exchangeRefund,
       };
       bills.push(bill);
       for (const l of draft.lines) {
@@ -182,6 +190,7 @@ export function createMockApi(): Api {
     ...createCrmMock(store),
     ...createExpensesMock(store),
     ...createMillMock(store),
+    ...createProductionMock(store),
     ...createPosReportsMock(store),
     ...createReportsMock(store),
   };

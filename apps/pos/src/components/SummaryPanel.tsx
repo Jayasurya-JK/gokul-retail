@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, Receipt, Truck, UserRound, UserRoundCheck, X } from 'lucide-react';
+import { ChevronRight, ReceiptIndianRupee, Truck, UserRound, UserRoundCheck, X, XCircle } from 'lucide-react';
 import type { BillTotals, CreditNote, Customer, CustomerWallet } from '@gokul/data';
 import type { Delivery } from '../store';
 import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees } from '@gokul/data';
@@ -33,7 +33,7 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-line bg-surface-2 px-4 py-2">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><Receipt size={16} /></span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><ReceiptIndianRupee size={16} /></span>
         <div className="leading-tight">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">
             Bill no.
@@ -51,12 +51,15 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, lastBill, billNo, exchange, due, slotLabel, wholesale, cashDisc, cashDiscBps, onCashDisc, onClearCashDisc, delivery, onDelivery, staff, onStaff }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, onCashDisc, onClearCashDisc, delivery, onDelivery, staff, onStaff }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
   lastBill: { number: string; total: number } | null; billNo: string;
-  exchange: CreditNote | null; due: number;
+  /** Typed discount from the box in this panel ("50" rupees or "5%"); empty clears it */
+  onApplyDiscount: (typed: string) => void;
+  /** Exchange credit carried into this bill, what is left to pay after it, and what goes back to the customer when the bill is smaller */
+  exchange: CreditNote | null; exchangeCredit: number; due: number; refundDue: number; onDropExchange: () => void;
   slotLabel?: string; wholesale?: boolean;
   /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K) */
   cashDisc: number; cashDiscBps: number; onCashDisc: () => void; onClearCashDisc: () => void;
@@ -137,18 +140,16 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-2">
         <Row label="Subtotal"><Money paise={goods} /></Row>
-        <div className="group flex items-center justify-between py-[3px] text-base">
-          <button
-            type="button" tabIndex={-1} onClick={onDiscount} title="Discount on the whole bill (Shift+F5)"
-            className={cn('-mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-primary-soft hover:text-primary', itemDisc ? 'text-success' : 'text-muted')}
-          >
-            {itemDisc ? `Discount ${pct}%` : 'Add discount'} <Kbd>Shift+F5</Kbd>
-          </button>
-          <span className={cn('num flex items-center gap-1.5 font-medium', itemDisc ? 'text-success' : 'text-muted')}>
-            <Money paise={-itemDisc} />
-            {itemDisc > 0 && (
+        <div className="flex items-center justify-between gap-2 py-[3px] text-base">
+          <span className={cn('flex items-center gap-1.5', itemDisc ? 'text-success' : 'text-muted')}>
+            {itemDisc ? `Discount ${pct}%` : 'Discount'}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <DiscountBox disabled={empty} onApply={onApplyDiscount} onMore={onDiscount} />
+            <span className={cn('num w-[84px] text-right font-medium', itemDisc ? 'text-success' : 'text-muted')}><Money paise={-itemDisc} /></span>
+            {itemDisc > 0 ? (
               <button type="button" tabIndex={-1} onClick={onClearDiscount} title="Remove the discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
-            )}
+            ) : <span className="w-5" />}
           </span>
         </div>
         <div className="flex items-center justify-between py-[3px] text-base">
@@ -184,14 +185,39 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
 
         {exchange && (
           <div className="mt-2 rounded-lg border border-info/30 bg-info-soft px-3 py-2">
-            <div className="flex items-center justify-between text-sm font-medium text-info">
-              <span className="flex items-center gap-1.5">Exchange credit <span className="num">{exchange.number}</span></span>
-              <b className="num"><Money paise={-Math.min(exchange.totals.grand, totals.grand || exchange.totals.grand)} /></b>
+            <div className="flex items-baseline justify-between gap-2 text-sm font-medium text-info">
+              <span className="min-w-0">Exchange credit <span className="text-xs font-normal text-muted">(from <span className="num">{exchange.billNumber}</span>)</span></span>
+              <b className="num shrink-0"><Money paise={exchangeCredit} /></b>
             </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-muted">
-              <span className="flex items-center gap-1"><Kbd>Ctrl+Del</Kbd> remove</span>
-              <span>To pay <b className="num text-sm text-ink"><Money paise={due} /></b></span>
+            <div className="mt-1 flex items-baseline justify-between text-sm text-ink">
+              <span className="text-muted">New items</span>
+              <b className="num"><Money paise={totals.grand} /></b>
             </div>
+            <div className="mt-1.5 flex items-baseline justify-between border-t border-info/25 pt-1.5">
+              {empty ? (
+                <span className="text-sm text-muted">Add the new items the customer wants</span>
+              ) : refundDue > 0 ? (
+                <>
+                  <span className="text-sm font-semibold text-warning">Refund to customer</span>
+                  <b className="num text-md text-warning"><Money paise={refundDue} /></b>
+                </>
+              ) : due > 0 ? (
+                <>
+                  <span className="text-sm font-semibold text-ink">Customer pays</span>
+                  <b className="num text-md text-ink"><Money paise={due} /></b>
+                </>
+              ) : (
+                <span className="text-sm font-semibold text-success">Credit covers the bill exactly</span>
+              )}
+            </div>
+            {refundDue > 0 && !empty && <div className="mt-1 text-xs text-muted">Cash or UPI is chosen in payment. A manager PIN is asked.</div>}
+            <button
+              type="button" tabIndex={-1} onClick={onDropExchange}
+              className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-danger/40 bg-surface text-xs font-semibold text-danger transition-colors hover:bg-danger-soft"
+              title="Take only the exchange credit off this bill. The items stay."
+            >
+              <XCircle size={14} /> Remove exchange <Kbd>Ctrl+Del</Kbd>
+            </button>
           </div>
         )}
 
@@ -218,5 +244,23 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
         </Button>
       </div>
     </>
+  );
+}
+
+/** Discount typed in the panel itself: "50" is rupees, "5%" is percent. Enter applies; the small % / rupee buttons just fill the box. */
+function DiscountBox({ disabled, onApply, onMore }: { disabled?: boolean; onApply: (v: string) => void; onMore: () => void }) {
+  const [v, setV] = useState('');
+  const go = () => { if (v.trim() !== '') { onApply(v); setV(''); document.querySelector<HTMLInputElement>('[data-scan-input]')?.focus(); } };
+  return (
+    <span className={cn('flex h-7 items-center overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20', disabled && 'opacity-50')}>
+      <input
+        value={v} disabled={disabled} inputMode="decimal" placeholder="Rs or %" aria-label="Discount in rupees, or percent like 5%"
+        onChange={(e) => setV(e.target.value.replace(/[^\d.%]/g, ''))}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') { setV(''); (e.target as HTMLInputElement).blur(); } }}
+        className="num h-full w-[74px] bg-transparent px-2 text-right text-sm font-medium text-ink placeholder:font-normal placeholder:text-subtle"
+      />
+      <button type="button" tabIndex={-1} disabled={disabled} onClick={() => { if (v.trim()) go(); else onMore(); }} title="Apply the discount (Enter). Empty: open the full discount box (Shift+F5)"
+        className="flex h-full items-center border-l border-line bg-surface-2 px-2 text-xs font-semibold text-primary hover:bg-primary-soft">Apply</button>
+    </span>
   );
 }

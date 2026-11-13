@@ -269,6 +269,19 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "listPackRuns" => ok(purchasing::list_pack_runs(c)?),
         "createPackRun" => ok(purchasing::create_pack_run(c, &arg::<purchasing::PackRunDraft>(a, 0, "draft")?)?),
 
+        // ----- ProductionApi (godown barrels, transfers, mill daily report) -----
+        "listGodownBarrels" => ok(crate::godown::list_godown_barrels(c)?),
+        "getGodownBarrel" => ok(crate::godown::get_godown_barrel(c, &arg::<String>(a, 0, "id")?)?),
+        "addGodownBarrels" => ok(crate::godown::add_godown_barrels(c, &arg::<crate::godown::AddBarrels>(a, 0, "input")?)?),
+        "editGodownBarrel" => ok(crate::godown::edit_godown_barrel(c, &arg::<crate::godown::EditBarrel>(a, 0, "input")?)?),
+        "setGodownStatus" => ok(crate::godown::set_godown_status(c, &arg::<crate::godown::StatusInput>(a, 0, "input")?)?),
+        "recordStickReading" => ok(crate::godown::record_stick_reading(c, &arg::<crate::godown::StickInput>(a, 0, "input")?)?),
+        "recordOutsourcedOil" => ok(crate::godown::record_outsourced_oil(c, &arg::<crate::godown::OutsourcedInput>(a, 0, "input")?)?),
+        "listOutsourcedOil" => ok(crate::godown::list_outsourced_oil(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(200))?),
+        "transferToStore" => ok(crate::godown::transfer_to_store(c, &arg::<crate::godown::TransferInput>(a, 0, "input")?)?),
+        "listGodownTransfers" => ok(crate::godown::list_godown_transfers(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(200))?),
+        "getMillDaily" => ok(crate::godown::mill_daily(c, &arg::<String>(a, 0, "day")?)?),
+
         // ----- CrmApi -----
         "listSalesBills" => ok(crm::list_sales_bills(c, &arg::<Option<crm::SalesQuery>>(a, 0, "query")?.unwrap_or_default())?),
         "salesFilterOptions" => ok(crm::sales_filter_options(c)?),
@@ -373,4 +386,6 @@ pub const METHODS: &[&str] = &[
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
     "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
     "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",
+    "listGodownBarrels", "getGodownBarrel", "addGodownBarrels", "editGodownBarrel", "setGodownStatus", "recordStickReading", "recordOutsourcedOil",
+    "listOutsourcedOil", "transferToStore", "listGodownTransfers", "getMillDaily",
 ];

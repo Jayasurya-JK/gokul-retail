@@ -145,9 +145,12 @@ export function RecentBillsDialog({ open, onClose, onReprint, onOpenSales }: {
         {loaded && bills.length === 0 && <div className="px-5 py-8 text-center text-sm text-muted">No bills yet today.</div>}
         {bills.map((b, i) => (
           <div key={b.id} onMouseMove={() => setHi(i)} className={cn('flex h-12 items-center gap-3 border-b border-line/70 px-5 text-sm', i === hi && 'bg-primary-soft')}>
-            <span className={cn('num w-28 font-semibold', b.status === 'cancelled' && 'text-subtle line-through')}>{b.number}</span>
+            <span className="min-w-0 flex-1 truncate">
+              <span className={cn('num font-semibold', b.status === 'cancelled' && 'text-subtle line-through')}>{b.number}</span>
+              <span className="text-muted"> - </span>
+              <span className="font-medium">{b.customerName}</span>
+            </span>
             <span className="num w-16 text-muted">{new Date(b.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-            <span className="min-w-0 flex-1 truncate">{b.customerName}</span>
             <Money paise={b.totals.grand} className="w-24 text-right font-semibold" />
             <button type="button" tabIndex={-1} onClick={() => onReprint(b)} title="Print a duplicate copy" aria-label={`Reprint ${b.number}`} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface hover:text-primary"><Printer size={15} /></button>
           </div>

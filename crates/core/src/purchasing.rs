@@ -673,12 +673,12 @@ pub fn record_supplier_payment(conn: &mut Connection, d: &SupplierPaymentDraft) 
 // Production: seeds, pressing, barrels, packing
 // =====================================================================
 
-struct SeedBase {
-    key: &'static str,
-    label: &'static str,
+pub(crate) struct SeedBase {
+    pub(crate) key: &'static str,
+    pub(crate) label: &'static str,
     ta: &'static str,
-    oil_name: &'static str,
-    rm: &'static str,
+    pub(crate) oil_name: &'static str,
+    pub(crate) rm: &'static str,
     cake_name: &'static str,
     uses_jaggery: bool,
 }
@@ -689,7 +689,7 @@ const SEEDS: &[SeedBase] = &[
 ];
 pub(crate) const JAGGERY_ITEM: &str = "Palm Jaggery (Karupatti) (Loose)";
 
-fn seed_base(key: &str) -> Option<&'static SeedBase> {
+pub(crate) fn seed_base(key: &str) -> Option<&'static SeedBase> {
     SEEDS.iter().find(|s| s.key == key)
 }
 
@@ -781,6 +781,10 @@ pub fn pressing_metrics(seed_g: i64, cleaning_g: i64, jaggery_g: i64, oil_ml: i6
         "netSeedKg": net, "oilKg": oil_kg, "yieldPct": yield_pct, "normPct": norm_pct, "variancePct": variance,
         "expectedOilL": net / kg_per_l, "litresPer100Kg": if net > 0.0 { oil_l / net * 100.0 } else { 0.0 },
         "lossKg": loss, "lossPct": if net > 0.0 { loss / net * 100.0 } else { 0.0 }, "grade": grade,
+        // The seed balance: seed in = oil (litres x kg per litre) + oil cake + cleaning waste + unexplained loss.
+        "seedInKg": seed_g as f64 / 1000.0, "cleaningKg": cleaning_g as f64 / 1000.0, "cakeKg": cake_g as f64 / 1000.0,
+        "cakePct": if net > 0.0 { cake_g as f64 / 1000.0 / net * 100.0 } else { 0.0 },
+        "kgSeedPerL": if oil_l > 0.0 { net / oil_l } else { 0.0 },
     })
 }
 
@@ -794,8 +798,9 @@ fn oil_item_id(conn: &Connection, oil_name: &str) -> Result<String> {
 }
 
 const BATCH_SELECT: &str = "SELECT b.id,b.number,b.at,b.seed,b.seed_g,b.cleaning_loss_g,b.jaggery_g,b.oil_raw_ml,b.cake_g,b.chekku,b.operator,
-    b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on,b.machine
-    FROM pressing_batches b LEFT JOIN barrels br ON br.id=b.barrel_id";
+    b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on,b.machine,
+    b.godown_barrel_id,gb.label
+    FROM pressing_batches b LEFT JOIN barrels br ON br.id=b.barrel_id LEFT JOIN godown_barrels gb ON gb.id=b.godown_barrel_id";
 
 fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
     let seed: String = r.get(3)?;
@@ -805,7 +810,10 @@ fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
     let ready: String = r.get(11)?;
     let barrel: Option<String> = r.get(16)?;
     let base = seed_base(&seed);
-    let phase = if barrel.is_some() {
+    let godown: Option<String> = r.get(20)?;
+    let phase = if godown.is_some() {
+        "in-godown"
+    } else if barrel.is_some() {
         "in-barrel"
     } else if ready <= iso(Local::now()) {
         "ready"
@@ -819,6 +827,7 @@ fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "chekku": r.get::<_, String>(9)?, "operator": r.get::<_, String>(10)?, "phase": phase, "settleReadyOn": ready,
         "clearOilL": r.get::<_, Option<i64>>(14)?, "sedimentL": r.get::<_, Option<i64>>(15)?, "barrelId": barrel,
         "barrelLabel": r.get::<_, Option<String>>(17)?, "movedOn": r.get::<_, Option<String>>(18)?, "machine": r.get::<_, String>(19)?,
+        "godownBarrelId": godown, "godownBarrelLabel": r.get::<_, Option<String>>(21)?, "normKgPerL": kg_per_l, "oilKgPerL": density,
         "metrics": pressing_metrics(seed_g, clean, jag, oil, cake, kg_per_l, density),
     }))
 }
@@ -870,6 +879,9 @@ pub struct PressingDraft {
     /// W = wood-pressed (chekku), R = rotary. Older callers send nothing and get W.
     #[serde(default = "default_machine")]
     pub machine: String,
+    /// The godown barrel the oil goes into (required by the Production screen; older callers send nothing and the oil is only recorded on the batch).
+    #[serde(default)]
+    pub godown_barrel_id: Option<String>,
 }
 
 fn default_machine() -> String {
@@ -880,7 +892,7 @@ fn fmt_kg(milli: i64) -> String {
     format!("{}", milli / 1000)
 }
 
-/// Seed (and jaggery) out of the godown, cake into stock, all as ledger movements. Oil enters stock when moved to a barrel.
+/// Seed (and jaggery) out of the godown, cake into stock, all as ledger movements. The oil goes into a godown barrel (production stock); it reaches the store only by a transfer.
 pub fn create_pressing_batch(conn: &mut Connection, d: &PressingDraft) -> Result<Value> {
     create_pressing_batch_at(conn, d, Local::now())
 }
@@ -930,6 +942,10 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
     } else {
         None
     };
+    let godown = match d.godown_barrel_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(id) => Some(crate::godown::check_fill(tx, id, &d.seed, d.oil_raw_l)?),
+        None => None,
+    };
     let norm = seed_norm(tx, &d.seed);
     let fy = fy_of(now);
     let seq = next_seq(tx, PRESS_SERIES, &fy)?;
@@ -945,6 +961,10 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
     )?;
     let bid = tx.last_insert_rowid();
     let at = iso(now);
+    if let Some(g) = &godown {
+        tx.execute("UPDATE pressing_batches SET godown_barrel_id=?1 WHERE id=?2", params![g, bid])?;
+        crate::godown::fill(tx, now, g, "press", d.oil_raw_l, "pressing", &bid.to_string(), &format!("Oil from {number}"))?;
+    }
     post_movement(tx, &at, base.rm, "production", -d.seed_kg, "pressing", &bid.to_string(), &format!("Pressed in {number}"), OFFICE)?;
     if let Some(j) = &jaggery_id {
         post_movement(tx, &at, j, "production", -d.jaggery_kg, "pressing", &bid.to_string(), &format!("Jaggery used in {number}"), OFFICE)?;
@@ -1168,4 +1188,11 @@ pub fn create_pack_run_at(conn: &mut Connection, d: &PackRunDraft, now: chrono::
     let out = pack_run_json(&tx, rid)?;
     tx.commit()?;
     Ok(out)
+}
+
+/// The pressing batches of one day (Mill daily sheet).
+pub(crate) fn batches_on(conn: &Connection, day: &str) -> Result<Vec<Value>> {
+    let mut st = conn.prepare(&format!("{BATCH_SELECT} WHERE b.day=?1 ORDER BY b.at, b.id"))?;
+    let v = st.query_map([day], batch_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(v)
 }

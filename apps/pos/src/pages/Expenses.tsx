@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, Pencil, Receipt, Wallet, Ban } from 'lucide-react';
+import { ArrowDownLeft, Pencil, ReceiptIndianRupee, Wallet, Ban } from 'lucide-react';
 import {
   CASH_REASONS, PAID_FROM_LABEL, formatRupees, needsManagerPin, parsePaise,
   type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom,
@@ -167,7 +167,7 @@ export function Expenses() {
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-3 p-1">
-              <Seg active={mode === 'expense'} onClick={() => switchMode('expense')} icon={<Receipt size={16} />} label="Expense" k="F3" />
+              <Seg active={mode === 'expense'} onClick={() => switchMode('expense')} icon={<ReceiptIndianRupee size={16} />} label="Expense" k="F3" />
               <Seg active={mode === 'in'} onClick={() => switchMode('in')} icon={<ArrowDownLeft size={16} />} label="Cash added" k="F4" />
             </div>
 

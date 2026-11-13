@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HandCoins, Pencil, Phone, Plus, Receipt, Search, ShoppingCart, Star, UserRound, UserPlus } from 'lucide-react';
+import { IndianRupee, Pencil, Phone, Plus, ReceiptIndianRupee, Search, ShoppingCart, Star, UserRound, UserPlus } from 'lucide-react';
 import { compareCustomers, isNoName, formatPoints, formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustomerWallet, type CustStatement, type PointsLedgerRow } from '@gokul/data';
 import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useBilling } from '../store';
@@ -220,7 +220,7 @@ export function Customers() {
                   <div className="mt-4 rounded-card border border-line p-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-semibold text-ink">Dues by age</h3>
-                      <Button variant="primary" size="sm" icon={<HandCoins size={14} />} kbd="F4" onClick={() => setCollecting(true)}>Collect payment</Button>
+                      <Button variant="primary" size="sm" icon={<IndianRupee size={14} />} kbd="F4" onClick={() => setCollecting(true)}>Collect payment</Button>
                     </div>
                     <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-surface-3">
                       {BUCKETS.map((b) => buckets[b.key] > 0 && <span key={b.key} className={b.bar} style={{ width: `${(buckets[b.key] / Math.max(1, bucketTotal)) * 100}%` }} />)}
@@ -241,7 +241,7 @@ export function Customers() {
                   <span className="text-xs text-muted">{profile?.bills.length ?? 0} bills</span>
                 </div>
                 <div className="mt-2 overflow-hidden rounded-card border border-line">
-                  {profile && profile.bills.length === 0 && <EmptyState icon={<Receipt size={20} />} title="No bills for this customer yet" className="!min-h-[120px]" />}
+                  {profile && profile.bills.length === 0 && <EmptyState icon={<ReceiptIndianRupee size={20} />} title="No bills for this customer yet" className="!min-h-[120px]" />}
                   {profile?.bills.slice(0, 30).map((b) => (
                     <div key={b.id} className="flex h-10 items-center gap-4 border-b border-line/70 px-4 text-sm last:border-b-0">
                       <span className={cn('num w-28 font-semibold', b.status === 'cancelled' ? 'text-subtle line-through' : 'text-ink')}>{b.number}</span>
@@ -265,7 +265,7 @@ export function Customers() {
 
               <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2 px-6 py-2.5">
                 <Button variant="primary" size="lg" icon={<ShoppingCart size={16} />} kbd="Enter" onClick={newBill}>New bill for {isNoName(sel.name) ? sel.phone : sel.name.split(' ')[0]}</Button>
-                <Button size="lg" icon={<HandCoins size={16} />} kbd="F4" disabled={sel.outstanding <= 0} onClick={() => setCollecting(true)}>Collect payment</Button>
+                <Button size="lg" icon={<IndianRupee size={16} />} kbd="F4" disabled={sel.outstanding <= 0} onClick={() => setCollecting(true)}>Collect payment</Button>
               </div>
             </>
           ) : (

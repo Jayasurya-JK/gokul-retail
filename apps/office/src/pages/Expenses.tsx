@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Ban, Banknote, Pencil, Plus, Receipt, Settings2, Wallet } from 'lucide-react';
+import { Ban, IndianRupee, Pencil, Plus, ReceiptIndianRupee, Settings2, Wallet } from 'lucide-react';
 import { PAID_FROM_LABEL, type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom, type ExpenseQuery } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, StatTile, dateRangePresets, cn,
@@ -71,8 +71,8 @@ export function Expenses() {
         actions={<><Button icon={<Settings2 size={15} />} onClick={() => setDlg('cats')}>Categories</Button><Button variant="primary" icon={<Plus size={15} />} kbd="F2" onClick={() => setDlg('new')}>New expense</Button></>}
       />
       <div className="grid shrink-0 grid-cols-4 gap-3 border-b border-line bg-surface px-5 py-3">
-        <StatTile label="Total expenses" icon={<Receipt size={14} />} value={<Money paise={data?.total ?? 0} decimals={false} />} hint={`${data?.count ?? 0} entries`} />
-        <StatTile label="Cash drawer" icon={<Banknote size={14} />} value={<Money paise={data?.byMode.cash ?? 0} decimals={false} />} hint="Taken off the day-close cash" />
+        <StatTile label="Total expenses" icon={<ReceiptIndianRupee size={14} />} value={<Money paise={data?.total ?? 0} decimals={false} />} hint={`${data?.count ?? 0} entries`} />
+        <StatTile label="Cash drawer" icon={<IndianRupee size={14} />} value={<Money paise={data?.byMode.cash ?? 0} decimals={false} />} hint="Taken off the day-close cash" />
         <StatTile label="UPI" value={<Money paise={data?.byMode.upi ?? 0} decimals={false} />} hint="Paid by UPI" />
         <StatTile label="Bank" value={<Money paise={data?.byMode.bank ?? 0} decimals={false} />} hint="Cheque or transfer" />
       </div>

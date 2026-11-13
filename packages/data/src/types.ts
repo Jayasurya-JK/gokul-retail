@@ -103,7 +103,12 @@ export interface BillExtras {
   /** Saved cash discount in paise (already inside the bill-level discount) */
   cashDisc?: Paise;
   remarks?: string;
+  /** Exchange credit was bigger than this bill: the rest goes back to the customer in cash or UPI (needs a manager PIN) */
+  exchangeRefund?: ExchangeRefund;
 }
+
+/** The part of an exchange credit handed back because the new bill was smaller */
+export interface ExchangeRefund { mode: 'cash' | 'upi'; amount: Paise; /** number of the exchange credit note */ creditNote: string }
 
 export interface Bill extends BillExtras {
   id: string;

@@ -1,5 +1,5 @@
 import type { MockStore } from './store';
-import type { Bill, BillLine, BillTotals, Milli, UnitCode } from '../types';
+import type { Bill, BillLine, BillTotals, Milli, Paise, UnitCode } from '../types';
 import { computeTotals, lineGross } from '../money';
 
 // Area: POS bill history, reprint, cancel, returns and exchange.
@@ -21,6 +21,8 @@ export interface CreditNote {
   reason: string;
   refundMode: RefundMode;
   by: string;
+  /** Still unused on this note (total minus what was already spent); missing means all of it */
+  balance?: Paise;
 }
 
 export interface CancelInfo { reason: string; by: string; approvedBy: string; at: string }

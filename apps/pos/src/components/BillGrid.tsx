@@ -134,7 +134,7 @@ export function BillGrid({ lines, selected, edit, loose, stock, onSelect, onDraf
                   {editing === 'rate' ? cellInput('rate', i, (l.rate / 100).toFixed(2)) : <CellButton label="Change rate" onClick={() => onEdit(i, 'rate')}><Money paise={l.rate} symbol={false} /></CellButton>}
                 </div>
                 <div className="px-1.5 text-right num">
-                  {editing === 'disc' ? cellInput('disc', i, '0 or 5%') : <CellButton label="Add discount" onClick={() => onEdit(i, 'disc')}>{l.discount ? <span className="text-success"><Money paise={-l.discount} symbol={false} /></span> : <span className="text-subtle">-</span>}</CellButton>}
+                  {editing === 'disc' ? cellInput('disc', i, '0 or 5%') : <CellButton label="Add discount" onClick={() => onEdit(i, 'disc')}>{l.discount ? <span className="text-success"><Money paise={-l.discount} symbol={false} /></span> : <span className="inline-block rounded border border-dashed border-line-strong px-1.5 text-xs font-medium text-subtle">+ Disc</span>}</CellButton>}
                 </div>
                 <div className="px-2 text-right text-sm text-muted num min-[1700px]:text-base">{l.gstRate}%</div>
                 <div className="relative px-2 text-right text-md font-semibold num min-[1700px]:text-xl">

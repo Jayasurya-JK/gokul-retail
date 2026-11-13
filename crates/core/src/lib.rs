@@ -12,6 +12,7 @@ pub mod db;
 pub mod dispatch;
 pub mod error;
 pub mod expenses;
+pub mod godown;
 pub mod labels;
 pub mod loyalty;
 pub mod lots;

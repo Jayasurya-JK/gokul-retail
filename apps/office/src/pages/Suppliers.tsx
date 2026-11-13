@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Banknote, MapPin, Pencil, Phone, Plus, Truck } from 'lucide-react';
+import { IndianRupee, MapPin, Pencil, Phone, Plus, Truck } from 'lucide-react';
 import { fuzzyFilter, type SupplierLedger, type SupplierProfile, type SupplierSummary } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
@@ -92,7 +92,7 @@ function Detail({ ledger, onPay, onEdit }: { ledger: SupplierLedger; onPay: () =
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button size="sm" icon={<Pencil size={13} />} onClick={onEdit}>Edit</Button>
-            <Button size="sm" variant="primary" icon={<Banknote size={14} />} kbd="F4" onClick={onPay} disabled={s.due <= 0}>Pay</Button>
+            <Button size="sm" variant="primary" icon={<IndianRupee size={14} />} kbd="F4" onClick={onPay} disabled={s.due <= 0}>Pay</Button>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">

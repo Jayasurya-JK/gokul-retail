@@ -156,6 +156,20 @@ pub struct BillExtras {
     pub cash_disc: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub remarks: String,
+    /// Exchange credit was larger than this bill: the difference handed back to the customer (needs a manager PIN).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exchange_refund: Option<ExchangeRefund>,
+}
+
+/// The part of an exchange credit given back in cash or UPI because the new bill was smaller.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExchangeRefund {
+    /// "cash" or "upi"
+    pub mode: String,
+    pub amount: i64,
+    /// Number of the exchange credit note this comes from
+    pub credit_note: String,
 }
 
 fn is_zero(v: &i64) -> bool {
@@ -432,6 +446,9 @@ pub struct CreditNote {
     pub reason: String,
     pub refund_mode: String, // cash | upi | credit_note | exchange
     pub by: String,
+    /// What is still unused on this note (grand minus used); only an exchange or store-credit note has any left.
+    #[serde(default)]
+    pub balance: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

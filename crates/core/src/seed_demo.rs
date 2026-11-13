@@ -360,7 +360,7 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
             &PressingDraft {
                 seed: seed.to_string(), seed_kg: seed_g, cleaning_loss_kg: cleaning, jaggery_kg: jag, oil_raw_l: oil_ml, cake_kg: cake_g,
                 chekku: format!("Chekku {}", 1 + n % 3), operator: ["Murugesan", "Selvam", "Kannan"][n % 3].into(),
-                machine: if n % 4 == 3 && *seed != "copra" { "R".into() } else { "W".into() },
+                machine: if n % 4 == 3 && *seed != "copra" { "R".into() } else { "W".into() }, godown_barrel_id: None,
             },
             when,
         )?;

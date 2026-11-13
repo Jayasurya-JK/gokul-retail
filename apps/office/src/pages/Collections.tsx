@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Banknote, MessageCircle, Printer, Wallet } from 'lucide-react';
+import { IndianRupee, MessageCircle, Printer, Wallet } from 'lucide-react';
 import { formatRupees, fuzzyFilter, type AgeingKey, type CustStatement, type ReceivableRow, type Settings } from '@gokul/data';
 import { Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, useToast, type ColumnDef, useRefreshOnFocus } from '@gokul/ui';
 import { api } from '../store';
@@ -68,7 +68,7 @@ function Statement({ row, st, onPay, onRemind }: { row: ReceivableRow; st: CustS
           ))}
         </div>
         <div className="mt-4 flex gap-2">
-          <Button variant="primary" icon={<Banknote size={15} />} kbd="F2" onClick={onPay} className="flex-1">Record payment</Button>
+          <Button variant="primary" icon={<IndianRupee size={15} />} kbd="F2" onClick={onPay} className="flex-1">Record payment</Button>
           <Button icon={<MessageCircle size={15} />} onClick={onRemind} className="flex-1">Remind</Button>
         </div>
         <div className="mt-2 text-xs text-subtle">

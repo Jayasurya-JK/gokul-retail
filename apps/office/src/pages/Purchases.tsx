@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Banknote, FileText, Plus, ShoppingCart } from 'lucide-react';
+import { IndianRupee, FileText, Plus, ShoppingCart } from 'lucide-react';
 import { fuzzyFilter, type Grn, type SupplierSummary } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, Money, PageHeader, SearchInput, Select, StatTile, cn, type ColumnDef, useRefreshOnFocus
@@ -35,7 +35,7 @@ function Detail({ g, onPay, payable }: { g: Grn; onPay: () => void; payable: boo
             <div className="flex items-center gap-2 text-md font-semibold leading-tight text-ink">{g.number}<PayBadge status={g.status} /></div>
             <div className="mt-0.5 truncate text-sm text-muted">{g.supplierName}</div>
           </div>
-          {due > 0 && payable && <Button size="sm" variant="primary" icon={<Banknote size={14} />} onClick={onPay}>Pay</Button>}
+          {due > 0 && payable && <Button size="sm" variant="primary" icon={<IndianRupee size={14} />} onClick={onPay}>Pay</Button>}
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
           <div><div className="text-muted">Invoice</div><div className="num mt-0.5 truncate text-sm font-medium text-ink">{g.invoiceNo}</div></div>
@@ -138,7 +138,7 @@ export function Purchases() {
         <StatTile label="Bought, 30 days" value={<Money paise={stats.monthTotal} decimals={false} />} hint={`${stats.monthBills} bills`} icon={<ShoppingCart size={14} />} />
         <StatTile label="Seed received, 30 days" value={<>{fmtMilli(seedMonthKg, 0)} <span className="text-sm font-normal text-muted">kg</span></>} hint="Groundnut, sesame, copra" icon={<FileText size={14} />} />
         <StatTile label="Input GST, 30 days" value={<Money paise={stats.monthGst} decimals={false} />} hint="Claim in GSTR-3B" icon={<FileText size={14} />} />
-        <StatTile label="Owed to suppliers" value={<Money paise={stats.due} decimals={false} />} hint={<>{stats.unpaid} unpaid bills, <span className="font-semibold text-danger"><Money paise={stats.overdue} decimals={false} /></span> overdue</>} icon={<Banknote size={14} />} />
+        <StatTile label="Owed to suppliers" value={<Money paise={stats.due} decimals={false} />} hint={<>{stats.unpaid} unpaid bills, <span className="font-semibold text-danger"><Money paise={stats.overdue} decimals={false} /></span> overdue</>} icon={<IndianRupee size={14} />} />
       </div>
       <FilterBar trailing={<span>{rows.length} shown{grns.length >= 1000 ? ' · latest 1,000 purchases (use Reports for older ones)' : ''}</span>}>
         <div className="w-72"><SearchInput placeholder="Search entry, invoice, supplier or item" value={q} onChange={(e) => setQ(e.target.value)} /></div>
