@@ -137,6 +137,36 @@ export interface MillDayInput {
   physical: Partial<Record<MillStockKey, number>>;
 }
 
+/** Job work (aravai for a customer): posted when it is entered. Seed and oil are the customer's own and never touch shop stock. */
+export interface JobWorkInput {
+  customerId: string;
+  seed: MillSeed;
+  machine: Machine;
+  seedKg: number;
+  oilL: number;
+  cakeKg: number;
+  cakeMode: 'taken' | 'kept';
+  /** Default today */
+  day?: string;
+}
+
+export interface JobWork {
+  id: string;
+  day: string;
+  customerId: string;
+  customerName: string;
+  seed: MillSeed;
+  machine: Machine;
+  seedKg: number;
+  oilL: number;
+  cakeKg: number;
+  cakeMode: 'taken' | 'kept';
+  /** Paise per kg, GST included */
+  rate: Paise;
+  charge: Paise;
+  billNumber: string;
+}
+
 export interface MillSheetSummary {
   day: string;
   status: 'draft' | 'closed';
@@ -155,6 +185,9 @@ export interface MillApi {
   listMillSheets(limit?: number): Promise<MillSheetSummary[]>;
   /** The day sheet's count lines (expected stock, counted, difference) */
   getMillDay(day: string): Promise<MillDay>;
+  /** Posts a customer's job work now: credit bill for the per-kg charge, and the cake the shop keeps goes into stock */
+  recordJobWork(input: JobWorkInput): Promise<JobWork>;
+  listJobWork(limit?: number): Promise<JobWork[]>;
   /** Saves supervisor, note and counts. Nothing touches stock. A closed day cannot be saved. */
   saveMillDay(input: MillDayInput): Promise<MillDay>;
   /** Posts the counted differences as stock adjustments and freezes the day. Needs a manager PIN. */
@@ -198,6 +231,7 @@ export function createMillMock(store: MockStore): MillApi {
   const closed = new Map<string, MillSheet>();
   const drafts = new Map<string, MillSheetInput>();
   let billSeq = 48700;
+  const jobs: JobWork[] = [];
   const dayMeta = new Map<string, { supervisor: string; note: string; physical: Partial<Record<MillStockKey, number>> }>();
 
   const settings = (): MillSettings => store.mill ?? DEFAULT_SETTINGS;
@@ -360,6 +394,30 @@ export function createMillMock(store: MockStore): MillApi {
       closed.set(day, sheet);
       drafts.delete(day);
       return { ...clone(sheet), legacyOpenRows: 0 };
+    },
+    recordJobWork: async (i) => {
+      if (i.seedKg <= 0) throw new Error('Enter the seed weight.');
+      if (i.cakeMode === 'kept' && i.cakeKg <= 0) throw new Error('Enter the cake the shop keeps.');
+      const cust = store.customers.find((x) => x.id === i.customerId);
+      if (!cust) throw new Error('Choose the customer.');
+      const day = i.day || dayKey(new Date());
+      if (day > dayKey(new Date())) throw new Error('The day cannot be in the future.');
+      if (closed.has(day)) throw new Error('That day is closed. Choose another day.');
+      const rate = i.cakeMode === 'kept' ? settings().rateCakeKept : settings().rateCakeTaken;
+      billSeq += 1;
+      const job: JobWork = {
+        id: `mj${900 + jobs.length}`, day, customerId: i.customerId, customerName: cust.name, seed: i.seed, machine: i.machine, seedKg: i.seedKg, oilL: i.oilL, cakeKg: i.cakeKg,
+        cakeMode: i.cakeMode, rate, charge: Math.round((rate * i.seedKg) / 1000), billNumber: `GK-26-${String(billSeq).padStart(6, '0')}`,
+      };
+      jobs.unshift(job);
+      return { ...job };
+    },
+    listJobWork: async (limit = 100) => {
+      const old: JobWork[] = [...closed.values()].flatMap((s) => s.custRows.map((r) => ({
+        id: r.id ?? '', day: s.day, customerId: r.customerId, customerName: r.customerName ?? '', seed: r.seed, machine: r.machine, seedKg: r.seedKg, oilL: r.oilL,
+        cakeKg: r.cakeKg, cakeMode: r.cakeMode, rate: r.rate ?? 0, charge: r.charge ?? 0, billNumber: r.billNumber ?? '',
+      })));
+      return [...jobs, ...old].sort((a, b) => b.day.localeCompare(a.day)).slice(0, limit).map((j) => ({ ...j }));
     },
     listMillSheets: async (limit = 60) => {
       const all: MillSheetSummary[] = [...closed.values()].map((s) => ({

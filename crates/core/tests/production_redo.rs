@@ -231,3 +231,36 @@ fn the_day_sheet_counts_and_closes_without_posting_batches_or_touching_old_rows(
     })
     .unwrap();
 }
+
+#[test]
+fn job_work_bills_the_customer_keeps_cake_and_never_touches_shop_seed_or_oil() {
+    let (_d, db) = common::mini_db();
+    db.with(|c| {
+        post_movement(c, &iso(Local::now()), "rm-gn", "purchase", 100_000, "test", "1", "seed", "Test")?;
+        let seed_before: i64 = c.query_row("SELECT stock FROM items WHERE id='rm-gn'", [], |r| r.get(0))?;
+        let oil_before: i64 = c.query_row("SELECT stock FROM items WHERE id='i2'", [], |r| r.get(0))?;
+        let cake_before = mill::list_job_work(c, 10)?.len();
+        assert_eq!(cake_before, 0);
+        // 40 kg of the customer's groundnut, the shop keeps 22 kg of cake: lower rate (Rs 5 per kg, GST included)
+        let j = mill::record_job_work(c, &de(json!({ "customerId": "c1", "seed": "groundnut", "machine": "W", "seedKg": 40_000, "oilL": 15_000, "cakeKg": 22_000, "cakeMode": "kept" })))?;
+        assert_eq!(j["rate"], 500);
+        assert_eq!(j["charge"], 20_000, "40 kg x Rs 5");
+        assert!(!j["billNumber"].as_str().unwrap().is_empty());
+        assert_eq!(c.query_row::<i64, _, _>("SELECT outstanding FROM customers WHERE id='c1'", [], |r| r.get(0))?, 20_000, "credit bill on the customer");
+        assert_eq!(c.query_row::<i64, _, _>("SELECT stock FROM items WHERE id='rm-gn'", [], |r| r.get(0))?, seed_before, "customer seed never touches shop stock");
+        assert_eq!(c.query_row::<i64, _, _>("SELECT stock FROM items WHERE id='i2'", [], |r| r.get(0))?, oil_before, "customer oil never touches shop stock");
+        let cake: i64 = c.query_row("SELECT COALESCE(SUM(qty),0) FROM stock_movements WHERE ref_type='mill_job'", [], |r| r.get(0))?;
+        assert_eq!(cake, 22_000, "kept cake goes into stock");
+        // cake taken by the customer: higher rate, no stock
+        let t = mill::record_job_work(c, &de(json!({ "customerId": "c1", "seed": "sesame", "seedKg": 10_000, "oilL": 3_500, "cakeKg": 6_000, "cakeMode": "taken" })))?;
+        assert_eq!(t["rate"], 800);
+        assert_eq!(c.query_row::<i64, _, _>("SELECT COALESCE(SUM(qty),0) FROM stock_movements WHERE ref_type='mill_job'", [], |r| r.get(0))?, 22_000);
+        assert_eq!(mill::list_job_work(c, 10)?.len(), 2);
+        // bad input changes nothing
+        assert!(mill::record_job_work(c, &de(json!({ "customerId": "nobody", "seed": "sesame", "seedKg": 1_000 }))).is_err());
+        assert!(mill::record_job_work(c, &de(json!({ "customerId": "c1", "seed": "sesame", "seedKg": 1_000, "cakeMode": "kept" }))).is_err());
+        assert_eq!(mill::list_job_work(c, 10)?.len(), 2);
+        Ok(())
+    })
+    .unwrap();
+}

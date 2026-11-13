@@ -1015,3 +1015,131 @@ pub fn close_day(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
     tx.commit()?;
     Ok(sheet)
 }
+
+// =====================================================================
+// Job work (aravai for a customer): the customer brings their own seed. It is posted the moment it is entered: the customer's seed
+// and oil never touch shop stock, a cake the shop keeps goes into stock, and the per-kg charge becomes a credit bill on the customer.
+// =====================================================================
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobWorkInput {
+    pub customer_id: String,
+    pub seed: String,
+    #[serde(default = "default_w")]
+    pub machine: String,
+    pub seed_kg: i64,
+    #[serde(default)]
+    pub oil_l: i64,
+    #[serde(default)]
+    pub cake_kg: i64,
+    /// taken: the customer takes the cake (higher rate). kept: the shop keeps it (lower rate, cake goes into stock).
+    #[serde(default = "default_taken")]
+    pub cake_mode: String,
+    #[serde(default)]
+    pub day: Option<String>,
+}
+
+fn default_w() -> String {
+    "W".into()
+}
+fn default_taken() -> String {
+    "taken".into()
+}
+
+const JOB_SELECT: &str = "SELECT id,day,customer_id,customer_name,seed,machine,seed_g,oil_ml,cake_g,cake_mode,rate,charge,bill_number FROM mill_cust_jobs";
+
+fn job_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({
+        "id": format!("mj{}", r.get::<_, i64>(0)?), "day": r.get::<_, String>(1)?, "customerId": r.get::<_, String>(2)?, "customerName": r.get::<_, String>(3)?,
+        "seed": r.get::<_, String>(4)?, "machine": r.get::<_, String>(5)?, "seedKg": r.get::<_, i64>(6)?, "oilL": r.get::<_, i64>(7)?,
+        "cakeKg": r.get::<_, i64>(8)?, "cakeMode": r.get::<_, String>(9)?, "rate": r.get::<_, i64>(10)?, "charge": r.get::<_, i64>(11)?, "billNumber": r.get::<_, String>(12)?,
+    }))
+}
+
+pub fn record_job_work(conn: &mut Connection, i: &JobWorkInput) -> Result<Value> {
+    if !SEEDS.contains(&i.seed.as_str()) {
+        return invalid("Choose the seed.");
+    }
+    if i.seed_kg <= 0 {
+        return invalid("Enter the seed weight.");
+    }
+    if i.oil_l < 0 || i.cake_kg < 0 {
+        return invalid("Weights cannot be negative.");
+    }
+    let mode = if i.cake_mode == "kept" { "kept" } else { "taken" };
+    if mode == "kept" && i.cake_kg <= 0 {
+        return invalid("Enter the cake the shop keeps.");
+    }
+    let machine = machine_of(&i.machine);
+    let today = db::day_of(Local::now());
+    let day = i.day.clone().filter(|d| !d.is_empty()).unwrap_or_else(|| today.clone());
+    day_start(&day)?;
+    if day > today {
+        return invalid("The day cannot be in the future.");
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let Some(customer): Option<String> = tx.query_row("SELECT name FROM customers WHERE id=?1", [&i.customer_id], |r| r.get(0)).optional()? else {
+        return invalid("Choose the customer.");
+    };
+    if sheet_status(&tx, &day)?.as_deref() == Some("closed") {
+        return invalid("That day is closed. Choose another day.");
+    }
+    if sheet_status(&tx, &day)?.is_none() {
+        let now = iso(Local::now());
+        tx.execute("INSERT INTO mill_sheets(day,status,physical_json,created_at,updated_at) VALUES(?1,'draft','{}',?2,?2)", params![day, now])?;
+    }
+    let s = mill_settings(&tx);
+    let at = posting_time(&day);
+    let at_iso = iso(at);
+    let who = db::actor_or(OFFICE);
+    let rate = if mode == "kept" { s.rate_kept } else { s.rate_taken };
+    tx.execute(
+        "INSERT INTO mill_cust_jobs(day,customer_id,customer_name,seed,machine,seed_g,oil_ml,cake_g,cake_mode,rate,posted) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1)",
+        params![day, i.customer_id, customer, i.seed, machine, i.seed_kg, i.oil_l, i.cake_kg, mode, rate],
+    )?;
+    let id = tx.last_insert_rowid();
+    ensure_all_items(&tx)?;
+    if mode == "kept" {
+        if let Some(item) = item_id_for(&tx, punnaku_key(&i.seed, &machine))? {
+            db::post_movement(&tx, &at_iso, &item, "production", i.cake_kg, "mill_job", &day, &format!("Cake kept from customer job work {day}"), &who)?;
+        }
+    }
+    let service_id = service_item(&tx, &s)?;
+    let line = recalc_line(&BillLine { item_id: service_id, code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: i.seed_kg, rate, discount: 0, gst_rate: s.gst_rate, amount: 0 });
+    let lines = vec![line];
+    let total = compute_totals(&lines, 0, db::load_settings(&tx)?.round_to_rupee).grand;
+    if total > 0 {
+        let bill = write_bill(
+            &tx,
+            &BillDraft {
+                customer_id: Some(i.customer_id.clone()),
+                customer_name: None,
+                lines,
+                bill_discount: 0,
+                payments: vec![Payment { mode: "credit".into(), amount: total, r#ref: Some(format!("Job work {day}")) }],
+                cashier: Some(who.clone()),
+                manager_pin: None,
+                extras: Default::default(),
+            },
+            at,
+            None,
+        )?;
+        let bill_id: i64 = bill.id.trim_start_matches('b').parse().unwrap_or(0);
+        tx.execute(
+            "UPDATE mill_cust_jobs SET charge=?1, bill_id=?2, bill_number=?3 WHERE id=?4",
+            params![charge_for(i.seed_kg, rate), bill_id, bill.number, id],
+        )?;
+    }
+    audit(&tx, Local::now(), &who, "create", "mill_job", &id.to_string(), &format!("{} kg {} for {customer}", i.seed_kg / 1000, i.seed))?;
+    let out = tx.query_row(&format!("{JOB_SELECT} WHERE id=?1"), [id], job_json)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+/// Job work that has been posted (newest first), including the jobs of old closed sheets.
+pub fn list_job_work(conn: &Connection, limit: i64) -> Result<Vec<Value>> {
+    let mut st = conn.prepare(&format!("{JOB_SELECT} WHERE posted=1 OR bill_number<>'' ORDER BY day DESC, id DESC LIMIT ?1"))?;
+    let v = st.query_map([limit.clamp(1, 500)], job_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(v)
+}

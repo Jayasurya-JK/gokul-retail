@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Factory, Flame, PackageOpen, Plus, Warehouse } from 'lucide-react';
+import { Factory, Flame, PackageOpen, Plus, Warehouse, Wheat } from 'lucide-react';
 import { type Barrel, type GodownBarrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
@@ -8,6 +8,7 @@ import { api } from '../store';
 import { PressingForm } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
 import { PressingGrid } from '../components/purchasing/PressingGrid';
+import { JobWorkPane } from '../components/purchasing/JobWorkPane';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
   BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, gradeTone, phaseInfo, SectionLabel, seedColor, useKeys,
@@ -282,13 +283,13 @@ export function Production() {
       <PageHeader
         title="Production" icon={<Factory size={17} />}
         subtitle={`${month.n} pressing batches in 30 days, ${fmtMilli(month.oil, 0)} L oil from ${fmtMilli(month.seed, 0)} kg seed`}
-        actions={tab === 'godown' ? undefined : (
+        actions={tab === 'godown' || tab === 'jobwork' ? undefined : (
           <Button icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'Batch with details' : 'New packing run'}</Button>
         )}
       />
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4 py-3">
         <div className="min-w-0 flex-1">
-          {tab === 'pressing' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : (
+          {tab === 'pressing' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : tab === 'jobwork' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : (
             <BarrelStrip
               barrels={tab === 'godown' ? godownStrip : barrels}
               selectedId={tab === 'godown' ? godownSelId : run?.barrelId}
@@ -311,6 +312,7 @@ export function Production() {
           { value: 'pressing', label: <><Flame size={14} />Pressing</>, count: batches.length },
           { value: 'godown', label: <><Warehouse size={14} />Godown</> },
           { value: 'packing', label: <><PackageOpen size={14} />Packing</>, count: runs.length },
+          { value: 'jobwork', label: <><Wheat size={14} />Job work</> },
         ]}
       >
         <TabPanel value="pressing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
@@ -330,6 +332,9 @@ export function Production() {
         </TabPanel>
         <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} selectedId={godownSelId} onSelect={setGodownSelId} />
+        </TabPanel>
+        <TabPanel value="jobwork" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
+          <JobWorkPane />
         </TabPanel>
         <TabPanel value="packing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <FilterBar trailing={<span>{runs.length} packing runs</span>}>
