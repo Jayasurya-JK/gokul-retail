@@ -492,7 +492,7 @@ export function Returns() {
                 </div>
                 <Money paise={count ? quote.totals.grand : 0} className="block text-right text-3xl font-bold text-white" softPaise />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button className="flex-1" icon={<FileText size={15} />} disabled={!draftNote} onClick={() => setDialog('preview')} kbd="F9">Preview note</Button>
                 <Button className="flex-[1.3]" variant="primary" size="md" disabled={busy} onClick={() => void complete()} kbd="F12">
                   {mode === 'exchange' ? 'Complete + exchange' : 'Complete return'}

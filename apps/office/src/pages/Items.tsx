@@ -20,7 +20,7 @@ const GHEAD: [string, string, boolean][] = [
   ['pick', '', false], ['code', 'Code', false], ['name', 'Item', false], ['category', 'Category', false], ['type', 'Type', false],
   ['supplier', 'Supplier', false], ['price', 'Price', true], ['gst', 'GST', true], ['stock', 'Stock', true],
 ];
-const GROUP_COLS = '36px 58px minmax(120px,1fr) 150px 86px 130px 92px 52px 104px';
+const GROUP_COLS = '36px 52px minmax(150px,1fr) 116px 70px 100px 84px 42px 90px';
 
 export function Items() {
   const nav = useNavigate();
@@ -127,7 +127,7 @@ export function Items() {
     },
     { accessorKey: 'code', header: 'Code', meta: { w: '58px', num: true } },
     {
-      accessorKey: 'name', header: 'Item', meta: { w: 'minmax(120px,1fr)' },
+      accessorKey: 'name', header: 'Item', meta: { w: 'minmax(150px,1fr)' },
       cell: (c) => (
         <span className={c.row.original.active ? 'font-medium text-ink' : 'font-medium text-subtle line-through'}>{c.getValue<string>()}</span>
       ),

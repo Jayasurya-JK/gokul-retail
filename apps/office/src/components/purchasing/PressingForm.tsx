@@ -125,9 +125,9 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
           </div>
 
           <div>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs font-medium text-muted">Godown barrel</span>
-              <span className="text-[11px] text-subtle">The oil stays in the godown; it reaches the shop only by Transfer to store.</span>
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="shrink-0 text-xs font-medium text-muted">Godown barrel</span>
+              <span className="pl-2 text-right text-[11px] text-subtle">The oil stays in the godown; it reaches the shop only by Transfer to store.</span>
             </div>
             {fillable.length === 0 ? (
               <p className="mt-1 rounded-control bg-warning-soft px-2.5 py-2 text-xs text-warning">

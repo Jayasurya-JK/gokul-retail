@@ -335,7 +335,12 @@ function OutsourcedList({ rows, onAdd }: { rows: OutsourcedOil[] | null; onAdd: 
 }
 
 /* ---------------- pane ---------------- */
-export function GodownPane({ reloadKey = 0, onBarrels }: { reloadKey?: number; onBarrels?: (list: GodownBarrel[]) => void }) {
+export function GodownPane({ reloadKey = 0, onBarrels, selectedId, onSelect }: {
+  reloadKey?: number; onBarrels?: (list: GodownBarrel[]) => void;
+  /** The barrel the strip above the pane has picked; the side panel follows it. */
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+}) {
   const [barrels, setBarrels] = useState<GodownBarrel[] | null>(null);
   const [outsourced, setOutsourced] = useState<OutsourcedOil[] | null>(null);
   const [transfers, setTransfers] = useState<GodownTransfer[] | null>(null);
@@ -353,6 +358,8 @@ export function GodownPane({ reloadKey = 0, onBarrels }: { reloadKey?: number; o
   // The Production page keeps the pressing form's barrel list in step with every change made here.
   const onBarrelsRef = useRef(onBarrels);
   onBarrelsRef.current = onBarrels;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
 
   const loadDetail = useCallback(async (id: string) => {
     const mine = ++req.current;
@@ -373,7 +380,7 @@ export function GodownPane({ reloadKey = 0, onBarrels }: { reloadKey?: number; o
     onBarrelsRef.current?.(list);
     const keep = selRef.current && list.some((b) => b.id === selRef.current) ? selRef.current : list[0]?.id ?? null;
     if (keep !== selRef.current) { selRef.current = keep; setSelId(keep); }
-    if (keep) await loadDetail(keep);
+    if (keep) { onSelectRef.current?.(keep); await loadDetail(keep); }
     else { req.current += 1; setDetail(null); setDetailLoading(false); }
   }, [loadDetail]);
 
@@ -384,8 +391,18 @@ export function GodownPane({ reloadKey = 0, onBarrels }: { reloadKey?: number; o
     if (selRef.current === id) return;
     selRef.current = id;
     setSelId(id);
+    onSelectRef.current?.(id);
     void loadDetail(id);
   }, [loadDetail]);
+
+  // The barrel strip above the pane can pick a barrel too; keep the side panel in step with it.
+  useEffect(() => {
+    if (!selectedId || selectedId === selRef.current) return;
+    if (!barrels?.some((b) => b.id === selectedId)) return;
+    selRef.current = selectedId;
+    setSelId(selectedId);
+    void loadDetail(selectedId);
+  }, [selectedId, barrels, loadDetail]);
 
   const groups = useMemo(() => {
     const map = new Map<SeedType, GodownBarrel[]>();

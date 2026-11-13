@@ -1,4 +1,5 @@
 import type { GodownStatus, MillDaily, MillDailyBarrel, PressingBatch } from '@gokul/data';
+import { fmtQty } from './millUtil';
 
 /** One line of the pressing section: a seed on a machine, run by one operator. All quantities are milli-units. */
 export interface MillPressingRow {
@@ -69,4 +70,5 @@ export const hasMillData = (data: MillDaily): boolean =>
 export const fmtNum = (n: number, decimals = 1): string =>
   n.toLocaleString('en-IN', { maximumFractionDigits: decimals, minimumFractionDigits: 0 });
 
-export const signed = (m: number): string => `${m > 0 ? '+' : m < 0 ? '-' : ''}${Math.abs(m).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+/** A signed litre/kilogram figure from milli-units, e.g. -500 -> "-0.5". */
+export const signed = (m: number): string => `${m > 0 ? '+' : m < 0 ? '-' : ''}${fmtQty(Math.abs(m))}`;

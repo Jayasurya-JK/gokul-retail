@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IndianRupee, CreditCard, QrCode, Star, Ticket, Wallet, X } from 'lucide-react';
-import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatPoints, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
+import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
 import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 
@@ -160,6 +160,8 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
     : mode === 'points' ? 'Rupees of points to use' : mode === 'credit_note' ? 'Rupees of wallet to use' : `${modeLabel(mode)} amount`;
   const walletLeft = Math.max(0, creditAvail - Math.min(amount, creditAvail));
   const pointsLeft = Math.max(0, pointsWorth - amount);
+  /** Points are shown and spent as whole numbers, so a balance of 555.15 is "555 pts". */
+  const wholePoints = (paise: number) => (pv > 0 ? Math.floor(paise / pv) : 0).toLocaleString('en-IN');
 
   return (
     <>
@@ -249,9 +251,9 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
 
                 {!refund && mode === 'points' && wallet && (
                   <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
-                    <Info k="Customer has" v={`${formatPoints(wallet.points)} pts`} sub={`worth ${formatRupees(Math.max(0, pointsWorth), { decimals: false })}`} />
+                    <Info k="Customer has" v={`${Math.floor(wallet.points).toLocaleString('en-IN')} pts`} sub={`worth ${formatRupees(Math.max(0, pointsWorth), { decimals: false })}`} />
                     <Info k="Can use now" v={formatRupees(pointsAvail, { decimals: false })} sub={`up to ${rules?.maxPct ?? 100}% of the bill`} />
-                    <Info k="Points left after" v={formatRupees(pointsLeft, { decimals: false })} sub={`least ${rules?.minRedeem ?? 100} pts (${formatRupees(minRedeemWorth, { decimals: false })})`} />
+                    <Info k="Points left after" v={`${wholePoints(pointsLeft)} pts`} sub={`least ${rules?.minRedeem ?? 100} pts (${formatRupees(minRedeemWorth, { decimals: false })})`} />
                   </div>
                 )}
                 {!refund && mode === 'credit_note' && (

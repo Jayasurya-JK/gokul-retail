@@ -184,7 +184,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
         {totals.roundOff !== 0 && <Row label="Round off" tone="muted"><Money paise={totals.roundOff} sign decimals /></Row>}
 
         {exchange && (
-          <div className="mt-2 rounded-lg border border-info/30 bg-info-soft px-3 py-2">
+          <div className="mb-3 mt-2 rounded-lg border border-info/30 bg-info-soft px-3 py-2">
             <div className="flex items-baseline justify-between gap-2 text-sm font-medium text-info">
               <span className="min-w-0">Exchange credit <span className="text-xs font-normal text-muted">(from <span className="num">{exchange.billNumber}</span>)</span></span>
               <b className="num shrink-0"><Money paise={exchangeCredit} /></b>

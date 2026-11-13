@@ -209,6 +209,7 @@ export function Production() {
   const [runs, setRuns] = useState<PackRun[]>([]);
   const [barrels, setBarrels] = useState<Barrel[]>([]);
   const [godownBarrels, setGodownBarrels] = useState<GodownBarrel[]>([]);
+  const [godownSelId, setGodownSelId] = useState<string | null>(null);
   const [godownKey, setGodownKey] = useState(0);
   const [profiles, setProfiles] = useState<SeedProfile[]>([]);
   const [selBatch, setSelBatch] = useState<string | null>(null);
@@ -245,6 +246,12 @@ export function Production() {
   const start = () => (tab === 'pressing' ? setNewBatch(true) : tab === 'packing' ? (setPackBarrel(null), setNewPack(true)) : undefined);
   useKeys((e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); start(); } });
 
+  /** In the Godown tab the strip shows the production barrels, so a click can pick the side panel's barrel. */
+  const godownStrip = useMemo<Barrel[]>(() => godownBarrels.map((g) => ({
+    id: g.id, label: g.label, seed: g.oil, oilName: g.oilName,
+    capacityL: g.capacityL, levelL: g.levelL, filledOn: g.filledOn,
+  })), [godownBarrels]);
+
   return (
     <>
       <PageHeader
@@ -255,7 +262,13 @@ export function Production() {
         )}
       />
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4 py-3">
-        <div className="min-w-0 flex-1"><BarrelStrip barrels={barrels} selectedId={tab === 'pressing' ? batch?.barrelId : run?.barrelId} /></div>
+        <div className="min-w-0 flex-1">
+          <BarrelStrip
+            barrels={tab === 'godown' ? godownStrip : barrels}
+            selectedId={tab === 'godown' ? godownSelId : tab === 'pressing' ? batch?.barrelId : run?.barrelId}
+            onPick={tab === 'godown' ? (b) => setGodownSelId(b.id) : undefined}
+          />
+        </div>
         <div className="flex w-[248px] shrink-0 flex-col gap-1.5">
           {profiles.map((p) => (
             <div key={p.seed} className="flex items-center justify-between rounded-md border border-line bg-surface px-2.5 py-1 text-xs">
@@ -290,7 +303,7 @@ export function Production() {
           </div>
         </TabPanel>
         <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
-          <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} />
+          <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} selectedId={godownSelId} onSelect={setGodownSelId} />
         </TabPanel>
         <TabPanel value="packing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <FilterBar trailing={<span>{runs.length} packing runs</span>}>

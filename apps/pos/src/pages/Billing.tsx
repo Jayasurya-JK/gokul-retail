@@ -586,7 +586,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
         onLocked={() => { useSession.getState().signOut(); nav('/login', { replace: true }); }}
       />
       <ConfirmDialog
-        open={dialog === 'cancel'} danger title="Cancel this bill?" confirmLabel="Cancel this bill"
+        open={dialog === 'cancel'} danger focusSafe title="Cancel this bill?" confirmLabel="Cancel this bill"
         message={`The whole bill will be cleared: ${plural(lines.length, 'item')} worth ${formatRupees(totals.grand, { decimals: false })}${exchange ? `. The exchange credit ${exchange.number} is not used and stays with the customer` : ''}. Use F6 instead to hold it for later.`}
         onClose={() => setDialog(null)} onConfirm={() => { B.clear(); setDialog(null); toast.show({ tone: 'info', title: 'Bill cancelled' }); }}
       />

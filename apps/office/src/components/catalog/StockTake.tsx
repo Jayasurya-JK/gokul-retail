@@ -9,7 +9,12 @@ import { CountSheetPaper, lineSupplier, orderForSheet } from './CountSheet';
 const countedOf = (raw: string | undefined): Milli | null => (raw === undefined || raw === '' ? null : parseQty(raw));
 /** Variance in paise for a quantity difference: cost or selling price per unit is per whole unit. */
 const valueOf = (paise: number, diff: Milli) => Math.round((paise * diff) / 1000);
-const signed = (n: number, loose: boolean) => `${n > 0 ? '+' : n < 0 ? '-' : ''}${formatQty(Math.abs(n), loose)}`;
+/** kg/L with up to 3 decimals and trailing zeros trimmed (113 kg, 4.56 kg); count units as whole numbers. */
+const qtyNum = (milli: number, loose: boolean) => {
+  const v = loose ? milli / 1000 : Math.round(milli / 1000);
+  return v.toLocaleString('en-IN', { maximumFractionDigits: loose ? 3 : 0, minimumFractionDigits: 0 });
+};
+const signed = (n: number, loose: boolean) => `${n > 0 ? '+' : n < 0 ? '-' : ''}${qtyNum(Math.abs(n), loose)}`;
 const cleanQty = (raw: string, loose: boolean) => {
   const v = raw.replace(/[^\d.]/g, '');
   const [w, f] = v.split('.');
@@ -192,45 +197,47 @@ export function StockTake({ onPosted }: { onPosted: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <FilterBar
-        trailing={lines ? <span>Sheet <b className="text-ink num">{sheetRows.length}</b> items - counted <b className="text-ink num">{sheetCounted}</b></span> : undefined}
+        trailing={lines ? <span className="whitespace-nowrap">Sheet <b className="text-ink num">{sheetRows.length}</b> items - counted <b className="text-ink num">{sheetCounted}</b></span> : undefined}
       >
-        {([['all', 'All items'], ['supplier', 'By supplier'], ['category', 'By category']] as const).map(([v, l]) => (
-          <button
-            key={v} onClick={() => setScope(v)}
-            className={cn('h-8 rounded-control border px-3 text-sm font-medium transition-colors', scope === v ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted hover:bg-surface-3')}
-          >{l}</button>
-        ))}
-        {scope === 'supplier' && (
-          <Select
-            value={supplierId} onChange={(e) => setSupplierId(e.target.value)} aria-label="Supplier to count"
-            options={[{ value: 'all', label: 'All suppliers' }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]}
-          />
-        )}
-        {scope === 'category' && (
-          <Select
-            value={catId} onChange={(e) => setCatId(e.target.value)} aria-label="Category to count"
-            options={[{ value: 'all', label: 'All categories' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]}
-          />
-        )}
-        <span className="mx-1 h-5 w-px bg-line" />
-        <Button variant={lines ? 'secondary' : 'primary'} icon={lines ? <RotateCcw size={14} /> : <ClipboardList size={14} />} onClick={() => void start()}>
-          {lines ? 'Restart count' : 'Start count sheet'}
-        </Button>
-        {lines && (
-          <>
-            <Button icon={<Printer size={14} />} onClick={() => setPreview(true)} disabled={sheetRows.length === 0}>Print count sheet</Button>
-            <span className="mx-1 h-5 w-px bg-line" />
-            {([['count', 'Count', sheetRows.length], ['review', 'Review', stats.counted]] as const).map(([v, l, n]) => (
-              <button
-                key={v} onClick={() => setPhase(v)}
-                className={cn('flex h-8 items-center gap-1.5 rounded-control border px-3 text-sm font-medium transition-colors', phase === v ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted hover:bg-surface-3')}
-              >{l} <span className="num text-[11px] opacity-70">{n}</span></button>
-            ))}
-            {phase === 'count' && canSeeSystem && (
-              <Button variant="ghost" onClick={matchRest} disabled={sheetCounted === sheetRows.length}>Match system for the rest</Button>
-            )}
-          </>
-        )}
+        <div className="flex flex-wrap items-center gap-1">
+          {([['all', 'All items'], ['supplier', 'By supplier'], ['category', 'By category']] as const).map(([v, l]) => (
+            <button
+              key={v} onClick={() => setScope(v)}
+              className={cn('h-7 rounded-control border px-2.5 text-sm font-medium transition-colors', scope === v ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted hover:bg-surface-3')}
+            >{l}</button>
+          ))}
+          {scope === 'supplier' && (
+            <Select
+              value={supplierId} onChange={(e) => setSupplierId(e.target.value)} aria-label="Supplier to count"
+              options={[{ value: 'all', label: 'All suppliers' }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]}
+            />
+          )}
+          {scope === 'category' && (
+            <Select
+              value={catId} onChange={(e) => setCatId(e.target.value)} aria-label="Category to count"
+              options={[{ value: 'all', label: 'All categories' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]}
+            />
+          )}
+          <span className="mx-1 h-5 w-px bg-line" />
+          <Button size="sm" variant={lines ? 'secondary' : 'primary'} icon={lines ? <RotateCcw size={14} /> : <ClipboardList size={14} />} onClick={() => void start()}>
+            {lines ? 'Restart count' : 'Start count sheet'}
+          </Button>
+          {lines && (
+            <>
+              <Button size="sm" icon={<Printer size={14} />} onClick={() => setPreview(true)} disabled={sheetRows.length === 0}>Print count sheet</Button>
+              <span className="mx-1 h-5 w-px bg-line" />
+              {([['count', 'Count', sheetRows.length], ['review', 'Review', stats.counted]] as const).map(([v, l, n]) => (
+                <button
+                  key={v} onClick={() => setPhase(v)}
+                  className={cn('flex h-7 items-center gap-1.5 rounded-control border px-2.5 text-sm font-medium transition-colors', phase === v ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-muted hover:bg-surface-3')}
+                >{l} <span className="num text-[11px] opacity-70">{n}</span></button>
+              ))}
+              {phase === 'count' && canSeeSystem && (
+                <Button size="sm" variant="ghost" onClick={matchRest} disabled={sheetCounted === sheetRows.length}>Match system for the rest</Button>
+              )}
+            </>
+          )}
+        </div>
       </FilterBar>
 
       {!lines ? (
@@ -298,9 +305,9 @@ export function StockTake({ onPosted }: { onPosted: () => void }) {
                     <td className={cn(td, 'text-center text-xs text-subtle num')}>{i + 1}</td>
                     <td className={td}><span className="block truncate"><span className="font-medium text-ink">{l.name}</span> <span className="ml-1.5 text-[11px] text-subtle num">{l.code}</span></span></td>
                     <td className={td} title={lineSupplier(l)}><span className="block truncate text-muted">{lineSupplier(l)}</span></td>
-                    <td className={cn(td, 'text-right num font-medium')}>{formatQty(counted, l.loose)} <span className="text-xs text-subtle">{unitText(l.unit)}</span></td>
+                    <td className={cn(td, 'text-right num font-medium')}>{qtyNum(counted, l.loose)} <span className="text-xs text-subtle">{unitText(l.unit)}</span></td>
                     {canSeeSystem && <>
-                      <td className={cn(td, 'text-right num text-muted')}>{formatQty(l.system, l.loose)} <span className="text-xs text-subtle">{unitText(l.unit)}</span></td>
+                      <td className={cn(td, 'text-right num text-muted')}>{qtyNum(l.system, l.loose)} <span className="text-xs text-subtle">{unitText(l.unit)}</span></td>
                       <td className={cn(td, 'text-right num', diff === 0 ? 'text-success' : diff < 0 ? 'font-semibold text-danger' : 'font-semibold text-warning')}>
                         {diff === 0 ? 'Matches' : signed(diff, l.loose)}
                       </td>

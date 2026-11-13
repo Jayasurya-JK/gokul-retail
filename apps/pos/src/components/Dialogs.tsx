@@ -350,13 +350,15 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
 }
 
 /* ---------- Confirm / prompt ---------- */
-export function ConfirmDialog({ open, title, message, confirmLabel, onConfirm, onClose, danger }: {
+export function ConfirmDialog({ open, title, message, confirmLabel, onConfirm, onClose, danger, focusSafe }: {
   open: boolean; title: string; message: string; confirmLabel: string; onConfirm: () => void; onClose: () => void; danger?: boolean;
+  /** Focus the safe button first, so a stray Enter cannot carry out the action. */
+  focusSafe?: boolean;
 }) {
   return (
     <Dialog
       open={open} onOpenChange={(o) => !o && onClose()} title={title} size="sm"
-      footer={<><Button onClick={onClose} kbd="Esc">Keep bill</Button><Button data-autofocus variant={danger ? 'danger' : 'primary'} onClick={onConfirm} kbd="Enter">{confirmLabel}</Button></>}
+      footer={<><Button data-autofocus={focusSafe ? true : undefined} onClick={onClose} kbd="Esc">Keep bill</Button><Button data-autofocus={focusSafe ? undefined : true} variant={danger ? 'danger' : 'primary'} onClick={onConfirm} kbd="Enter">{confirmLabel}</Button></>}
     >
       <p className="text-base text-muted">{message}</p>
     </Dialog>

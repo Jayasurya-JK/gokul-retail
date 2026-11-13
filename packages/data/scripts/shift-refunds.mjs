@@ -66,7 +66,8 @@ const open = async (s) => {
   s.creditNotes.push(note('exchange', 25000));
   const x = await api.shiftSummary();
   assert.equal(x.cashRefunds, 0);
-  assert.equal(x.expectedCash, 369000);
+  // No bill this time: opening Rs 2,000 + cash in Rs 1,000 - cash out Rs 310.
+  assert.equal(x.expectedCash, 269000);
 }
 
 console.log('shift-refunds: ok');

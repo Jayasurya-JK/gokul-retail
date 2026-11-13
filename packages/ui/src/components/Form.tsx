@@ -178,8 +178,8 @@ export function Combobox({ options, value, onChange, placeholder, label }: {
               onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
               className={cn('flex items-center justify-between rounded-md px-2.5 py-1.5 text-sm', i === hi ? 'bg-primary-soft text-ink' : 'text-ink')}
             >
-              <span>{o.label}</span>
-              {o.hint && <span className="text-xs text-subtle">{o.hint}</span>}
+              <span className="min-w-0 truncate" title={o.label}>{o.label}</span>
+              {o.hint && <span className="shrink-0 whitespace-nowrap pl-2 text-xs text-subtle">{o.hint}</span>}
             </li>
           ))}
         </ul>
