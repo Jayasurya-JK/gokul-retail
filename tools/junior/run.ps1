@@ -44,6 +44,11 @@ $env:ANTHROPIC_AUTH_TOKEN                     = $apiKey
 $env:ANTHROPIC_MODEL                          = $modelId
 $env:ANTHROPIC_SMALL_FAST_MODEL               = 'deepseek-flash'
 $env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+# deepseek-flash is not in the CLI's model table, so it would assume a 200k window. DeepSeek documents 1M for it.
+$env:CLAUDE_CODE_MAX_CONTEXT_TOKENS           = '1000000'
+# Keep user-level plugins' MCP servers and bundled skills out of the junior's context.
+$env:CLAUDE_CODE_SKIP_PLUGIN_MCP_SERVERS      = '1'
+$env:CLAUDE_CODE_DISABLE_BUNDLED_SKILLS       = '1'
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 $apiKey = $null
 
@@ -57,7 +62,8 @@ $errPath     = Join-Path $logDir "$base.stderr.txt"
 $summaryPath = Join-Path $logDir "$base-summary.md"
 $settingsPath = Join-Path $scriptDir 'settings.json'
 
-$prompt = "You are the JUNIOR developer. Follow CLAUDE.md and the task file exactly. Task file: $taskPath. Read it first.`n`n" + $taskText
+$prompt = "You are the JUNIOR developer. Follow CLAUDE.md and the task file exactly. Task file: $taskPath. Read it first.`n`n" + `
+    "Prefer Grep/Glob/Read with offset/limit; never read whole large files (>400 lines) at once; keep tool outputs short (pipe through head). Do not use cd: the working directory is already the repo root, so run plain commands such as grep -n ... file | head -40.`n`n" + $taskText
 
 $lines     = New-Object System.Collections.Generic.List[string]
 $exitCode  = -1
@@ -78,6 +84,9 @@ try {
         --permission-mode acceptEdits `
         --permission-prompts none `
         --settings $settingsPath `
+        --setting-sources 'project,local' `
+        --strict-mcp-config `
+        --mcp-config (Join-Path $scriptDir 'empty-mcp.json') `
         --output-format stream-json `
         --verbose `
         2> $errPath | ForEach-Object {

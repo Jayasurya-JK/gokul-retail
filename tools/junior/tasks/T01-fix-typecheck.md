@@ -3,7 +3,7 @@
 **Branch:** wip/r6 (already checked out). **Do not commit.** Work only in this repo.
 
 ## Context
-Gokul Retail is a Tauri desktop POS. The Rust core is in `crates/core`, the shared TS Api is in `packages/data`, and the apps are in `apps/pos` and `apps/office`. An earlier developer was stopped half-way through "round 6". Their unfinished work is in the last commit (`git show --stat HEAD`).
+Gokul Retail is a Tauri desktop POS. The Rust core is in `crates/core`, the shared TS Api is in `packages/data`, and the apps are in `apps/pos` and `apps/office`. An earlier developer was stopped half-way through "round 6". Their unfinished work is in commit `c6a45a8`; run `git show --stat c6a45a8` to see it. The newer commit `05fc485` only adds `tools/junior/`.
 - The Rust core already compiles: `cargo check -p gokul-core` passes.
 - TypeScript does **not**: `npm run typecheck` reports about 41 errors in
   - `packages/data/src/areas/production.ts`
