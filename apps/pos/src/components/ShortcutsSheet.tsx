@@ -24,7 +24,8 @@ const GROUPS: { title: string; rows: [string, string[]][] }[] = [
     title: 'Editing a row',
     rows: [
       ['Edit quantity', ['F4']], ['Line discount (amount or 5%)', ['Ctrl+D']], ['Discount on the whole bill', ['Shift+F5']],
-      ['Cash discount (percent, on top)', ['Ctrl+K']], ['Wholesale prices on or off', ['Alt+W']],
+      ['Cash discount (percent, on top)', ['Ctrl+K']], ['Store credit from the customer wallet', ['Alt+C']],
+      ['Wholesale prices on or off', ['Alt+W']],
       ['Next field while editing', ['Tab']], ['Clear typed code, or cancel the bill', ['Esc']],
     ],
   },

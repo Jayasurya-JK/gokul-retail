@@ -43,11 +43,16 @@ export function billReceipt(d: BillDetail, cfg?: ReceiptConfig): ReceiptData {
   const { bill } = d;
   const f = cfg?.billFormat;
   const cash = bill.payments.filter((p) => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
+  // Credit-note payments are the Wallet (F5) mode; points and Sodexo are stored under that mode too, so leave them out.
+  const storeCreditUsed = bill.payments
+    .filter((p) => p.mode === 'credit_note' && p.ref && p.ref !== 'PTS' && p.ref !== 'SODEXO')
+    .reduce((s, p) => s + p.amount, 0);
   return {
     title: f ? billTitleFor(bill.payments, f) : 'TAX INVOICE', subtitle: f ? 'TAX INVOICE' : undefined,
     number: f ? printNumber(bill.number, f.numberFormat) : bill.number, at: bill.at, cashier: bill.cashier, counter: bill.counter,
     customerName: bill.customerName, customerId: bill.customerId,
     lines: bill.lines, totals: bill.totals, payments: bill.payments, received: cash || undefined,
+    storeCreditUsed: storeCreditUsed || undefined,
     stamp: bill.status === 'cancelled' ? 'Cancelled' : undefined,
     note: d.reprints > 0 ? `DUPLICATE COPY - reprint ${d.reprints}` : undefined,
   };

@@ -53,6 +53,9 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const [pinAsk, setPinAsk] = useState<{ message: string; payments: Payment[]; change: number; refund?: 'cash' | 'upi' } | null>(null);
   /** Ctrl+K asks the summary panel to put the cursor in the inline cash-discount box. */
   const [cashFocus, setCashFocus] = useState(0);
+  /** Store credit (wallet / credit notes) put on this bill, in paise. A different customer never keeps it. */
+  const [storeCredit, setStoreCredit] = useState(0);
+  const [storeFocus, setStoreFocus] = useState(0);
   const removed = useRef<{ line: BillLine; at: number } | null>(null);
 
   const itemMap = useMemo(() => {
@@ -78,8 +81,14 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
      the difference goes back to the customer (cash or UPI, manager PIN, audited), chosen in the payment window. */
   const exchangeCredit = exchange ? exchange.balance ?? exchange.totals.grand : 0;
   const exchangeUsed = exchange ? Math.min(exchangeCredit, totals.grand) : 0;
-  const due = totals.grand - exchangeUsed;
+  /** Store credit never takes the bill below zero: it can use only what the customer has and what is still payable. */
+  const storeCreditAvail = customer ? wallet?.storeCredit ?? 0 : 0;
+  const storeCreditUsed = Math.min(storeCredit, storeCreditAvail, Math.max(0, totals.grand - exchangeUsed));
+  const due = totals.grand - exchangeUsed - storeCreditUsed;
   const refundDue = exchange && totals.grand > 0 ? Math.max(0, exchangeCredit - totals.grand) : 0;
+
+  /* The store-credit box belongs to one customer: removing or changing them starts it at zero again. */
+  useEffect(() => { setStoreCredit(0); }, [customerId]);
 
   /* Items and stock are read from the database again after every bill and whenever this window comes back to the front
      (Office may have received goods or adjusted stock meanwhile), and the item is re-read when it is added to the bill. */
@@ -290,9 +299,11 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const complete = async (payments: Payment[], change: number, pin?: string, refundMode?: 'cash' | 'upi'): Promise<string | null> => {
     setSaving(true);
     try {
-      const all: Payment[] = exchange && exchangeUsed > 0
-        ? [{ mode: 'credit_note' as const, amount: exchangeUsed, ref: exchange.number }, ...payments]
-        : payments;
+      const all: Payment[] = [
+        ...(exchange && exchangeUsed > 0 ? [{ mode: 'credit_note' as const, amount: exchangeUsed, ref: exchange.number }] : []),
+        ...(storeCreditUsed > 0 ? storeCreditPayments(storeCreditUsed) : []),
+        ...payments,
+      ];
       const exchangeRefund = exchange && refundMode && refundDue > 0 ? { mode: refundMode, amount: refundDue, creditNote: exchange.number } : undefined;
       const bill = await api.saveBill({ customerId: customer?.id, customerName: customer?.name, lines, billDiscount, payments: all, cashier: user?.name, managerPin: pin, exchangeRefund, ...extras() });
       if (exchange) { await api.clearPendingExchange(); setExchange(null); }
@@ -307,7 +318,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       toast.show({
         tone: 'success', title: `Bill ${bill.number} saved`,
         detail: exchangeRefund ? `Give ${formatRupees(exchangeRefund.amount)} back to the customer (${exchangeRefund.mode.toUpperCase()})`
-          : change > 0 ? `Give change ${formatRupees(change)}` : payments.length ? payments.map((p) => p.mode.toUpperCase()).join(' + ') + ' received' : 'Paid by exchange credit',
+          : change > 0 ? `Give change ${formatRupees(change)}` : payments.length ? payments.map((p) => p.mode.toUpperCase()).join(' + ') + ' received'
+          : storeCreditUsed > 0 ? `Paid by store credit (${formatRupees(storeCreditUsed, { decimals: false })})` : 'Paid by exchange credit',
       });
       return null;
     } catch (e) {
@@ -379,6 +391,36 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (amt === null || amt < 0) { toast.show({ tone: 'error', title: 'Type an amount like 50, or a percent like 2.5%' }); return; }
     B.setCashDisc(Math.min(10000, Math.round((amt * 10000) / net)));
   };
+  /** Store credit typed in the panel: rupees of the customer's wallet (open credit notes) to use on this bill. */
+  const applyStoreCredit = (v: string) => {
+    const t = v.trim();
+    if (!t || t === '0') { setStoreCredit(0); return; }
+    if (!customer) { toast.show({ tone: 'info', title: 'Choose a customer first', detail: 'Store credit belongs to a customer.' }); return; }
+    if (storeCreditAvail <= 0) { toast.show({ tone: 'info', title: 'No store credit', detail: `${customer.name} has no wallet balance.` }); return; }
+    const amt = parsePaise(t);
+    if (amt === null || amt <= 0) { toast.show({ tone: 'error', title: 'Type an amount like 350' }); return; }
+    const max = Math.min(storeCreditAvail, Math.max(0, totals.grand - exchangeUsed));
+    if (amt > max) {
+      setStoreCredit(max);
+      toast.show({
+        tone: 'info', title: `Store credit set to ${formatRupees(max, { decimals: false })}`,
+        detail: amt > storeCreditAvail ? `Only ${formatRupees(storeCreditAvail, { decimals: false })} is available.` : 'That is more than this bill.',
+      });
+      return;
+    }
+    setStoreCredit(amt);
+  };
+  /** The same split the Wallet (F5) mode in PaymentDialog makes: oldest credit note first, part of a note is fine. */
+  const storeCreditPayments = (amount: number): Payment[] => {
+    const out: Payment[] = [];
+    let need = amount;
+    for (const n of wallet?.creditNotes ?? []) {
+      if (need <= 0) break;
+      const part = Math.min(n.balance, need);
+      if (part > 0) { out.push({ mode: 'credit_note', amount: part, ref: n.number }); need -= part; }
+    }
+    return out;
+  };
   const reprintBill = (b: { id: string; number: string }) => {
     void api.recordReprint(b.id, user?.name ?? '').catch(() => undefined);
     void printWithToast('bill', b.id, { duplicate: true }, toast, `Duplicate of ${b.number} printed`);
@@ -398,6 +440,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); if (selected >= 0) startEdit('disc'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setCashFocus((n) => n + 1); return; }
+    if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); setStoreFocus((n) => n + 1); return; }
     if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'w') { e.preventDefault(); toggleWholesale(); return; }
     if (e.ctrlKey && e.key.toLowerCase() === 'p') {
       e.preventDefault();
@@ -489,6 +532,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} exchangeCredit={exchangeCredit} due={due} refundDue={refundDue} onDropExchange={() => setDialog('dropEx')} onApplyDiscount={applyBillDiscount} billNo={billNo}
           slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
           focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
+          storeCredit={storeCreditAvail} storeCreditUsed={storeCreditUsed} focusStoreCredit={storeFocus}
+          onApplyStoreCredit={applyStoreCredit} onClearStoreCredit={() => setStoreCredit(0)}
           delivery={delivery} onDelivery={() => setDialog('delivery')} staff={staff} onStaff={() => setDialog('staff')}
         />
       }
@@ -559,7 +604,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
       <PaymentDialog
-        open={dialog === 'pay'} total={due} billTotal={totals.grand} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
+        open={dialog === 'pay'} total={due} billTotal={totals.grand} storeCredit={storeCreditUsed} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
         exchange={exchange ? { credit: exchangeCredit, number: exchange.number, billNumber: exchange.billNumber } : null}
         onComplete={(p, c, refund) => void complete(p, c, undefined, refund)} onCustomerUpdate={(c) => B.setCustomer(c)}
       />

@@ -106,6 +106,12 @@ export function createMockApi(): Api {
         const it = byId.get(l.itemId);
         if (it) it.stock -= l.qty;
       }
+      // Wallet (F5) and exchange payments use up the credit note they name, the same as the Rust backend.
+      for (const p of draft.payments) {
+        if (p.mode !== 'credit_note' || !p.ref) continue;
+        const n = store.creditNotes?.find((x) => x.number === p.ref);
+        if (n) n.balance = Math.max(0, (n.balance ?? n.totals.grand) - p.amount);
+      }
       return bill;
     },
 

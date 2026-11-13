@@ -31,6 +31,10 @@ export interface ReceiptData {
   points?: number;
   /** Points that lapse next (yyyy-mm-dd). Shown as "N pts expire dd/mm/yy" only when within 30 days; pass it only when loyalty.printExpiry is on. */
   pointsExpiry?: { points: number; on: string } | null;
+  /** Store credit (wallet / credit notes) spent on this bill, in paise. Printed in the totals. */
+  storeCreditUsed?: number;
+  /** The customer's store-credit balance after the bill, in paise. Printed in the customer block. */
+  storeCreditBalance?: number;
   /** Cash handed over (cash paid + change), for "Amount Received" */
   received?: number;
 }
@@ -136,6 +140,9 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
           {data.customerAddress && <div>Address : {data.customerAddress}</div>}
           {data.points !== undefined && <div>Points : {data.points.toFixed(2)}</div>}
           {data.points !== undefined && expiryLine && <div>{expiryLine}</div>}
+          {data.storeCreditBalance !== undefined && (data.storeCreditBalance > 0 || (data.storeCreditUsed ?? 0) > 0) && (
+            <div>Store credit balance : {money(data.storeCreditBalance)}</div>
+          )}
           {rule}
         </>
       )}
@@ -195,6 +202,9 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
       <div className="mt-1 flex items-baseline justify-between border-y-2 border-neutral-900 py-1 font-sans text-[16px] font-extrabold">
         <span>{data.refund ? 'REFUND' : 'NET AMOUNT ₹ :'}</span><span className="num">{sign}{money(t.grand)}</span>
       </div>
+      {(data.storeCreditUsed ?? 0) > 0 && (
+        <div className="flex justify-between"><span>Store credit used</span><span>-{money(data.storeCreditUsed!)}</span></div>
+      )}
       {rule}
       <div className="grid grid-cols-[34px_1fr_1fr_1fr_1fr] gap-x-1 text-[10.5px]">
         <span className="font-bold">Tax %</span><span className="text-right font-bold">Taxable Val</span><span className="text-right font-bold">SGST</span><span className="text-right font-bold">CGST</span><span className="text-right font-bold">Total Amt</span>

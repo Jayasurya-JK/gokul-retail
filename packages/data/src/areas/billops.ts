@@ -194,7 +194,7 @@ export function createBillOpsMock(store: MockStore): BillOpsApi {
       const note: CreditNote = {
         id: `cn${cnSeq}`, number: `CN-${String(cnSeq).padStart(6, '0')}`, at: new Date().toISOString(),
         billId: b.id, billNumber: b.number, customerId: b.customerId, customerName: b.customerName,
-        lines: q.lines, totals: q.totals, reason, refundMode, by,
+        lines: q.lines, totals: q.totals, reason, refundMode, by, balance: q.totals.grand,
       };
       notes.push(note);
       if (refundMode === 'exchange') pendingExchange = note;

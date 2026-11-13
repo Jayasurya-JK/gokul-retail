@@ -3,6 +3,7 @@ mod common;
 use common::*;
 use gokul_core::bills::save_bill;
 use gokul_core::db::set_setting;
+use gokul_core::printing;
 use gokul_core::types::*;
 use gokul_core::{billops, dispatch_session, loyalty, Db, Session};
 use rusqlite::Connection;
@@ -190,6 +191,13 @@ fn store_credit_can_be_spent_in_parts() {
         let w = loyalty::wallet(c, "c1")?;
         assert_eq!(w["storeCredit"], 36_000, "half is left");
         assert_eq!(w["creditNotes"][0]["balance"], 36_000);
+
+        // The printed bill shows the store credit used and the balance the customer still has on the wallet.
+        let cfg = printing::load_config(c)?;
+        let doc = printing::bill_doc(c, &cfg, &b.id, false, 0)?;
+        let text = gokul_print::layout::to_text(&gokul_print::layout(&doc.doc, cfg.paper));
+        assert!(text.contains("Store credit used") && text.contains("-360.00"), "{text}");
+        assert!(text.contains("Store credit balance : 360.00"), "{text}");
         // cannot spend more than is left
         let mut d = draft_with(oil(2000), 0, Some("c1"), "cash");
         d.payments = vec![pay("credit_note", 72_000, Some(&cn.number))];

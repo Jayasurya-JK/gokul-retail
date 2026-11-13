@@ -892,7 +892,15 @@ export function createCrmMock(store: MockStore): CrmApi {
       const favourites = [...agg.values()].sort((a, b) => b.amount - a.amount).slice(0, 5);
       return delay({ customer: rowFor(c), favourites, bills: bills.slice(0, 40) });
     },
-    getCustomerWallet: (id) => delay({ points: store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0, pointsValue: Math.round((store.customers.find((x) => x.id === id)?.loyaltyPoints ?? 0) * bundle.loyalty.pointValue),  storeCredit: 0, creditNotes: [], rules: bundle.loyalty, nextExpiry: null }),
+    getCustomerWallet: (id) => {
+      // Store credit: the customer's own credit notes refunded as "credit note", still with something left on them.
+      const notes = (store.creditNotes ?? [])
+        .filter((n) => n.customerId === id && n.refundMode === 'credit_note' && (n.balance ?? n.totals.grand) > 0)
+        .map((n) => ({ number: n.number, at: n.at, balance: n.balance ?? n.totals.grand }));
+      const storeCredit = notes.reduce((s, n) => s + n.balance, 0);
+      const c = store.customers.find((x) => x.id === id);
+      return delay({ points: c?.loyaltyPoints ?? 0, pointsValue: Math.round((c?.loyaltyPoints ?? 0) * bundle.loyalty.pointValue), storeCredit, creditNotes: notes, rules: bundle.loyalty, nextExpiry: null });
+    },
     listPointsHistory: (id) => delay(pointsLedgerOf(id).slice(0, 100).map((r) => ({ at: r.at, kind: r.kind, points: r.points, note: r.note, by: r.by, bill: r.bill }))),
     getPointsLedger: (id, limit = 500) => delay(pointsLedgerOf(id).slice(0, limit)),
     pointsOverview: () => {

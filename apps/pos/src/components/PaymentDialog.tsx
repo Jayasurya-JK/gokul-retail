@@ -23,12 +23,14 @@ const ceilTo = (paise: number, step: number) => Math.ceil(paise / step) * step;
 /** Exchange credit carried into this bill (from the Returns screen). */
 export interface ExchangeInfo { credit: number; number: string; billNumber: string }
 
-export function PaymentDialog({ open, total, billTotal, exchange, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
+export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
   open: boolean;
-  /** What the customer still has to pay for this bill (after any exchange credit); 0 when the credit covers it */
+  /** What the customer still has to pay for this bill (after any exchange credit and store credit); 0 when the credit covers it */
   total: number;
-  /** The whole new bill (before exchange credit) */
+  /** The whole new bill (before any credit) */
   billTotal: number;
+  /** Store credit already put on the bill in the summary panel; it is saved as Wallet (credit note) payments */
+  storeCredit?: number;
   exchange?: ExchangeInfo | null;
   customer: Customer | null; wallet?: CustomerWallet | null; onClose: () => void; busy: boolean;
   onCustomerUpdate?: (c: Customer) => void;
@@ -37,6 +39,7 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
 }) {
   const refund = exchange && billTotal < exchange.credit ? exchange.credit - billTotal : 0;
   const covered = !refund && total === 0;
+  const storeApplied = storeCredit ?? 0;
   const [payments, setPayments] = useState<Payment[]>([]);
   const [mode, setMode] = useState<PayMode>('cash');
   const [field, setField] = useState('');
@@ -60,8 +63,9 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
     return [...set].filter((x) => x >= remaining && x > 0).slice(0, 5);
   }, [remaining]);
 
-  /* Store credit (credit notes spent in parts) and loyalty points: offered only when the customer has some. */
-  const spentCredit = payments.filter((p) => p.mode === 'credit_note').reduce((s, p) => s + p.amount, 0);
+  /* Store credit (credit notes spent in parts) and loyalty points: offered only when the customer has some.
+     Credit already put on the bill in the summary panel is used up too, so it is never spent twice. */
+  const spentCredit = storeApplied + payments.filter((p) => p.mode === 'credit_note').reduce((s, p) => s + p.amount, 0);
   const creditAvail = Math.max(0, (wallet?.storeCredit ?? 0) - spentCredit);
   const rules = wallet?.rules;
   const spentPoints = payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
@@ -179,6 +183,8 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
             <div className="truncate">{customer ? customer.name : 'Walk-in customer'}</div>
             {exchange ? (
               <div className="num mt-0.5 text-chrome-ink">New items {formatRupees(billTotal)} - exchange credit {formatRupees(exchange.credit)}</div>
+            ) : storeApplied > 0 ? (
+              <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(billTotal)} - store credit {formatRupees(storeApplied)}</div>
             ) : payments.length > 0 ? (
               <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(total)}</div>
             ) : null}
@@ -189,7 +195,7 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
           <div className="min-w-0 border-r border-line p-5">
             {covered ? (
               <div className="rounded-xl bg-success-soft px-4 py-3 text-sm font-medium text-success">
-                The exchange credit {exchange ? <b className="num">{exchange.number}</b> : null} pays this bill in full. Press Enter to save it.
+                {exchange ? <>The exchange credit <b className="num">{exchange.number}</b> pays this bill in full.</> : <>The store credit pays this bill in full.</>} Press Enter to save it.
               </div>
             ) : (
               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleModes.length}, minmax(0, 1fr))` }}>
@@ -314,7 +320,13 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
                   <b className="num text-info">{formatPaise(Math.min(exchange.credit, billTotal))}</b>
                 </div>
               )}
-              {payments.length === 0 && !exchange && <div className="text-sm text-subtle">Nothing taken yet. Type the amount and press Enter.</div>}
+              {storeApplied > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-sm">
+                  <span className="min-w-0 truncate font-medium text-success">Store credit</span>
+                  <b className="num text-success">{formatPaise(storeApplied)}</b>
+                </div>
+              )}
+              {payments.length === 0 && !exchange && storeApplied === 0 && <div className="text-sm text-subtle">Nothing taken yet. Type the amount and press Enter.</div>}
               {payments.map((p, i) => (
                 <div key={i} className="flex items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-sm">
                   <span className="font-medium">{modeLabel(p.mode)}</span>
@@ -330,6 +342,11 @@ export function PaymentDialog({ open, total, billTotal, exchange, customer, wall
                 <>
                   <div className="flex justify-between text-muted"><span>New items</span><span className="num">{formatRupees(billTotal)}</span></div>
                   <div className="flex justify-between text-info"><span>Exchange credit</span><span className="num">-{formatRupees(Math.min(exchange.credit, billTotal))}</span></div>
+                </>
+              ) : storeApplied > 0 ? (
+                <>
+                  <div className="flex justify-between text-muted"><span>Bill amount</span><span className="num">{formatRupees(billTotal)}</span></div>
+                  <div className="flex justify-between text-success"><span>Store credit</span><span className="num">-{formatRupees(storeApplied)}</span></div>
                 </>
               ) : (
                 <div className="flex justify-between text-muted"><span>Bill amount</span><span className="num">{formatRupees(total)}</span></div>

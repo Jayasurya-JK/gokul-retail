@@ -52,12 +52,17 @@ export function Sales() {
   const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BillDetail | null>(null);
-  const [walletBits, setWalletBits] = useState<{ points?: number; pointsExpiry?: { points: number; on: string } | null }>({});
+  const [walletBits, setWalletBits] = useState<{ points?: number; pointsExpiry?: { points: number; on: string } | null; storeCreditBalance?: number }>({});
   const detailCustomer = detail?.bill.customerId;
   useEffect(() => {
     let live = true;
     if (!detailCustomer) { setWalletBits({}); return undefined; }
-    api.getCustomerWallet(detailCustomer).then((w) => { if (live) setWalletBits(w.rules.enabled ? { points: w.points, pointsExpiry: w.rules.printExpiry ? w.nextExpiry : null } : {}); }).catch(() => { if (live) setWalletBits({}); });
+    api.getCustomerWallet(detailCustomer).then((w) => {
+      if (live) setWalletBits({
+        ...(w.rules.enabled ? { points: w.points, pointsExpiry: w.rules.printExpiry ? w.nextExpiry : null } : {}),
+        storeCreditBalance: w.storeCredit,
+      });
+    }).catch(() => { if (live) setWalletBits({}); });
     return () => { live = false; };
   }, [detailCustomer]);
   const [version, setVersion] = useState(0);

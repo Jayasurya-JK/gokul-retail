@@ -17,12 +17,18 @@ function CustStat({ k, v, tone }: { k: string; v: string; tone?: 'warning' }) {
 /** One shared grid for every money row: label left, input just left of the amount column, amount right. */
 const ROW_GRID = 'grid h-8 grid-cols-[minmax(0,1fr)_104px_88px_20px] items-center gap-x-1.5 text-sm';
 
-function GridRow({ label, hint, onLabel, box, amount, clear, tone }: {
-  label: React.ReactNode; hint?: string; onLabel?: () => void; box?: React.ReactNode; amount: React.ReactNode; clear?: React.ReactNode;
+function GridRow({ label, sub, hint, onLabel, box, amount, clear, tone }: {
+  label: React.ReactNode; sub?: string; hint?: string; onLabel?: () => void; box?: React.ReactNode; amount: React.ReactNode; clear?: React.ReactNode;
   tone?: 'success' | 'muted';
 }) {
   const labelCls = cn('flex min-w-0 items-center gap-1.5 text-left', tone === 'success' ? 'text-success' : 'text-muted');
-  const inner = <><span className="truncate">{label}</span>{hint && <Kbd>{hint}</Kbd>}</>;
+  const inner = <>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate">{label}</span>
+      {sub && <span className="num block truncate text-[10px] leading-tight text-subtle">{sub}</span>}
+    </span>
+    {hint && <Kbd>{hint}</Kbd>}
+  </>;
   return (
     <div className={ROW_GRID}>
       {onLabel
@@ -62,7 +68,7 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, delivery, onDelivery, staff, onStaff }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, staff, onStaff }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
@@ -74,11 +80,15 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   slotLabel?: string; wholesale?: boolean;
   /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K). The box applies a rupee amount or a percent. */
   cashDisc: number; cashDiscBps: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
+  /** Store credit (the customer's wallet / open credit notes) put on this bill, and how much of it this bill can use (Alt+C). */
+  storeCredit: number; storeCreditUsed: number; focusStoreCredit: number; onApplyStoreCredit: (typed: string) => void; onClearStoreCredit: () => void;
   delivery: Delivery; onDelivery: () => void;
   staff: string; onStaff: () => void;
 }) {
   const cashRef = useRef<HTMLInputElement>(null);
+  const storeRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (focusCashDisc > 0) { cashRef.current?.focus(); cashRef.current?.select(); } }, [focusCashDisc]);
+  useEffect(() => { if (focusStoreCredit > 0) { storeRef.current?.focus(); storeRef.current?.select(); } }, [focusStoreCredit]);
   const itemDisc = totals.discount - cashDisc;
   const goods = totals.gross - delivery.charge;
   const pct = goods > 0 && itemDisc > 0 ? Math.round((itemDisc / goods) * 1000) / 10 : 0;
@@ -170,6 +180,18 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             ? <button type="button" tabIndex={-1} onClick={onClearCashDisc} title="Remove the cash discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
             : undefined}
         />
+        {customer && storeCredit > 0 && (
+          <GridRow
+            label="Store credit" sub={`${formatRupees(storeCredit - storeCreditUsed, { decimals: false })} available`} hint="Alt+C"
+            tone={storeCreditUsed > 0 ? 'success' : undefined}
+            onLabel={() => { storeRef.current?.focus(); storeRef.current?.select(); }}
+            box={<AmountBox inputRef={storeRef} disabled={empty} onApply={onApplyStoreCredit} onEmpty={onClearStoreCredit} placeholder="₹ amount" ariaLabel="Store credit in rupees to use on this bill" title="Use the customer's store credit (wallet) on this bill" />}
+            amount={<Money paise={-storeCreditUsed} />}
+            clear={storeCreditUsed > 0
+              ? <button type="button" tabIndex={-1} onClick={onClearStoreCredit} title="Remove the store credit from this bill" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
+              : undefined}
+          />
+        )}
         {delivery.charge > 0 && <GridRow label="Delivery charge" hint="F2" amount={<Money paise={delivery.charge} />} />}
         <div className="my-1.5 rounded-md border border-line bg-surface-2 px-2 py-1">
           {totals.slabs.length === 0 && <div className="py-0.5 text-xs text-subtle">No tax yet</div>}
@@ -234,7 +256,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
         <div className={cn('flex items-center justify-between gap-3 rounded-lg px-3.5 py-1.5 transition-colors', empty ? 'bg-surface-3 text-muted' : 'bg-chrome text-white')}>
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">Grand total</span>
           <span className="num font-semibold leading-none tracking-tight" style={{ fontSize: 36 }}>
-            <Money paise={totals.grand} softPaise />
+            <Money paise={totals.grand - storeCreditUsed} softPaise />
           </span>
         </div>
         <Button variant="primary" size="lg" block className="mt-2 !h-[48px] !text-base" onClick={onPay} kbd="F12" disabled={empty}>

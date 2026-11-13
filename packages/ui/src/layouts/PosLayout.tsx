@@ -84,7 +84,7 @@ export function PosLayout({ topBar, side, keys, children, sideWidth }: {
         {side && (
           <aside
             className="flex shrink-0 flex-col border-l border-line bg-surface"
-            style={{ width: sideWidth ?? 'clamp(340px, 26vw, 440px)' }}
+            style={{ width: sideWidth ?? 'clamp(360px, 30vw, 440px)' }}
           >
             {side}
           </aside>

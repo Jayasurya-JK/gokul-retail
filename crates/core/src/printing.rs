@@ -365,6 +365,22 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
         None => None,
     };
     let b2b_gstin = cust.as_ref().map(|x| x.3.clone()).unwrap_or_default();
+    // Store credit used on this bill: the Wallet (F5) payments, which are credit notes. Points stay in that mode with the
+    // ref "PTS" (Sodexo reads back as its own mode) and exchange credit is a credit note too, so skip only points.
+    // This is the same sum the on-screen receipt preview shows.
+    let store_used: i64 = b
+        .payments
+        .iter()
+        .filter(|p| p.mode == "credit_note" && p.r#ref.as_deref() != Some(crate::loyalty::POINTS_REF))
+        .map(|p| p.amount)
+        .sum();
+    let store_balance: i64 = match &b.customer_id {
+        Some(id) => crate::loyalty::open_credit_notes(conn, id)?
+            .iter()
+            .map(|n| n["balance"].as_i64().unwrap_or(0))
+            .sum(),
+        None => 0,
+    };
     let supply_only = c.composition || (b.totals.gst == 0 && b.lines.iter().all(|l| l.gst_rate == 0));
     let word = if supply_only { "BILL OF SUPPLY" } else if !b2b_gstin.is_empty() { "TAX INVOICE (B2B)" } else { "TAX INVOICE" };
     let cols = c.paper.cols();
@@ -403,6 +419,9 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
                         d.line(format!("{} pts expire {}", crate::loyalty::fmt_points(pts), short));
                     }
                 }
+            }
+            if store_balance > 0 || store_used > 0 {
+                d.line(format!("Store credit balance : {}", money(store_balance)));
             }
         }
         d.rule();
@@ -459,6 +478,10 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
     d.push(Op::Rule('='));
     pic(&mut d, c, format!("NET AMOUNT \u{20b9} : {}", money(t.grand)), format!("NET AMOUNT Rs : {}", money(t.grand)), Style::NORMAL.bold().big().center());
     d.push(Op::Rule('='));
+    if store_used > 0 {
+        d.pair("Store credit used", format!("-{}", money(store_used)));
+        d.push(Op::Rule('='));
+    }
     if !c.composition && c.show_gst_summary && !t.slabs.is_empty() {
         let (a, bb, cc, dd) = if cols >= 48 { (7, 11, 9, 9) } else { (4, 7, 6, 6) };
         let trow = |x: &str, y: &str, z: &str, w: &str, v: &str, st: Style| {
