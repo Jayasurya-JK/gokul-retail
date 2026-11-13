@@ -14,6 +14,7 @@ import { Stock } from './pages/Stock';
 import { Purchases } from './pages/Purchases';
 import { Suppliers } from './pages/Suppliers';
 import { Production } from './pages/Production';
+import { Insights } from './pages/Insights';
 import { Sales } from './pages/Sales';
 import { Customers } from './pages/Customers';
 import { Collections } from './pages/Collections';
@@ -84,6 +85,7 @@ function Shell() {
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/production" element={<Production />} />
+        <Route path="/production-insights" element={<Insights />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/loyalty-points" element={<LoyaltyPoints />} />
