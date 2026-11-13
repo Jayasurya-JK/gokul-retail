@@ -256,6 +256,25 @@ pub fn unspend_credit_note(tx: &Connection, number: &str, amount: i64) -> Result
     Ok(())
 }
 
+/// Splits the credit-note payments of a bill into (store credit, exchange credit), in paise.
+/// Points and Sodexo are stored as credit_note rows too and are left out. Exchange credit is the note of a returned bill
+/// spent on this one. Its refund_mode stays 'exchange' after it is spent (only an unused one is released to store credit),
+/// so the note's own mode is the test. The bill's own rows cannot tell the two apart.
+pub fn split_credit_payments(conn: &Connection, payments: &[Payment]) -> Result<(i64, i64)> {
+    let mut st = conn.prepare_cached("SELECT refund_mode FROM credit_notes WHERE number=?1")?;
+    let (mut store, mut exchange) = (0, 0);
+    for p in payments.iter().filter(|p| p.mode == "credit_note") {
+        let Some(r) = p.r#ref.as_deref().filter(|r| *r != POINTS_REF && *r != SODEXO_REF) else { continue };
+        let mode: Option<String> = st.query_row([r], |x| x.get(0)).optional()?;
+        if mode.as_deref() == Some("exchange") {
+            exchange += p.amount;
+        } else {
+            store += p.amount;
+        }
+    }
+    Ok((store, exchange))
+}
+
 /// Everything the counter needs about a customer's wallet in one call.
 pub fn wallet(conn: &Connection, customer_id: &str) -> Result<Value> {
     let notes = open_credit_notes(conn, customer_id)?;

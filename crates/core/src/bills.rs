@@ -152,6 +152,7 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
 
     // Points are redeemed first (checks the balance, minimum and maximum share of the bill), inside this same transaction.
     crate::loyalty::redeem_for_bill(tx, draft.customer_id.as_deref(), &draft.payments, totals.grand, bill_id, &number, &cashier)?;
+    let (_, exchange_paid) = crate::loyalty::split_credit_payments(tx, &draft.payments)?;
     {
         let mut ins = tx.prepare_cached("INSERT INTO bill_payments(bill_id,mode,amount,ref) VALUES(?1,?2,?3,?4)")?;
         for p in &draft.payments {
@@ -222,6 +223,7 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             delivery_locality: ex.delivery_locality.trim().into(),
             delivery_charge: ex.delivery_charge,
             wholesale: ex.wholesale,
+            exchange_credit: exchange_paid,
             cash_disc_bps: ex.cash_disc_bps,
             cash_disc,
             remarks: ex.remarks.trim().into(),
@@ -326,6 +328,7 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             delivery_locality: r.get(19)?,
             delivery_charge: r.get(20)?,
             wholesale: r.get::<_, i64>(21)? != 0,
+            exchange_credit: 0, // filled from the payments by fill_children
             cash_disc_bps: r.get(22)?,
             cash_disc: r.get(23)?,
             remarks: r.get(24)?,
@@ -368,6 +371,7 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
                 Ok(p)
             })?
             .collect::<rusqlite::Result<_>>()?;
+        b.extras.exchange_credit = crate::loyalty::split_credit_payments(conn, &b.payments)?.1;
         b.extras.exchange_refund = xr
             .query_row([id], |r| Ok(ExchangeRefund { credit_note: r.get(0)?, mode: r.get(1)?, amount: r.get(2)? }))
             .optional()?;

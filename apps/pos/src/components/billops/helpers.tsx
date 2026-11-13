@@ -43,10 +43,13 @@ export function billReceipt(d: BillDetail, cfg?: ReceiptConfig): ReceiptData {
   const { bill } = d;
   const f = cfg?.billFormat;
   const cash = bill.payments.filter((p) => p.mode === 'cash').reduce((s, p) => s + p.amount, 0);
-  // Credit-note payments are the Wallet (F5) mode; points and Sodexo are stored under that mode too, so leave them out.
-  const storeCreditUsed = bill.payments
+  // Store credit is the Wallet (F5) part of the credit-note payments. Points and Sodexo are stored under that mode too, and
+  // exchange credit (a returned bill's credit note) is one as well: the server reports that part as extras.exchangeCredit.
+  // Same split as the printed bill (loyalty::split_credit_payments).
+  const creditPaid = bill.payments
     .filter((p) => p.mode === 'credit_note' && p.ref && p.ref !== 'PTS' && p.ref !== 'SODEXO')
     .reduce((s, p) => s + p.amount, 0);
+  const storeCreditUsed = Math.max(0, creditPaid - (bill.exchangeCredit ?? 0));
   return {
     title: f ? billTitleFor(bill.payments, f) : 'TAX INVOICE', subtitle: f ? 'TAX INVOICE' : undefined,
     number: f ? printNumber(bill.number, f.numberFormat) : bill.number, at: bill.at, cashier: bill.cashier, counter: bill.counter,

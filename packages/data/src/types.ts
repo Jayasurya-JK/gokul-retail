@@ -105,6 +105,8 @@ export interface BillExtras {
   remarks?: string;
   /** Exchange credit was bigger than this bill: the rest goes back to the customer in cash or UPI (needs a manager PIN) */
   exchangeRefund?: ExchangeRefund;
+  /** Paise of this bill paid with exchange credit. It is a credit-note payment too, but not store credit. */
+  exchangeCredit?: Paise;
 }
 
 /** The part of an exchange credit handed back because the new bill was smaller */

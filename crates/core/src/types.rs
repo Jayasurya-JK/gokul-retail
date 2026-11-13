@@ -148,6 +148,9 @@ pub struct BillExtras {
     /// Bill uses wholesale prices.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wholesale: bool,
+    /// Paise of this bill paid with exchange credit (a returned bill's credit note). Part of the credit-note payments, not store credit.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub exchange_credit: i64,
     /// Cash discount on the whole bill, percent x 100 (250 = 2.5%). Separate from item discounts.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cash_disc_bps: i64,

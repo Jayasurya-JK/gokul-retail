@@ -214,6 +214,42 @@ fn store_credit_can_be_spent_in_parts() {
 }
 
 #[test]
+fn exchange_credit_on_a_bill_is_not_printed_as_store_credit() {
+    let (_d, db) = mini_db();
+    db.with(|c| {
+        // Wallet: Rs 360 of store credit from a returned bill
+        let first = save_bill(c, &draft_with(oil(1000), 0, Some("c1"), "cash"))?;
+        let wallet_cn = billops::create_return(
+            c,
+            &ReturnRequest { bill_id: first.id.clone(), picks: vec![ReturnPick { line_index: 0, qty: 1000 }], reason: "x".into(), refund_mode: "credit_note".into(), by: "Karthik".into(), manager_pin: "2222".into() },
+        )?;
+        // Exchange: Rs 360 of exchange credit from another returned bill
+        let second = save_bill(c, &draft_with(oil(1000), 0, Some("c1"), "cash"))?;
+        let exchange_cn = billops::create_return(
+            c,
+            &ReturnRequest { bill_id: second.id.clone(), picks: vec![ReturnPick { line_index: 0, qty: 1000 }], reason: "x".into(), refund_mode: "exchange".into(), by: "Karthik".into(), manager_pin: "2222".into() },
+        )?;
+        // New bill of Rs 720: Rs 360 exchange credit, Rs 100 of the wallet, the rest in cash
+        let mut d = draft_with(oil(2000), 0, Some("c1"), "cash");
+        d.payments = vec![pay("credit_note", 36_000, Some(&exchange_cn.number)), pay("credit_note", 10_000, Some(&wallet_cn.number)), pay("cash", 26_000, None)];
+        let b = save_bill(c, &d)?;
+        assert_eq!(b.extras.exchange_credit, 36_000, "the saved bill knows its exchange part");
+        assert_eq!(loyalty::wallet(c, "c1")?["storeCredit"], 26_000, "only the wallet part was spent");
+        assert_eq!(gokul_core::bills::get_bill(c, &b.id)?.unwrap().extras.exchange_credit, 36_000, "a reloaded bill knows it too");
+
+        // The printed bill: Store credit used is the wallet Rs 100 only, and the exchange part is not counted as store credit
+        let cfg = printing::load_config(c)?;
+        let doc = printing::bill_doc(c, &cfg, &b.id, false, 0)?;
+        let text = gokul_print::layout::to_text(&gokul_print::layout(&doc.doc, cfg.paper));
+        let used: Vec<&str> = text.lines().filter(|l| l.contains("Store credit used")).collect();
+        assert_eq!(used.len(), 1, "{text}");
+        assert!(used[0].contains("-100.00") && !used[0].contains("-360.00"), "{text}");
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
 fn one_credit_rule_zero_means_not_allowed_minus_one_means_no_limit() {
     let (_d, db) = mini_db();
     db.with(|c| {

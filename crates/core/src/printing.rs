@@ -365,15 +365,10 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
         None => None,
     };
     let b2b_gstin = cust.as_ref().map(|x| x.3.clone()).unwrap_or_default();
-    // Store credit used on this bill: the Wallet (F5) payments, which are credit notes. Points stay in that mode with the
-    // ref "PTS" (Sodexo reads back as its own mode) and exchange credit is a credit note too, so skip only points.
-    // This is the same sum the on-screen receipt preview shows.
-    let store_used: i64 = b
-        .payments
-        .iter()
-        .filter(|p| p.mode == "credit_note" && p.r#ref.as_deref() != Some(crate::loyalty::POINTS_REF))
-        .map(|p| p.amount)
-        .sum();
+    // Store credit used on this bill: the Wallet (F5) part only. Exchange credit is a credit note too, but it prints as
+    // its own payment row, so it is not store credit. Points and Sodexo are left out as well (see split_credit_payments).
+    // The on-screen receipt uses the same split (extras.exchangeCredit).
+    let (store_used, _exchange_used) = crate::loyalty::split_credit_payments(conn, &b.payments)?;
     let store_balance: i64 = match &b.customer_id {
         Some(id) => crate::loyalty::open_credit_notes(conn, id)?
             .iter()

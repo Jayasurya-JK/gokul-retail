@@ -89,6 +89,10 @@ export function createMockApi(): Api {
       const dGst = settings.deliveryGstRate ?? 0;
       const totals = computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDisc, settings.roundToRupee, delivery, dGst);
       const credit = draft.payments.some((p) => p.mode === 'credit');
+      // Exchange credit keeps refundMode 'exchange' once spent, the same test as loyalty::split_credit_payments in Rust.
+      const exchangeCredit = draft.payments
+        .filter((p) => p.mode === 'credit_note' && p.ref && store.creditNotes?.some((x) => x.number === p.ref && x.refundMode === 'exchange'))
+        .reduce((s, p) => s + p.amount, 0);
       const lines = delivery > 0
         ? [...draft.lines, { itemId: '_delivery', code: 'DLV', name: 'Delivery charge', unit: 'pc' as const, qty: 1000, rate: delivery, discount: 0, gstRate: dGst, amount: delivery }]
         : draft.lines;
@@ -99,7 +103,7 @@ export function createMockApi(): Api {
         lines, totals, payments: draft.payments, status: credit ? 'credit' : 'paid',
         staff: draft.staff ?? '', deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: delivery,
         wholesale: !!draft.wholesale, cashDiscBps: draft.cashDiscBps ?? 0, cashDisc, remarks: draft.remarks ?? '',
-        exchangeRefund: draft.exchangeRefund,
+        exchangeRefund: draft.exchangeRefund, exchangeCredit: exchangeCredit || undefined,
       };
       bills.push(bill);
       for (const l of draft.lines) {
