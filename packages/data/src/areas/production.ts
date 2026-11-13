@@ -1,6 +1,7 @@
 import type { MockStore } from './store';
 import type { Milli, Paise } from '../types';
 import type { PressingBatch, SeedType } from './purchasing';
+import { buildMillAnalysis, type MillAnalysis, type MillAnalysisQuery } from './analysis';
 
 // Area: godown barrels (production stock), transfers to the store, outsourced oil and the Mill daily report.
 //
@@ -89,6 +90,8 @@ export interface ProductionApi {
   listGodownTransfers(limit?: number): Promise<GodownTransfer[]>;
   /** The Mill daily sheet: a report filled from the day's production entries */
   getMillDaily(day: string): Promise<MillDaily>;
+  /** Mill analysis: yield vs norm, value, cost per litre, godown ageing, seed cover and low batches for a date range */
+  getMillAnalysis(query: MillAnalysisQuery): Promise<MillAnalysis>;
 }
 
 /* ====================================================================== */
@@ -293,6 +296,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
       return rec;
     },
     listGodownTransfers: async () => [...state.transfers].sort((a, c) => c.date.localeCompare(a.date)),
+    getMillAnalysis: async (q) => buildMillAnalysis(q, store.pressing?.() ?? [], state.barrels.map((b) => ({ ...refresh(b) })), store.items),
     getMillDaily: async (day) => {
       const inDay = (iso: string) => ymd(iso) === day;
       const before = (iso: string) => ymd(iso) < day;

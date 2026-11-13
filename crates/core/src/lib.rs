@@ -1,5 +1,6 @@
 //! gokul-core: all Gokul Retail business rules and the SQLite database. No Tauri dependency.
 
+pub mod analysis;
 pub mod authz;
 pub mod backup;
 pub mod barrels;

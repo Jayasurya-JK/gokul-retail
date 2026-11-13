@@ -26,6 +26,7 @@ import type {
 } from '../areas/expenses';
 import type { MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
 import type { PaymodeReport, ReportQuery, SalesReport, Staff, StaffReportRow, StockReport } from '../areas/posreports';
+import type { MillAnalysis, MillAnalysisQuery } from '../areas/analysis';
 import type {
   AddBarrelsInput, EditBarrelInput, GodownBarrel, GodownDetail, GodownTransfer, MillDaily, OutsourcedInput, OutsourcedOil, StatusInput, StickInput, TransferInput,
 } from '../areas/production';
@@ -68,7 +69,7 @@ export const REAL_METHODS = [
   'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
   'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
   'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
-  'listOutsourcedOil', 'transferToStore', 'listGodownTransfers', 'getMillDaily',
+  'listOutsourcedOil', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -250,6 +251,7 @@ export function createTauriApi(): Api {
     transferToStore: (input: TransferInput) => call<GodownTransfer>('transferToStore', input),
     listGodownTransfers: (limit?: number) => call<GodownTransfer[]>('listGodownTransfers', limit ?? null),
     getMillDaily: (day: string) => call<MillDaily>('getMillDaily', day),
+    getMillAnalysis: (query: MillAnalysisQuery) => call<MillAnalysis>('getMillAnalysis', query),
 
     // ----- ReportsApi -----
     runReport: (id: ReportId, params: ReportParams) => call<ReportResult>('runReport', id, params),

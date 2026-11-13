@@ -281,6 +281,7 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "transferToStore" => ok(crate::godown::transfer_to_store(c, &arg::<crate::godown::TransferInput>(a, 0, "input")?)?),
         "listGodownTransfers" => ok(crate::godown::list_godown_transfers(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(200))?),
         "getMillDaily" => ok(crate::godown::mill_daily(c, &arg::<String>(a, 0, "day")?)?),
+        "getMillAnalysis" => ok(crate::analysis::get_mill_analysis(c, &arg::<crate::analysis::AnalysisQuery>(a, 0, "query")?)?),
 
         // ----- CrmApi -----
         "listSalesBills" => ok(crm::list_sales_bills(c, &arg::<Option<crm::SalesQuery>>(a, 0, "query")?.unwrap_or_default())?),
@@ -387,5 +388,5 @@ pub const METHODS: &[&str] = &[
     "getMillSheet", "saveMillSheet", "closeMillSheet", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
     "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",
     "listGodownBarrels", "getGodownBarrel", "addGodownBarrels", "editGodownBarrel", "setGodownStatus", "recordStickReading", "recordOutsourcedOil",
-    "listOutsourcedOil", "transferToStore", "listGodownTransfers", "getMillDaily",
+    "listOutsourcedOil", "transferToStore", "listGodownTransfers", "getMillDaily", "getMillAnalysis",
 ];

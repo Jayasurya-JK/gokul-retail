@@ -98,3 +98,54 @@ fn a_new_batch_stamps_the_seed_price() {
     })
     .unwrap();
 }
+
+fn press(c: &mut rusqlite::Connection, seed_kg: i64, oil_l: i64, cake: i64, op: &str, machine: &str) -> Value {
+    purchasing::create_pressing_batch(
+        c,
+        &de(json!({ "seed": "groundnut", "seedKg": seed_kg, "oilRawL": oil_l, "cakeKg": cake, "godownBarrelId": "GB-001", "operator": op, "machine": machine })),
+    )
+    .unwrap()
+}
+
+#[test]
+fn analysis_gives_yield_vs_norm_cost_and_flags_low_batches() {
+    let (_d, db) = common::mini_db();
+    db.with(|c| {
+        post_movement(c, &iso(Local::now()), "rm-gn", "purchase", 900_000, "test", "1", "seed", "Test")?;
+        c.execute("UPDATE items SET cost=10000 WHERE id='rm-gn'", [])?; // Rs 100 per kg
+        godown::add_godown_barrels(c, &de(json!({ "oil": "groundnut", "count": 1 })))?;
+        // norm 2.5 kg per litre: 100 kg should give 40 L. One good batch, two low ones by Selvam on R.
+        press(c, 100_000, 40_000, 55_000, "Murugesan", "W");
+        press(c, 100_000, 34_000, 60_000, "Selvam", "R");
+        press(c, 100_000, 32_000, 60_000, "Selvam", "R");
+        let today = gokul_core::db::day_of(Local::now());
+        let a = gokul_core::analysis::get_mill_analysis(c, &de(json!({ "from": today, "to": today })))?;
+        let t = &a["totals"];
+        assert_eq!(t["batches"], 3);
+        assert!((t["oilL"].as_f64().unwrap() - 106.0).abs() < 1e-9);
+        assert!((t["litresPer100Kg"].as_f64().unwrap() - 106.0 / 3.0).abs() < 1e-6);
+        assert!((t["normPer100Kg"].as_f64().unwrap() - 40.0).abs() < 1e-6);
+        assert_eq!(t["lowBatches"], 2);
+        // cost: 300 kg at Rs 100 = Rs 30,000 over 106 L = Rs 283 per litre (28302 paise), known (stamped) so not an estimate
+        assert_eq!(t["costPerL"], 28302);
+        assert_eq!(t["costEstimated"], false);
+        let seeds = a["seeds"].as_array().unwrap();
+        assert_eq!(seeds.len(), 1);
+        assert_eq!(seeds[0]["children"].as_array().unwrap().len(), 2, "W and R machines");
+        let low = a["lowBatches"].as_array().unwrap();
+        assert_eq!(low.len(), 2);
+        assert!(low[0]["variancePct"].as_f64().unwrap() < low[1]["variancePct"].as_f64().unwrap(), "worst first");
+        assert!(low[0]["reason"].as_str().unwrap().contains("Selvam"));
+        let cover = &a["seedCover"].as_array().unwrap()[0];
+        assert_eq!(cover["stockKg"].as_f64().unwrap(), 600.0);
+        assert_eq!(cover["daysOfCover"].as_f64().unwrap(), 2.0, "300 kg a pressing day, 600 kg in stock");
+        assert_eq!(cover["low"], true);
+        assert_eq!(a["godown"].as_array().unwrap().len(), 1);
+        // a seed filter and a bad range
+        let g = gokul_core::analysis::get_mill_analysis(c, &de(json!({ "from": today, "to": today, "seed": "sesame" })))?;
+        assert_eq!(g["totals"]["batches"], 0);
+        assert!(gokul_core::analysis::get_mill_analysis(c, &de(json!({ "from": "2026-12-02", "to": "2026-12-01" }))).is_err());
+        Ok(())
+    })
+    .unwrap();
+}
