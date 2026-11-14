@@ -15,6 +15,7 @@ pub mod error;
 pub mod expenses;
 pub mod godown;
 pub mod labels;
+pub mod live_setup;
 pub mod loyalty;
 pub mod lots;
 pub mod points;
