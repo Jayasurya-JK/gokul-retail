@@ -61,8 +61,8 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
   const norm100 = normPer100(m);
   const prof = profiles.find((p) => p.seed === b.seed);
   return (
-    <div className="flex h-full w-[360px] shrink-0 flex-col border-l border-line bg-surface">
-      <div className="border-b border-line p-4">
+    <div className="flex h-full w-[350px] shrink-0 flex-col border-l border-line bg-surface 2xl:w-[420px]">
+      <div className="shrink-0 border-b border-line px-4 py-3">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2 text-md font-semibold text-ink">{b.number}<Badge tone={phase.tone}>{phase.label}</Badge></div>
@@ -84,7 +84,7 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
           </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="shrink-0 border-b border-line px-4 py-3">
         <SectionLabel right={<span className="num font-normal normal-case tracking-normal">seed in {fmtNum(m.netSeedKg)} kg{jagKg > 0 ? `, vellam ${fmtNum(jagKg)} kg` : ''}</span>}>Where the seed went</SectionLabel>
         <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-3">
           {parts.map((p) => <div key={p.l} className={p.cls} style={{ width: `${(p.v / base) * 100}%` }} />)}
@@ -101,8 +101,9 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
         <p className="num mt-2 text-xs text-muted">
           Seed {fmtNum(m.netSeedKg)} kg{jagKg > 0 ? ` + vellam ${fmtNum(jagKg)} kg` : ''} = oil {fmtNum(m.oilKg)} + cake {fmtNum(cakeKg)} + loss {fmtNum(lossKg)} kg
         </p>
-
-        <dl className="mt-4 divide-y divide-line/70 text-sm">
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-2">
+        <dl className="divide-y divide-line/70 text-sm">
           <Line k="Seed taken">{fmtMilli(b.seedKg)} kg</Line>
           <Line k="Cleaning loss">{fmtMilli(b.cleaningLossKg)} kg</Line>
           {b.jaggeryKg > 0 && <Line k="Palm jaggery added">{fmtMilli(b.jaggeryKg)} kg</Line>}
@@ -221,22 +222,31 @@ function PackDetail({ r }: { r: PackRun }) {
 }
 
 /* ---------------- godown chips on the Pressing tab: where the oil goes, and what is settling ---------------- */
-function GodownChips({ barrels, onOpen }: { barrels: GodownBarrel[]; onOpen: () => void }) {
+function GodownChips({ barrels, profiles, onOpen }: { barrels: GodownBarrel[]; profiles: SeedProfile[]; onOpen: () => void }) {
   const oils: { seed: SeedType; label: string }[] = [{ seed: 'groundnut', label: 'Groundnut' }, { seed: 'sesame', label: 'Sesame' }, { seed: 'copra', label: 'Coconut' }];
+  const chip = 'flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-1 text-left text-xs';
   return (
     <div className="flex items-center gap-2">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Oil</span>
       {oils.map(({ seed, label }) => {
         const list = barrels.filter((b) => b.active && b.oil === seed && b.levelL > 0);
         const litres = list.reduce((a, b) => a + b.levelL, 0);
         const settling = list.filter((b) => b.status === 'settling').length;
         const ready = list.filter((b) => b.status === 'ready').length;
         return (
-          <button key={seed} type="button" onClick={onOpen} title="Open the Godown tab" className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-left text-xs hover:bg-surface-2">
-            <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[seed])} />{label} oil in godown</span>
-            <span className="num text-right"><span className="font-semibold text-ink">{fmtMilli(litres, 0)} L</span>{(settling > 0 || ready > 0) && <span className="ml-2 text-muted">{settling > 0 ? `${settling} settling` : ''}{settling > 0 && ready > 0 ? ', ' : ''}{ready > 0 ? `${ready} ready` : ''}</span>}</span>
+          <button key={seed} type="button" onClick={onOpen} title={`${label} oil: ${settling} settling, ${ready} ready. Open the Godown tab`} className={cn(chip, 'hover:bg-surface-2')}>
+            <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[seed])} />{label}</span>
+            <span className="num font-semibold text-ink">{fmtMilli(litres, 0)} L{ready > 0 && <span className="ml-1.5 hidden font-normal text-info 2xl:inline">{ready} ready</span>}</span>
           </button>
         );
       })}
+      <span className="ml-2 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Seed</span>
+      {profiles.map((p) => (
+        <div key={p.seed} className={chip}>
+          <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[p.seed])} />{p.label.split(' ')[0]}</span>
+          <span className={cn('num font-semibold', p.stock < 300000 ? 'text-warning' : 'text-ink')}>{fmtMilli(p.stock, 0)} kg</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -300,9 +310,9 @@ export function Production() {
           <Button icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'Batch with details' : 'New packing run'}</Button>
         )}
       />
-      <div className="flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4 py-3">
+      <div className={cn('flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4', tab === 'pressing' || tab === 'jobwork' ? 'py-1.5' : 'py-3')}>
         <div className="min-w-0 flex-1">
-          {tab === 'pressing' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : tab === 'jobwork' ? <GodownChips barrels={godownBarrels} onOpen={() => setTab('godown')} /> : (
+          {tab === 'pressing' || tab === 'jobwork' ? <GodownChips barrels={godownBarrels} profiles={profiles} onOpen={() => setTab('godown')} /> : (
             <BarrelStrip
               barrels={tab === 'godown' ? godownStrip : barrels}
               selectedId={tab === 'godown' ? godownSelId : run?.barrelId}
@@ -310,7 +320,7 @@ export function Production() {
             />
           )}
         </div>
-        <div className="flex w-[248px] shrink-0 flex-col gap-1.5">
+        <div className={cn('w-[248px] shrink-0 flex-col gap-1.5', tab === 'pressing' || tab === 'jobwork' ? 'hidden' : 'flex')}>
           {profiles.map((p) => (
             <div key={p.seed} className="flex items-center justify-between rounded-md border border-line bg-surface px-2.5 py-1 text-xs">
               <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[p.seed])} />{p.label} in godown</span>
@@ -328,20 +338,22 @@ export function Production() {
           { value: 'jobwork', label: <><Wheat size={14} />Job work</> },
         ]}
       >
-        <TabPanel value="pressing" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
+        <TabPanel value="pressing" className="flex min-h-0 flex-1 flex-row outline-none data-[state=inactive]:hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <PressingGrid profiles={profiles} barrels={godownBarrels} operators={operators} onSaved={(saved) => { setGodownKey((k) => k + 1); void load({ batch: saved[0]?.id }); }} />
           <FilterBar
             trailing={<span>{month.low > 0 && <span className="mr-3 font-medium text-warning">{month.low} low yield in 30 days</span>}{shown.length} shown</span>}
           >
             <Select value={seedFilter} onChange={(e) => setSeedFilter(e.target.value)} options={[{ value: 'all', label: 'All seeds' }, ...profiles.map((p) => ({ value: p.seed, label: p.label }))]} />
           </FilterBar>
-          <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1">
             <DataTable
               data={shown} columns={pressCols} getRowId={(r) => r.id} selectedId={selBatch} onSelect={(r) => setSelBatch(r.id)} rowHeight={44}
-              empty={<EmptyState icon={<Flame size={22} />} title="No batches match" hint="Change the seed or stage filter, or record a new pressing batch." />}
+              empty={<EmptyState icon={<Flame size={22} />} title="No batches match" hint="Change the seed filter, or record a new pressing batch." />}
             />
-            {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onOpenGodown={() => setTab('godown')} />}
           </div>
+          </div>
+          {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onOpenGodown={() => setTab('godown')} />}
         </TabPanel>
         <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} selectedId={godownSelId} onSelect={setGodownSelId} />

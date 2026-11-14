@@ -59,13 +59,18 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
   const used = (r: Row) => !!(r.kg.trim() || r.oil.trim() || r.cake.trim() || r.jag.trim());
   const complete = (r: Row) => (parseQty(r.kg) ?? 0) > 0 && (parseQty(r.oil) ?? 0) > 0 && !!r.operator && !!r.barrel;
   const ready = rows.filter((r) => used(r) && complete(r));
+  // vellam is only used with sesame, so its column appears only when a sesame row is there (saves width)
+  const showJag = rows.some((r) => r.seed === 'sesame');
 
   const focusCell = (r: number, c: number) => root.current?.querySelector<HTMLElement>(`[data-cell="${r}-${c}"]`)?.focus();
   const onKey = (e: KeyboardEvent, r: number, c: number) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void save(); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (c < COLS - 1) { focusCell(r, c + 1); return; }
+    for (let k = c + 1; k < COLS; k++) {
+      const el = root.current?.querySelector<HTMLElement>(`[data-cell="${r}-${k}"]:not(:disabled)`);
+      if (el) { el.focus(); return; }
+    }
     if (r === rows.length - 1) {
       setRows((rs) => [...rs, blank(rs[r].operator, rs[r].seed, rs[r].machine)]);
       setTimeout(() => focusCell(r + 1, 3), 30);
@@ -103,8 +108,8 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
     <div ref={root} className="shrink-0 border-b border-line bg-surface px-4 py-2" role="group" aria-label="Enter pressing">
       <div className="mb-1.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-          Enter pressing
-          <span className="text-xs font-normal text-muted">one row per operator run. Enter goes to the next box.</span>
+          <span className="whitespace-nowrap">Enter pressing</span>
+          <span className="hidden text-xs font-normal text-muted 2xl:inline">one row per operator run. Enter goes to the next box.</span>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-muted">Day
@@ -116,19 +121,19 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
           </Button>
         </div>
       </div>
-      <div className="max-h-[150px] overflow-y-auto">
-        <table className="w-full table-fixed">
+      <div className="max-h-[150px] overflow-auto">
+        <table className="w-full min-w-[800px] table-fixed">
           <thead>
             <tr>
-              <th className={cn(th, 'w-[132px]')}>Operator</th>
-              <th className={cn(th, 'w-[120px]')}>Seed</th>
-              <th className={cn(th, 'w-[112px]')}>Machine</th>
-              <th className={cn(th, 'w-[84px] text-right')}>Seed kg</th>
-              <th className={cn(th, 'w-[84px] text-right')}>Oil L</th>
-              <th className={cn(th, 'w-[84px] text-right')}>Cake kg</th>
-              <th className={cn(th, 'w-[84px] text-right')}>Vellam kg</th>
-              <th className={cn(th, 'w-[184px]')}>Godown barrel</th>
-              <th className={th}>Yield (L / 100 kg) vs norm</th>
+              <th className={cn(th, 'w-[116px]')}>Operator</th>
+              <th className={cn(th, 'w-[104px]')}>Seed</th>
+              <th className={cn(th, 'w-[100px]')}>Machine</th>
+              <th className={cn(th, 'w-[72px] text-right')}>Seed kg</th>
+              <th className={cn(th, 'w-[72px] text-right')}>Oil L</th>
+              <th className={cn(th, 'w-[72px] text-right')}>Cake kg</th>
+              {showJag && <th className={cn(th, 'w-[72px] text-right')}>Vellam kg</th>}
+              <th className={cn(th, 'w-[164px]')}>Godown barrel</th>
+              <th className={cn(th, 'whitespace-nowrap')}>Yield vs norm</th>
               <th className="w-9" />
             </tr>
           </thead>
@@ -157,12 +162,14 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
                   <td className="p-0.5"><input data-cell={`${i}-3`} className={num} inputMode="decimal" value={r.kg} onChange={(e) => set(i, { kg: e.target.value })} onKeyDown={(e) => onKey(e, i, 3)} aria-label={`Row ${i + 1} seed kg`} /></td>
                   <td className="p-0.5"><input data-cell={`${i}-4`} className={num} inputMode="decimal" value={r.oil} onChange={(e) => set(i, { oil: e.target.value })} onKeyDown={(e) => onKey(e, i, 4)} aria-label={`Row ${i + 1} oil litres`} /></td>
                   <td className="p-0.5"><input data-cell={`${i}-5`} className={num} inputMode="decimal" value={r.cake} onChange={(e) => set(i, { cake: e.target.value })} onKeyDown={(e) => onKey(e, i, 5)} aria-label={`Row ${i + 1} cake kg`} /></td>
+                  {showJag && (
                   <td className="p-0.5">
                     <input
                       data-cell={`${i}-6`} className={cn(num, r.seed !== 'sesame' && 'bg-surface-2 text-subtle')} inputMode="decimal" value={r.jag} disabled={r.seed !== 'sesame'}
                       placeholder={r.seed === 'sesame' ? '' : 'n/a'} onChange={(e) => set(i, { jag: e.target.value })} onKeyDown={(e) => onKey(e, i, 6)} aria-label={`Row ${i + 1} vellam kg`}
                     />
                   </td>
+                  )}
                   <td className="p-0.5">
                     <select data-cell={`${i}-7`} className={cell} value={r.barrel} onChange={(e) => set(i, { barrel: e.target.value })} onKeyDown={(e) => onKey(e, i, 7)} aria-label={`Row ${i + 1} godown barrel`}>
                       {opts.length === 0 && <option value="">No barrel filling</option>}
