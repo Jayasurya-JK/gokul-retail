@@ -190,7 +190,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
             </div>
             {win.available && (
               <>
-                <MenuItem icon={win.fullscreen ? <Minimize2 size={15} /> : <Maximize size={15} />} label={win.fullscreen ? 'Exit full screen' : 'Full screen'} kbd="F11" onClick={() => { setMenu(false); win.toggleFullscreen(); }} />
+                <MenuItem icon={win.fullscreen ? <Minimize2 size={15} /> : <Maximize size={15} />} label={win.fullscreen ? 'Exit full screen' : 'Full screen'} kbd="Shift+F11" onClick={() => { setMenu(false); win.toggleFullscreen(); }} />
                 <MenuItem icon={<Minimize size={15} />} label="Minimize" onClick={() => { setMenu(false); win.minimize(); }} />
               </>
             )}

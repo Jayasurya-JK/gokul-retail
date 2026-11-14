@@ -92,7 +92,7 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
                   <>
                     <button role="menuitem" onClick={() => { setMenu(false); win.toggleFullscreen(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
                       {win.fullscreen ? <Minimize2 size={15} /> : <Maximize size={15} />}
-                      <span className="flex-1">{win.fullscreen ? 'Exit full screen' : 'Full screen'}</span><Kbd>F11</Kbd>
+                      <span className="flex-1">{win.fullscreen ? 'Exit full screen' : 'Full screen'}</span><Kbd>Shift+F11</Kbd>
                     </button>
                     <button role="menuitem" onClick={() => { setMenu(false); win.minimize(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
                       <Minimize size={15} /><span className="flex-1">Minimize</span>

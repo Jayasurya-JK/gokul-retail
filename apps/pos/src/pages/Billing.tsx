@@ -451,7 +451,6 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       return;
     }
     const prevent = () => e.preventDefault();
-    if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'c') { prevent(); setDialog('customer'); return; }
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
       prevent();
       const r = removed.current;
@@ -468,6 +467,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       case 'F8': prevent(); setDialog('recent'); break;
       case 'F9': prevent(); nav('/cash'); break;
       case 'F10': prevent(); nav('/returns'); break;
+      case 'F11': prevent(); setDialog('customer'); break;
       case 'Delete': if (e.ctrlKey && exchange) { prevent(); setDialog('dropEx'); } else if (!scan) { prevent(); removeSelected(); } break;
       case 'F12': case 'End': prevent(); openPay(); break;
       case 'ArrowDown': prevent(); B.select(selected + 1); break;
@@ -517,7 +517,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     { key: 'F8', label: 'Recent', onClick: () => setDialog('recent') },
     { key: 'F9', label: 'Cash', onClick: () => nav('/cash') },
     { key: 'F10', label: 'Return', onClick: () => nav('/returns') },
-    { key: 'Alt+C', label: 'Customer', onClick: () => setDialog('customer') },
+    { key: 'F11', label: 'Customer', onClick: () => setDialog('customer') },
     { key: 'F12', label: 'Pay', tone: 'primary', onClick: openPay },
     { key: 'Esc', label: 'Clear', onClick: () => (scan ? setScan('') : lines.length && setDialog('cancel')) },
   ];

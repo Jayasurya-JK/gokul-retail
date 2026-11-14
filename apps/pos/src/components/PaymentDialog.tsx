@@ -103,7 +103,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
     let amt = parsePaise(field) ?? remaining;
     if (amt <= 0) amt = remaining;
     if (mode === 'credit') {
-      if (!customer) { setError('Credit needs a customer. Close this and press Alt+C to choose one.'); return; }
+      if (!customer) { setError('Credit needs a customer. Close this and press F11 to choose one.'); return; }
       const limit = customer.creditLimit;
       const use = Math.min(amt, remaining);
       if (limit > 0 && customer.outstanding + use > limit) {

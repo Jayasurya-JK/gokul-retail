@@ -13,7 +13,7 @@ interface WindowControls { available: boolean; fullscreen: boolean; toggleFullsc
 const Ctx = createContext<WindowControls>({ available: false, fullscreen: false, toggleFullscreen: () => undefined, minimize: () => undefined });
 
 /**
- * Full screen and minimize for the desktop window. F11 toggles full screen from anywhere (Esc is left alone, the POS uses it).
+ * Full screen and minimize for the desktop window. Shift+F11 toggles full screen from anywhere (Esc is left alone, the POS uses it).
  * The apps start full screen with no taskbar; the user menu offers the same actions by mouse.
  */
 export function WindowControlsProvider({ controller, children }: { controller: WindowController; children: ReactNode }) {
@@ -30,9 +30,9 @@ export function WindowControlsProvider({ controller, children }: { controller: W
   const minimize = useCallback(() => { if (controller.available) void controller.minimize().catch(() => undefined); }, [controller]);
 
   useEffect(() => {
-    if (!controller.available) return undefined; // in a browser F11 keeps its normal meaning
+    if (!controller.available) return undefined; // in a browser Shift+F11 keeps its normal meaning
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'F11' && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }
+      if (e.key === 'F11' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }
     };
     window.addEventListener('keydown', h, true);
     return () => window.removeEventListener('keydown', h, true);

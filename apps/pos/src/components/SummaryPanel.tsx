@@ -107,10 +107,10 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             <UserRound size={19} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">Customer <Kbd>Alt+C</Kbd></span>
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">Customer <Kbd>F11</Kbd></span>
             <span className="block truncate text-md font-semibold text-ink">{customer ? customer.name : 'Walk-in customer'}</span>
             <span className="block truncate text-xs text-muted">
-              {customer ? `${customer.phone} - last visit ${customer.lastVisit}` : 'Press Alt+C to attach a customer'}
+              {customer ? `${customer.phone} - last visit ${customer.lastVisit}` : 'Press F11 to attach a customer'}
             </span>
           </span>
           <ChevronRight size={16} className="text-subtle" />
