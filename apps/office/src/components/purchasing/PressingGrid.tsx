@@ -122,18 +122,20 @@ export function PressingGrid({ profiles, barrels, operators, onSaved }: {
         </div>
       </div>
       <div className="max-h-[150px] overflow-auto">
-        <table className="w-full min-w-[800px] table-fixed">
+        {/* Seed, Machine and Godown barrel have no fixed width: a fixed-layout table shares the spare width between them,
+            so they grow with the window. The minimum keeps the barrel label whole; at 1366 the box scrolls sideways. */}
+        <table className="w-full table-fixed" style={{ minWidth: showJag ? 1380 : 1308 }}>
           <thead>
             <tr>
               <th className={cn(th, 'w-[116px]')}>Operator</th>
-              <th className={cn(th, 'w-[104px]')}>Seed</th>
-              <th className={cn(th, 'w-[100px]')}>Machine</th>
+              <th className={th}>Seed</th>
+              <th className={th}>Machine</th>
               <th className={cn(th, 'w-[72px] text-right')}>Seed kg</th>
               <th className={cn(th, 'w-[72px] text-right')}>Oil L</th>
               <th className={cn(th, 'w-[72px] text-right')}>Cake kg</th>
               {showJag && <th className={cn(th, 'w-[72px] text-right')}>Vellam kg</th>}
-              <th className={cn(th, 'w-[164px]')}>Godown barrel</th>
-              <th className={cn(th, 'whitespace-nowrap')}>Yield vs norm</th>
+              <th className={th}>Godown barrel</th>
+              <th className={cn(th, 'w-[250px] whitespace-nowrap')}>Yield vs norm</th>
               <th className="w-9" />
             </tr>
           </thead>
