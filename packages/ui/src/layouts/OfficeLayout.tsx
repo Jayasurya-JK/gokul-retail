@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronsLeft, ChevronsRight, CornerDownLeft, Moon, Search, Sun } from 'lucide-react';
+import { ChevronDown, ChevronsLeft, ChevronsRight, CornerDownLeft, LogOut, Maximize, Minimize2, Minimize, Moon, Search, Sun } from 'lucide-react';
 import { cn } from '../cn';
 import { Kbd } from '../components/Display';
 import { Dialog, Tooltip } from '../components/Overlay';
 import { IconButton } from '../components/Button';
 import { Logo } from '../components/Logo';
+import { useWindowControls } from '../components/WindowControls';
 
 export interface NavItem { path: string; label: string; icon: ReactNode; keywords?: string }
 export interface NavGroup { title: string; items: NavItem[] }
@@ -28,6 +29,16 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
+  const win = useWindowControls();
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    if (!menu) return undefined;
+    const close = () => setMenu(false);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false); };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc); };
+  }, [menu]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -66,13 +77,35 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
             </button>
           </Tooltip>
           <span className="mx-1 h-6 w-px bg-white/10" />
-          <button onClick={onLogout} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2.5 hover:bg-white/10" title="Sign out">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-yellow text-[11px] font-bold text-forest-950">{user.initials}</span>
-            <span className="text-left leading-tight">
-              <span className="block text-xs font-semibold text-white">{user.name}</span>
-              <span className="block text-[10px] capitalize text-chrome-muted">{user.role}</span>
-            </span>
-          </button>
+          <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+            <button onClick={() => setMenu((o) => !o)} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-white/10" aria-haspopup="menu" aria-expanded={menu}>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-yellow text-[11px] font-bold text-forest-950">{user.initials}</span>
+              <span className="text-left leading-tight">
+                <span className="block text-xs font-semibold text-white">{user.name}</span>
+                <span className="block text-[10px] capitalize text-chrome-muted">{user.role}</span>
+              </span>
+              <ChevronDown size={13} className="text-chrome-muted" />
+            </button>
+            {menu && (
+              <div role="menu" className="g-overlay absolute right-0 top-[calc(100%+6px)] z-[60] w-[240px] overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay">
+                {win.available && (
+                  <>
+                    <button role="menuitem" onClick={() => { setMenu(false); win.toggleFullscreen(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
+                      {win.fullscreen ? <Minimize2 size={15} /> : <Maximize size={15} />}
+                      <span className="flex-1">{win.fullscreen ? 'Exit full screen' : 'Full screen'}</span><Kbd>F11</Kbd>
+                    </button>
+                    <button role="menuitem" onClick={() => { setMenu(false); win.minimize(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
+                      <Minimize size={15} /><span className="flex-1">Minimize</span>
+                    </button>
+                    <div className="my-1 h-px bg-line" />
+                  </>
+                )}
+                <button role="menuitem" onClick={() => { setMenu(false); onLogout?.(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-danger hover:bg-danger-soft">
+                  <LogOut size={15} /><span className="flex-1">Sign out</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

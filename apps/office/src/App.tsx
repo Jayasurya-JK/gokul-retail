@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { TriangleAlert } from 'lucide-react';
-import type { BackupStatus } from '@gokul/data';
-import { OfficeLayout, StatusDot, ToastProvider, TooltipProvider, useDesktopGuards } from '@gokul/ui';
+import { windowController, type BackupStatus } from '@gokul/data';
+import { OfficeLayout, StatusDot, ToastProvider, TooltipProvider, WindowControlsProvider, useDesktopGuards } from '@gokul/ui';
 import { nav } from './nav';
 import { api, useSession } from './store';
 import { Login } from './pages/Login';
@@ -105,6 +105,7 @@ function Shell() {
 export function App() {
   useDesktopGuards();
   return (
+    <WindowControlsProvider controller={windowController}>
     <TooltipProvider>
       <ToastProvider>
         <HashRouter>
@@ -115,5 +116,6 @@ export function App() {
         </HashRouter>
       </ToastProvider>
     </TooltipProvider>
+    </WindowControlsProvider>
   );
 }

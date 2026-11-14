@@ -19,6 +19,7 @@
         "height": 768,
         "minWidth": 1280,
         "minHeight": 720,
+        "fullscreen": true,
         "maximized": true,
         "visible": false,
         "backgroundColor": "#0A3426",

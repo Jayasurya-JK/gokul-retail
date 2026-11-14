@@ -9,14 +9,14 @@ const GROUPS: { title: string; rows: [string, string[]][] }[] = [
       ['Point of Sale', ['Alt+1']], ['POS 1 (second bill)', ['Alt+2']], ['Bills (reprint, cancel)', ['Alt+4']],
       ['Sales Report', ['Alt+5']], ['Paymode Report', ['Alt+6']], ['Stock', ['Alt+7']], ['Customer', ['Alt+8']],
       ['Returns and exchange', ['F10']], ['Expenses and cash', ['F9']], ['Day close', ['Ctrl+E']], ['User menu', ['Alt+U']],
-      ['Lock the counter', ['Ctrl+L']], ['This sheet', ['F1']], ['Back to billing (from any other screen)', ['Esc']],
+      ['Lock the counter', ['Ctrl+L']], ['Full screen on or off', ['F11']], ['This sheet', ['F1']], ['Back to billing (from any other screen)', ['Esc']],
     ],
   },
   {
     title: 'Adding items',
     rows: [
       ['Add scanned or typed code', ['Enter']], ['Add 5 of item 101', ['5*101']], ['Search items by name', ['Ctrl+F']],
-      ['Choose customer', ['F11']], ['Move between rows', ['Up', 'Down']], ['Quantity up or down', ['+', '-']],
+      ['Choose customer', ['Alt+C']], ['Move between rows', ['Up', 'Down']], ['Quantity up or down', ['+', '-']],
       ['Remove the row', ['Del']], ['Undo the removed row', ['Ctrl+Z']],
     ],
   },

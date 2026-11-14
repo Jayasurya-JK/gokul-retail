@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, BarChart3, ChevronDown, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShieldCheck, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
-import { Kbd, Logo, Tooltip, cn } from '@gokul/ui';
+import { ArrowLeftRight, BarChart3, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShieldCheck, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
+import { Kbd, Logo, Tooltip, cn, useWindowControls } from '@gokul/ui';
 import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
@@ -50,6 +50,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
   const [now, setNow] = useState(new Date());
   const [keys, setKeys] = useState(false);
   const [menu, setMenu] = useState(false);
+  const win = useWindowControls();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -187,6 +188,12 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <div className="flex items-center gap-1.5 font-semibold text-ink"><UserRound size={13} /> {user?.name}</div>
               <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? `${pad(opened.getHours())}:${pad(opened.getMinutes())}` : '--'} ({hrs}h {pad(mins)}m)</div>
             </div>
+            {win.available && (
+              <>
+                <MenuItem icon={win.fullscreen ? <Minimize2 size={15} /> : <Maximize size={15} />} label={win.fullscreen ? 'Exit full screen' : 'Full screen'} kbd="F11" onClick={() => { setMenu(false); win.toggleFullscreen(); }} />
+                <MenuItem icon={<Minimize size={15} />} label="Minimize" onClick={() => { setMenu(false); win.minimize(); }} />
+              </>
+            )}
             <MenuItem icon={<ArrowLeftRight size={15} />} label="Switch user" onClick={out} />
             <MenuItem icon={<LogOut size={15} />} label="Sign out" onClick={out} danger />
           </div>

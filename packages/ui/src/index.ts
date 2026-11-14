@@ -15,3 +15,4 @@ export * from './components/useCountdown';
 export * from './components/Logo';
 export * from './components/useRefreshOnFocus';
 export * from './components/useResizableColumns';
+export * from './components/WindowControls';

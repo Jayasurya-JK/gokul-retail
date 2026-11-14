@@ -18,6 +18,7 @@ export * from './insights';
 export { mockApi, createMockApi } from './mockApi';
 export { settings as defaultSettings, categories as mockCategories } from './seed';
 export { api, isTauri } from './tauri/select';
+export { windowController } from './tauri/window';
 export { createTauriApi, REAL_METHODS, saveSeedNorms } from './tauri/tauriApi';
 export * from './auth';
 export * from './printed';

@@ -1,5 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { PosStatusContext, ToastProvider, TooltipProvider, useDesktopGuards } from '@gokul/ui';
+import { PosStatusContext, ToastProvider, TooltipProvider, WindowControlsProvider, useDesktopGuards } from '@gokul/ui';
+import { windowController } from '@gokul/data';
 import { useSession } from './store';
 import { Login } from './pages/Login';
 import { Billing } from './pages/Billing';
@@ -22,6 +23,7 @@ function Guard({ children }: { children: JSX.Element }) {
 export function App() {
   useDesktopGuards();
   return (
+    <WindowControlsProvider controller={windowController}>
     <TooltipProvider>
       <ToastProvider>
         <PosStatusContext.Provider value={<StatusBar />}>
@@ -49,5 +51,6 @@ export function App() {
         </PosStatusContext.Provider>
       </ToastProvider>
     </TooltipProvider>
+    </WindowControlsProvider>
   );
 }

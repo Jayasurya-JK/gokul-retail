@@ -330,7 +330,7 @@ const HELP: [string, string][] = [
   ['Enter', 'Add the typed code or scanned barcode'], ['5*101', 'Add 5 of item 101'], ['Up / Down', 'Move between bill rows'],
   ['Enter (empty)', 'Edit quantity of selected row'], ['F4', 'Edit quantity'], ['Ctrl+D', 'Line discount (amount or 5%)'],
   ['Tab (editing)', 'Next field: qty, rate, discount'], ['Del', 'Remove selected row'], ['Ctrl+Z', 'Undo last removed row'],
-  ['+ / -', 'Quantity up or down by one'], ['Ctrl+F', 'Search items'], ['F11', 'Choose customer'],
+  ['+ / -', 'Quantity up or down by one'], ['Ctrl+F', 'Search items'], ['Alt+C', 'Choose customer'], ['F11', 'Full screen on or off'],
   ['F6', 'Hold this bill'], ['Shift+F6', 'Bring back a held bill'], ['F8', 'Recent bills'], ['F9', 'Cash in / out'],
   ['F10', 'Return / exchange'], ['Ctrl+L', 'Lock the counter'], ['Ctrl+E', 'Close the day (Z)'], ['F12 or End', 'Take payment'], ['Shift+F5', 'Discount on whole bill'], ['Esc', 'Clear typed code or cancel bill'],
 ];
