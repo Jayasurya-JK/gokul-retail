@@ -11,7 +11,7 @@ import { DeleteRecord, useCanEditRecords } from '../components/purchasing/Delete
 import { JobWorkPane } from '../components/purchasing/JobWorkPane';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
-  BarrelStrip, fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, normPer100, phaseInfo, SectionLabel, seedColor, signedPct, useKeys, vsNormText, yieldTextCls, yieldTone,
+  fmtDate, fmtDateYear, fmtMilli, fmtNum, fmtTime, normPer100, phaseInfo, SectionLabel, seedColor, signedPct, useKeys, vsNormText, yieldTextCls, yieldTone,
 } from '../components/purchasing/common';
 
 /* ---------------- yield trend (bars per batch, norm line) ---------------- */
@@ -235,31 +235,37 @@ function PackDetail({ r }: { r: PackRun }) {
   );
 }
 
-/* ---------------- godown chips on the Pressing tab: where the oil goes, and what is settling ---------------- */
-function GodownChips({ barrels, profiles, onOpen }: { barrels: GodownBarrel[]; profiles: SeedProfile[]; onOpen: () => void }) {
+/* ---------------- one compact row above the tabs: oil in the godown (click opens the Godown tab), and seed stock ---------------- */
+function StockSummary({ barrels, profiles, onOpen }: { barrels: GodownBarrel[]; profiles: SeedProfile[]; onOpen: () => void }) {
   const oils: { seed: SeedType; label: string }[] = [{ seed: 'groundnut', label: 'Groundnut' }, { seed: 'sesame', label: 'Sesame' }, { seed: 'copra', label: 'Coconut' }];
-  const chip = 'flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-1 text-left text-xs';
+  const caption = 'shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted';
   return (
-    <div className="flex items-center gap-2">
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Oil</span>
+    <div className="flex h-9 min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap text-xs">
+      <span className={caption}>Oil in godown</span>
       {oils.map(({ seed, label }) => {
-        const list = barrels.filter((b) => b.active && b.oil === seed && b.levelL > 0);
-        const litres = list.reduce((a, b) => a + b.levelL, 0);
-        const settling = list.filter((b) => b.status === 'settling').length;
-        const ready = list.filter((b) => b.status === 'ready').length;
+        const mine = barrels.filter((b) => b.active && b.oil === seed);
+        const litres = mine.reduce((a, b) => a + b.levelL, 0);
+        const n = mine.length;
         return (
-          <button key={seed} type="button" onClick={onOpen} title={`${label} oil: ${settling} settling, ${ready} ready. Open the Godown tab`} className={cn(chip, 'hover:bg-surface-2')}>
-            <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[seed])} />{label}</span>
-            <span className="num font-semibold text-ink">{fmtMilli(litres, 0)} L{ready > 0 && <span className="ml-1.5 hidden font-normal text-info 2xl:inline">{ready} ready</span>}</span>
+          <button
+            key={seed} type="button" onClick={onOpen} title={`${label} oil in the godown: ${n} barrel${n === 1 ? '' : 's'}. Open the Godown tab`}
+            className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2"
+          >
+            <span className={cn('h-2 w-2 rounded-full', seedColor[seed])} />
+            <span className="font-medium text-ink">{label}</span>
+            <span className="num text-ink">{fmtMilli(litres, 0)} L</span>
+            <span className="hidden text-muted 2xl:inline">· {n} barrel{n === 1 ? '' : 's'}</span>
           </button>
         );
       })}
-      <span className="ml-2 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">Seed</span>
-      {profiles.map((p) => (
-        <div key={p.seed} className={chip}>
-          <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[p.seed])} />{p.label.split(' ')[0]}</span>
-          <span className={cn('num font-semibold', p.stock < 300000 ? 'text-warning' : 'text-ink')}>{fmtMilli(p.stock, 0)} kg</span>
-        </div>
+      <span className="mx-1 h-4 w-px shrink-0 bg-line" />
+      <span className={caption}>Seed stock</span>
+      {profiles.map((p, i) => (
+        <span key={p.seed} className="flex shrink-0 items-center gap-1.5">
+          {i > 0 && <span className="text-subtle">·</span>}
+          <span className="font-medium text-ink">{p.label.split(' ')[0]}</span>
+          <span className={cn('num', p.stock < 300000 ? 'font-semibold text-warning' : 'text-ink')}>{fmtMilli(p.stock, 0)} kg</span>
+        </span>
       ))}
     </div>
   );
@@ -309,12 +315,6 @@ export function Production() {
   const start = () => (tab === 'pressing' ? setNewBatch(true) : tab === 'packing' ? (setPackBarrel(null), setNewPack(true)) : undefined);
   useKeys((e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); start(); } });
 
-  /** In the Godown tab the strip shows the production barrels, so a click can pick the side panel's barrel. */
-  const godownStrip = useMemo<Barrel[]>(() => godownBarrels.map((g) => ({
-    id: g.id, label: g.label, seed: g.oil, oilName: g.oilName,
-    capacityL: g.capacityL, levelL: g.levelL, filledOn: g.filledOn,
-  })), [godownBarrels]);
-
   return (
     <>
       <PageHeader
@@ -324,24 +324,8 @@ export function Production() {
           <Button icon={<Plus size={15} />} kbd="Ctrl+N" onClick={start}>{tab === 'pressing' ? 'Batch with details' : 'New packing run'}</Button>
         )}
       />
-      <div className={cn('flex shrink-0 items-center gap-3 border-b border-line bg-bg px-4', tab === 'pressing' || tab === 'jobwork' ? 'py-1.5' : 'py-3')}>
-        <div className="min-w-0 flex-1">
-          {tab === 'pressing' || tab === 'jobwork' ? <GodownChips barrels={godownBarrels} profiles={profiles} onOpen={() => setTab('godown')} /> : (
-            <BarrelStrip
-              barrels={tab === 'godown' ? godownStrip : barrels}
-              selectedId={tab === 'godown' ? godownSelId : run?.barrelId}
-              onPick={tab === 'godown' ? (b) => setGodownSelId(b.id) : undefined}
-            />
-          )}
-        </div>
-        <div className={cn('w-[248px] shrink-0 flex-col gap-1.5', tab === 'pressing' || tab === 'jobwork' ? 'hidden' : 'flex')}>
-          {profiles.map((p) => (
-            <div key={p.seed} className="flex items-center justify-between rounded-md border border-line bg-surface px-2.5 py-1 text-xs">
-              <span className="flex items-center gap-1.5 text-muted"><span className={cn('h-2 w-2 rounded-full', seedColor[p.seed])} />{p.label} in godown</span>
-              <span className={cn('num font-semibold', p.stock < 300000 ? 'text-warning' : 'text-ink')}>{fmtMilli(p.stock, 0)} kg</span>
-            </div>
-          ))}
-        </div>
+      <div className="flex h-9 shrink-0 items-center border-b border-line bg-bg px-4">
+        <StockSummary barrels={godownBarrels} profiles={profiles} onOpen={() => setTab('godown')} />
       </div>
       <Tabs
         value={tab} onValueChange={setTab} className="min-h-0 flex-1"
