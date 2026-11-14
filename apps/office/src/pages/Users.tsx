@@ -7,8 +7,8 @@ import { RolesMatrix } from '../components/crm/RolesMatrix';
 import { SaveBar } from '../components/crm/SaveBar';
 import { Avatar, ago } from '../components/crm/common';
 
-const roleTone: Record<Role, Tone> = { owner: 'primary', manager: 'info', cashier: 'neutral' };
-const roleName: Record<Role, string> = { owner: 'Owner', manager: 'Manager', cashier: 'Cashier' };
+const roleTone: Record<Role, Tone> = { owner: 'primary', admin: 'primary', manager: 'info', staff: 'info', cashier: 'neutral' };
+const roleName: Record<Role, string> = { owner: 'Owner', admin: 'Admin', manager: 'Manager', staff: 'Staff', cashier: 'Cashier' };
 
 interface UserDraft { name: string; role: Role; phone: string; pin: string; active: boolean }
 
@@ -43,7 +43,7 @@ function UserSheet({ open, user, roles, onClose, onSave }: {
             label="Role" value={d.role} onChange={(ev) => setD({ ...d, role: ev.target.value as Role })}
             options={roles.map((r) => ({ value: r.id, label: r.name }))}
           />
-          {role && <p className="mt-1.5 text-xs text-muted">{role.description} {role.id !== 'owner' && `Discount up to ${role.discountLimitPct}% without a PIN.`}</p>}
+          {role && <p className="mt-1.5 text-xs text-muted">{role.description} {role.id !== 'owner' && role.id !== 'admin' && `Discount up to ${role.discountLimitPct}% without a PIN.`}</p>}
         </div>
         <Input label="Phone (optional)" value={d.phone} onChange={(ev) => setD({ ...d, phone: ev.target.value.replace(/[^\d ]/g, '').slice(0, 11) })} className="num" />
         <Input

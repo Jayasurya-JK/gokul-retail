@@ -67,7 +67,7 @@ export function Categories() {
           </footer>
         </aside>
         <CatalogItemsPane
-          category={category} brand={brand} cats={cats} brands={brands} canEdit={role === 'owner' || role === 'manager'}
+          category={category} brand={brand} cats={cats} brands={brands} canEdit={role === 'owner' || role === 'admin' || role === 'manager'}
           onClearCategory={() => setCatId(null)} onClearBrand={() => setBrandId(null)} onChanged={() => void refresh()}
         />
       </div>

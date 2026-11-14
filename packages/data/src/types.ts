@@ -147,7 +147,7 @@ export interface HeldBill extends BillExtras {
   total: Paise;
 }
 
-export type Role = 'owner' | 'manager' | 'cashier';
+export type Role = 'owner' | 'admin' | 'manager' | 'staff' | 'cashier';
 export interface User {
   id: string; name: string; role: Role; initials: string; pin: string; color: string; lastLogin: string;
   /** Seconds left on a PIN lockout (5 wrong PINs lock the user for 60 s); absent when not locked. */

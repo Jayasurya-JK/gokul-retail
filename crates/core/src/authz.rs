@@ -64,7 +64,11 @@ impl Actor {
     }
     /// Cost and profit are for the owner and managers only.
     pub fn can_see_cost(&self) -> bool {
-        self.role == "owner" || self.role == "manager"
+        self.role == "owner" || self.role == "manager" || self.role == "admin"
+    }
+    /// A counter user (cashier or staff): sees today's bills and reports only.
+    pub fn is_counter(&self) -> bool {
+        self.role == "cashier" || self.role == "staff"
     }
 }
 
@@ -127,6 +131,8 @@ enum Rule {
     Bill,
     /// An expense over the limit (setting) needs a manager PIN unless the role may open the drawer on its own.
     ExpenseAdd,
+    /// Edit or delete a saved record: the role must hold `canEditRecords` (owner and admin).
+    EditRecords,
     /// Removing a scanned line: no PIN, unless the setting asks for one and the role lists it.
     VoidLine,
 }
@@ -136,7 +142,8 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
     match method {
         "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
         | "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => Perm("canManageItems"),
-        "createGrn" | "saveSupplier" | "recordSupplierPayment" | "saveSeedNorms" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
+        "editPressingBatch" | "deletePressingBatch" | "saveSeedNorms" | "editGodownBarrel" | "editOutsourcedOil" | "deleteOutsourcedOil" | "deleteStickReading" => EditRecords,
+        "createGrn" | "saveSupplier" | "recordSupplierPayment" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
             Perm("canManageStock")
         }
         "setCustomerCredit" => PermPin { perm: "canEditPrices", action: "allow_credit", pin_arg: 2, pin_key: None },
@@ -159,7 +166,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "voidExpense" => PermPin { perm: "canOpenDrawer", action: "void_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "logVoidedLine" => VoidLine,
         "saveExpenseCategories" | "getMillSheet" | "saveMillSheet" | "listMillSheets" | "getMillDaily" | "getMillAnalysis" | "getMillDay" | "saveMillDay" | "recordJobWork" | "listJobWork" => Perm("canManageStock"),
-        "addGodownBarrels" | "editGodownBarrel" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => Perm("canManageStock"),
+        "addGodownBarrels" | "setGodownStatus" | "recordStickReading" | "recordOutsourcedOil" | "transferToStore" => Perm("canManageStock"),
         "closeMillSheet" | "closeMillDay" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         _ => Open,
     }
@@ -227,14 +234,14 @@ fn stamp_identity(actor: &Actor, method: &str, args: &mut Vec<Value>) {
             }
             args[0] = Value::Object(q);
         }
-        "listBillsOn" if actor.role == "cashier" => {
+        "listBillsOn" if actor.is_counter() => {
             // A cashier sees today's bills only; managers and owners see any date.
             if let Some(o) = args.get_mut(0).and_then(|a| a.as_object_mut()) {
                 o.insert("date".into(), Value::String(crate::db::day_of(Local::now())));
                 o.insert("allDays".into(), Value::Bool(false));
             }
         }
-        "salesReport" | "paymodeReport" | "staffReport" if actor.role == "cashier" => {
+        "salesReport" | "paymodeReport" | "staffReport" if actor.is_counter() => {
             // The counter's reports show today only; managers and owners pick any dates.
             let today = Value::String(crate::db::day_of(Local::now()));
             let mut q = args.first().and_then(|a| a.as_object()).cloned().unwrap_or_default();
@@ -328,6 +335,13 @@ pub fn authorize(conn: &Connection, actor: &Actor, method: &str, args: &mut Vec<
             match store::find_approver(conn, &pin, Some(perm), 0)? {
                 Some(m) => Ok(Some(Override { approver: m.name, what: action_what.to_string() })),
                 None => Err(wrong_approval_pin(conn, actor, action_what)),
+            }
+        }
+        Rule::EditRecords => {
+            if actor.has("canEditRecords") {
+                Ok(None)
+            } else {
+                invalid("Only the owner or admin can change saved records.")
             }
         }
         Rule::Bill => check_bill(conn, actor, args),

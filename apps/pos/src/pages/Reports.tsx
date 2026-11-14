@@ -24,7 +24,7 @@ const REPORT_KEYS: KeyRows = [
 /** Owner and managers see cost and profit; a cashier never gets those numbers from the backend. */
 function useCanSeeCost() {
   const role = useSession((s) => s.user?.role);
-  return role === 'owner' || role === 'manager';
+  return role === 'owner' || role === 'admin' || role === 'manager';
 }
 
 function useStaffList() {
@@ -121,7 +121,7 @@ export function SalesReportPage() {
   useScreenKeys('Sales Report', REPORT_KEYS);
   const toast = useToast();
   const canCost = useCanSeeCost();
-  const cashier = useSession((s) => s.user?.role === 'cashier');
+  const cashier = useSession((s) => s.user?.role === 'cashier' || s.user?.role === 'staff');
   const staffList = useStaffList();
   const [range, setRange] = useState<DateRange>(today);
   const [staff, setStaff] = useState('');
@@ -290,7 +290,7 @@ const MODE_COLS: { key: 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points'
 export function PaymodeReportPage() {
   useScreenKeys('Paymode Report', REPORT_KEYS);
   const toast = useToast();
-  const cashier = useSession((s) => s.user?.role === 'cashier');
+  const cashier = useSession((s) => s.user?.role === 'cashier' || s.user?.role === 'staff');
   const staffList = useStaffList();
   const [range, setRange] = useState<DateRange>(today);
   const [staff, setStaff] = useState('');
@@ -562,7 +562,7 @@ function StockLine({ r, canCost, on, onSelect }: { r: StockRow; cols?: string; c
 export function StaffReportPage() {
   useScreenKeys('Staff report', [REPORT_KEYS[2], REPORT_KEYS[3], REPORT_KEYS[4]]);
   const toast = useToast();
-  const cashier = useSession((s) => s.user?.role === 'cashier');
+  const cashier = useSession((s) => s.user?.role === 'cashier' || s.user?.role === 'staff');
   const [range, setRange] = useState<DateRange>(today);
   const [rows, setRows] = useState<StaffReportRow[]>([]);
   const [loading, setLoading] = useState(false);

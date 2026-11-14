@@ -225,9 +225,9 @@ export function createShiftMock(store: MockStore): ShiftApi {
 
     shiftSummary: async () => summarise(),
     verifyManagerPin: async (pin) =>
-      store.users.find((u) => (u.role === 'manager' || u.role === 'owner') && u.pin === pin) ?? null,
+      store.users.find((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === pin) ?? null,
     closeDay: async ({ userId, counts, managerPin }) => {
-      const approver = store.users.find((u) => (u.role === 'manager' || u.role === 'owner') && u.pin === managerPin);
+      const approver = store.users.find((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === managerPin);
       if (!approver) return null;
       const summary = summarise();
       const counted = countedTotal(counts);

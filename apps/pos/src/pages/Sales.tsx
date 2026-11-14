@@ -77,7 +77,7 @@ export function Sales() {
   const searchRef = useRef<HTMLInputElement>(null);
   const today = dayKey(new Date());
   /** Cashiers see today only; the owner and managers can open any day. Totals are visible to everyone. */
-  const canBrowse = user?.role !== 'cashier';
+  const canBrowse = user?.role !== 'cashier' && user?.role !== 'staff';
   /* A scanned bill barcode (the bill number) finds that bill. */
   useScanHandler((raw) => {
     const c = raw.trim();

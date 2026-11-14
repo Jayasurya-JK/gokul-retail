@@ -150,7 +150,7 @@ export function createBillOpsMock(store: MockStore): BillOpsApi {
       if (b.status === 'cancelled') throw new Error('This bill is already cancelled');
       if (returnedOf(b).some((q) => q > 0)) throw new Error('Items were already returned on this bill. Cancel is not allowed.');
       if (!reason.trim()) throw new Error('Choose a reason');
-      const mgr = store.users.find((u) => (u.role === 'owner' || u.role === 'manager') && u.pin === managerPin);
+      const mgr = store.users.find((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === managerPin);
       if (!mgr) throw new Error('Manager PIN is not correct');
       b.status = 'cancelled';
       for (const l of b.lines) {

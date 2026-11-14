@@ -27,7 +27,7 @@ export function Items() {
   const toast = useToast();
   const role = useSession((s) => s.user?.role);
   /** Purchase cost is for the owner and managers only, like the stock take screen. */
-  const canSeeCost = role === 'owner' || role === 'manager';
+  const canSeeCost = role === 'owner' || role === 'admin' || role === 'manager';
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

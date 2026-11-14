@@ -163,7 +163,7 @@ export function createExpensesMock(store: MockStore): ExpensesApi {
   rows[4].voidedBy = 'Lakshmi Rajan';
 
   const needPin = (pin: string | undefined, what: string) => {
-    const ok = store.users.some((u) => (u.role === 'owner' || u.role === 'manager') && u.pin === (pin ?? '').trim());
+    const ok = store.users.some((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === (pin ?? '').trim());
     if (!(pin ?? '').trim()) throw new Error(`A manager PIN is needed to ${what}`);
     if (!ok) throw new Error('Manager PIN is not correct');
   };

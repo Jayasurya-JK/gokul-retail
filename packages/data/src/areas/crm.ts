@@ -157,7 +157,7 @@ export const managerPinActions: { key: ManagerPinAction; label: string; hint: st
 
 export type PermissionKey =
   | 'canCancelBill' | 'canReturn' | 'canEditPrices' | 'canSeeCost' | 'canSeeReports'
-  | 'canManageItems' | 'canManageStock' | 'canCollectCredit' | 'canOpenDrawer' | 'canManageUsers' | 'canChangeSettings';
+  | 'canManageItems' | 'canManageStock' | 'canCollectCredit' | 'canOpenDrawer' | 'canManageUsers' | 'canChangeSettings' | 'canEditRecords';
 
 export const permissionDefs: { key: PermissionKey; label: string; hint: string; group: 'Counter' | 'Back office' }[] = [
   { key: 'canCancelBill', label: 'Cancel a bill', hint: 'Void a saved bill', group: 'Counter' },
@@ -171,6 +171,7 @@ export const permissionDefs: { key: PermissionKey; label: string; hint: string; 
   { key: 'canManageStock', label: 'Stock and purchases', hint: 'GRN, adjustments, production', group: 'Back office' },
   { key: 'canManageUsers', label: 'Manage users and roles', hint: 'Create users, reset PINs', group: 'Back office' },
   { key: 'canChangeSettings', label: 'Change settings', hint: 'Shop, tax, printers, backup', group: 'Back office' },
+  { key: 'canEditRecords', label: 'Edit or delete saved records', hint: 'Correct or remove a saved pressing batch or godown entry', group: 'Back office' },
 ];
 
 export interface RoleDef {
@@ -627,13 +628,22 @@ function seedRoles(): RoleDef[] {
   const manager = allOn();
   manager.canManageUsers = false;
   manager.canChangeSettings = false;
+  manager.canEditRecords = false;
+  const staff = Object.fromEntries(permissionDefs.map((p) => [p.key, false])) as Record<PermissionKey, boolean>;
+  staff.canCollectCredit = true;
+  staff.canManageStock = true;
   const cashier = Object.fromEntries(permissionDefs.map((p) => [p.key, false])) as Record<PermissionKey, boolean>;
   cashier.canCollectCredit = true;
   return [
     { id: 'owner', name: 'Owner', description: 'Full control of shop, money and settings.', discountLimitPct: 100, perms: allOn(), pinFor: [], locked: true },
+    { id: 'admin', name: 'Admin', description: 'Full access, same as owner', discountLimitPct: 100, perms: allOn(), pinFor: [], locked: true },
     {
       id: 'manager', name: 'Manager', description: 'Runs the floor. Approves exceptions with their own PIN.', discountLimitPct: 15, perms: manager,
       pinFor: ['stock_adjust'],
+    },
+    {
+      id: 'staff', name: 'Staff', description: 'Entry only. Cannot edit or delete saved records.', discountLimitPct: 2, perms: staff,
+      pinFor: ['discount_over_limit', 'cancel_bill', 'return', 'price_override', 'void_line', 'open_drawer', 'credit_over_limit', 'stock_adjust'],
     },
     {
       id: 'cashier', name: 'Cashier', description: 'Bills at the counter only.', discountLimitPct: 2, perms: cashier,
@@ -678,7 +688,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     hardware: { scanGapMs: 30, scanMinLen: 3, scanBeep: true },
     security: { lockoutAttempts: 5, lockoutSeconds: 60, voidLineNeedsPin: false },
     expenses: { limit: 100000 },
-    mill: { operators: ['Operator 1', 'Operator 2'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 },
+    mill: { operators: ['Ambethkar'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 },
     backup: {
       schedule: 'daily', time: '02:00', location: 'D:\\GokulBackup', keep: 30, copyToUsb: false,
       history: Array.from({ length: 7 }, (_, i) => ({
@@ -1033,7 +1043,7 @@ export function createCrmMock(store: MockStore): CrmApi {
     /* users and roles */
     listRoles: () => delay(clone(roles)),
     saveRoles: (next) => {
-      roles = clone(next).map((r) => (r.id === 'owner' ? { ...r, perms: allOn(), pinFor: [], discountLimitPct: 100 } : r));
+      roles = clone(next).map((r) => (r.id === 'owner' || r.id === 'admin' ? { ...r, perms: allOn(), pinFor: [], discountLimitPct: 100 } : r));
       return delay(clone(roles));
     },
     listUserAccounts: () => delay(store.users.map(accountOf)),

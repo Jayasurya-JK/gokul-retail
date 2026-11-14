@@ -80,7 +80,7 @@ export function StockTake({ onPosted }: { onPosted: () => void }) {
   const toast = useToast();
   const role = useSession((s) => s.user?.role);
   /** Counts are blind: the counter staff never see the system quantity, and neither does the printed sheet. */
-  const canSeeSystem = role === 'owner' || role === 'manager';
+  const canSeeSystem = role === 'owner' || role === 'admin' || role === 'manager';
 
   const [cats, setCats] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

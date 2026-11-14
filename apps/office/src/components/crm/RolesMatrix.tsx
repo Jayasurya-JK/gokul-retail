@@ -3,7 +3,7 @@ import { managerPinActions, permissionDefs, type ManagerPinAction, type Permissi
 import { Badge, Checkbox, NumberInput, Switch } from '@gokul/ui';
 import { cn } from '@gokul/ui';
 
-const COLS = 'grid grid-cols-[minmax(240px,1fr)_repeat(3,150px)] items-center';
+const COLS = 'grid grid-cols-[minmax(240px,1fr)_repeat(5,128px)] items-center';
 
 function HeaderRow({ roles }: { roles: RoleDef[] }) {
   return (
@@ -12,7 +12,7 @@ function HeaderRow({ roles }: { roles: RoleDef[] }) {
       {roles.map((r) => (
         <div key={r.id} className="flex flex-col items-center gap-0.5">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">{r.name}{r.locked && <Lock size={12} className="text-subtle" />}</div>
-          <div className="text-[11px] text-subtle">{r.id === 'owner' ? 'Always full access' : r.id === 'manager' ? 'Floor lead' : 'Counter staff'}</div>
+          <div className="text-[11px] text-subtle">{r.id === 'owner' ? 'Always full access' : r.id === 'admin' ? 'Same as owner' : r.id === 'manager' ? 'Floor lead' : r.id === 'staff' ? 'Entry only' : 'Counter'}</div>
         </div>
       ))}
     </div>

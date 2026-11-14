@@ -557,7 +557,7 @@ pub fn log_reminder(conn: &Connection, id: &str) -> Result<()> {
 
 pub const PERMISSION_KEYS: &[&str] = &[
     "canCancelBill", "canReturn", "canEditPrices", "canSeeCost", "canSeeReports", "canManageItems", "canManageStock",
-    "canCollectCredit", "canOpenDrawer", "canManageUsers", "canChangeSettings",
+    "canCollectCredit", "canOpenDrawer", "canManageUsers", "canChangeSettings", "canEditRecords",
 ];
 
 fn role_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -571,7 +571,7 @@ fn role_row(r: &rusqlite::Row) -> rusqlite::Result<Value> {
 }
 
 pub fn list_roles(conn: &Connection) -> Result<Vec<Value>> {
-    let mut st = conn.prepare("SELECT id,name,description,discount_limit_pct,perms_json,pin_for_json,locked FROM roles ORDER BY CASE id WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END")?;
+    let mut st = conn.prepare("SELECT id,name,description,discount_limit_pct,perms_json,pin_for_json,locked FROM roles ORDER BY CASE id WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'staff' THEN 3 ELSE 4 END")?;
     let v = st.query_map([], role_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
 }
@@ -580,14 +580,14 @@ pub fn save_roles(conn: &mut Connection, roles: &[Value]) -> Result<Vec<Value>> 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     for r in roles {
         let id = r["id"].as_str().unwrap_or("");
-        if !["owner", "manager", "cashier"].contains(&id) {
+        if !["owner", "admin", "manager", "staff", "cashier"].contains(&id) {
             return invalid("Unknown role.");
         }
         let limit = r["discountLimitPct"].as_i64().unwrap_or(0);
         if !(0..=100).contains(&limit) {
             return invalid("Discount limit must be between 0 and 100 percent.");
         }
-        let (perms, pin_for, limit) = if id == "owner" {
+        let (perms, pin_for, limit) = if id == "owner" || id == "admin" {
             // The owner can always do everything and never needs a manager PIN.
             (Value::Object(PERMISSION_KEYS.iter().map(|k| (k.to_string(), json!(true))).collect()), json!([]), 100)
         } else {
@@ -688,7 +688,7 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
     if name.is_empty() {
         return invalid("Enter the user's name.");
     }
-    if !["owner", "manager", "cashier"].contains(&i.role.as_str()) {
+    if !["owner", "admin", "manager", "staff", "cashier"].contains(&i.role.as_str()) {
         return invalid("Choose a role.");
     }
     if let Some(p) = i.pin.as_deref().filter(|p| !p.is_empty()) {

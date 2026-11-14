@@ -24,6 +24,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (13, include_str!("../migrations/013_godown.sql")),
     (14, include_str!("../migrations/014_production_redo.sql")),
     (15, include_str!("../migrations/015_job_work.sql")),
+    (16, include_str!("../migrations/016_roles_admin_staff.sql")),
 ];
 
 /// The schema version this build brings every database up to.
@@ -95,12 +96,36 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         if current >= *version {
             continue;
         }
+        if *version == 16 {
+            allow_admin_and_staff_roles(&tx)?; // before the SQL below inserts the new roles
+        }
         tx.execute_batch(sql)?;
         if *version == 10 {
             crate::lots::backfill(&tx)?; // lots from the existing ledger, in the same transaction
         }
         tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
         tx.commit()?;
+    }
+    Ok(())
+}
+
+/// `users.role` was created with CHECK (role IN ('owner','manager','cashier')). SQLite cannot alter a CHECK, and rebuilding `users`
+/// would need foreign keys off (not possible inside this transaction), so the CHECK text is loosened in the schema itself, the
+/// documented way for a change that touches no stored row (https://www.sqlite.org/lang_altertable.html, "Making Other Kinds Of
+/// Table Schema Changes"). The schema cookie is bumped so the connection reloads the schema.
+fn allow_admin_and_staff_roles(tx: &rusqlite::Transaction) -> Result<()> {
+    let old = "CHECK (role IN ('owner','manager','cashier'))";
+    let new = "CHECK (role IN ('owner','manager','cashier','admin','staff'))";
+    let cookie: i64 = tx.query_row("PRAGMA schema_version", [], |r| r.get(0))?;
+    tx.execute_batch("PRAGMA writable_schema = ON")?;
+    let n = tx.execute("UPDATE sqlite_master SET sql = replace(sql, ?1, ?2) WHERE type='table' AND name='users'", rusqlite::params![old, new])?;
+    let n2 = tx.execute(
+        "UPDATE sqlite_master SET sql = replace(sql, ?1, ?2) WHERE type='table' AND name='roles'",
+        rusqlite::params!["CHECK (id IN ('owner','manager','cashier'))", "CHECK (id IN ('owner','manager','cashier','admin','staff'))"],
+    )?;
+    tx.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", cookie + 1))?;
+    if n != 1 || n2 != 1 {
+        return Err(internal("could not allow the admin and staff roles on the users table"));
     }
     Ok(())
 }
@@ -114,6 +139,36 @@ pub fn iso(dt: DateTime<Local>) -> String {
 /// Local calendar day, yyyy-mm-dd.
 pub fn day_of(dt: DateTime<Local>) -> String {
     dt.format("%Y-%m-%d").to_string()
+}
+
+/// The moment an entry belongs to. `day` (yyyy-mm-dd) and `time` (HH:MM) are optional: nothing means now; a past day without a time is
+/// stamped 20:00 (like the mill sheet); today with a time uses that time. A future day or time is refused.
+pub fn entry_time(day: Option<&str>, time: Option<&str>) -> Result<DateTime<Local>> {
+    use chrono::{NaiveDate, NaiveTime, TimeZone};
+    let now = Local::now();
+    let day = day.map(str::trim).filter(|d| !d.is_empty());
+    let time = time.map(str::trim).filter(|t| !t.is_empty());
+    if day.is_none() && time.is_none() {
+        return Ok(now);
+    }
+    let today = now.date_naive();
+    let d = match day {
+        Some(s) => NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| ApiError::Invalid("The date looks wrong.".into()))?,
+        None => today,
+    };
+    if d > today {
+        return Err(ApiError::Invalid("The date cannot be in the future.".into()));
+    }
+    let t = match time {
+        Some(s) => NaiveTime::parse_from_str(s, "%H:%M").map_err(|_| ApiError::Invalid("The time looks wrong.".into()))?,
+        None if d == today => return Ok(now),
+        None => NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
+    };
+    let at = Local.from_local_datetime(&d.and_time(t)).earliest().unwrap_or(now);
+    if at > now {
+        return Err(ApiError::Invalid("The time cannot be in the future.".into()));
+    }
+    Ok(at)
 }
 
 /// Indian financial year (April to March): "2026-27".

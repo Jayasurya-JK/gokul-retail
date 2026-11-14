@@ -123,7 +123,7 @@ pub fn verify_pin(conn: &Connection, user_id: &str, pin: &str) -> Result<Option<
 /// The owner or manager whose PIN this is, if any.
 pub fn find_manager(conn: &Connection, pin: &str) -> Result<Option<User>> {
     let now = Local::now();
-    let mut st = conn.prepare("SELECT id,name,role,initials,color,last_login,pin_hash FROM users WHERE active=1 AND role IN ('owner','manager')")?;
+    let mut st = conn.prepare("SELECT id,name,role,initials,color,last_login,pin_hash FROM users WHERE active=1 AND role IN ('owner','admin','manager')")?;
     let mut rows = st.query([])?;
     while let Some(r) = rows.next()? {
         let hash: String = r.get(6)?;
@@ -140,7 +140,7 @@ pub fn find_approver(conn: &Connection, pin: &str, perm: Option<&str>, min_disco
     let now = Local::now();
     let mut st = conn.prepare(
         "SELECT u.id,u.name,u.role,u.initials,u.color,u.last_login,u.pin_hash,r.perms_json,r.discount_limit_pct
-         FROM users u JOIN roles r ON r.id=u.role WHERE u.active=1 AND u.role IN ('owner','manager')",
+         FROM users u JOIN roles r ON r.id=u.role WHERE u.active=1 AND u.role IN ('owner','admin','manager')",
     )?;
     let mut rows = st.query([])?;
     while let Some(r) = rows.next()? {
@@ -151,8 +151,8 @@ pub fn find_approver(conn: &Connection, pin: &str, perm: Option<&str>, min_disco
         let perms: serde_json::Value = serde_json::from_str(&r.get::<_, String>(7)?).unwrap_or(serde_json::Value::Null);
         let limit: i64 = r.get(8)?;
         let role: String = r.get(2)?;
-        let holds = role == "owner" || perm.map(|p| perms[p].as_bool().unwrap_or(false)).unwrap_or(true);
-        if holds && (role == "owner" || limit >= min_discount_pct) {
+        let holds = role == "owner" || role == "admin" || perm.map(|p| perms[p].as_bool().unwrap_or(false)).unwrap_or(true);
+        if holds && (role == "owner" || role == "admin" || limit >= min_discount_pct) {
             return Ok(Some(user_from_row(r, now)?));
         }
     }
