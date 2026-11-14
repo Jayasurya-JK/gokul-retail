@@ -134,7 +134,7 @@ fn transfer_to_store_adds_litres_to_the_loose_item_and_takes_them_from_the_barre
         press(c, "GB-001", 100_000, 0, 40_000, 50_000)?;
         press(c, "GB-001", 100_000, 0, 40_000, 50_000)?;
         let loose = stock_of(c, "i2"); // 100 L in the store
-        let t = |litres: i64| godown::TransferInput { barrel_id: "GB-001".into(), item_id: "i2".into(), litres_l: litres, store_barrel_id: None, note: String::new() };
+        let t = |litres: i64| godown::TransferInput { barrel_id: "GB-001".into(), item_id: "i2".into(), litres_l: litres, store_barrel_id: None, note: String::new(), day: None, time: None };
 
         // not settled: refused, nothing moves
         let e = godown::transfer_to_store(c, &t(10_000)).unwrap_err().to_string();
@@ -188,7 +188,7 @@ fn a_settling_barrel_turns_ready_by_itself_after_the_settling_days() {
         let past = iso(Local::now() - chrono::Duration::days(5));
         c.execute("UPDATE godown_barrels SET settle_started_on=?1 WHERE id='GB-001'", [past])?;
         assert_eq!(barrel(c, "GB-001")["status"], "ready");
-        godown::transfer_to_store(c, &godown::TransferInput { barrel_id: "GB-001".into(), item_id: "i2".into(), litres_l: 10_000, store_barrel_id: None, note: String::new() })?;
+        godown::transfer_to_store(c, &godown::TransferInput { barrel_id: "GB-001".into(), item_id: "i2".into(), litres_l: 10_000, store_barrel_id: None, note: String::new(), day: None, time: None })?;
         // settle needs oil in the barrel
         assert!(godown::set_godown_status(c, &de(json!({ "barrelId": "GB-002", "action": "settle" }))).is_err());
         Ok(())
@@ -308,6 +308,78 @@ fn migrates_a_copy_of_the_live_database() {
         let rep = godown::mill_daily(c, &day_of(Local::now()))?;
         println!("items {items}, batches {batches}, today's batches {}", rep["totals"]["batches"]);
         assert_eq!(c.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))?, gokul_core::db::latest_version());
+        Ok(())
+    })
+    .unwrap();
+}
+
+// ---------- R6: every processing entry carries the date it really happened ----------
+
+fn two_days_ago() -> String {
+    day_of(Local::now() - chrono::Duration::days(2))
+}
+
+#[test]
+fn a_back_dated_pressing_batch_uses_its_date_everywhere_and_a_future_date_is_refused() {
+    let (_d, db) = mini_db();
+    setup(&db);
+    db.with(|c| {
+        let d = two_days_ago();
+        let b: Value = purchasing::create_pressing_batch(
+            c,
+            &de(json!({ "seed": "groundnut", "seedKg": 100_000, "cleaningLossKg": 2_000, "oilRawL": 38_000, "cakeKg": 55_000, "godownBarrelId": "GB-001", "operator": "Ambethkar", "day": d })),
+        )?;
+        let id: i64 = b["id"].as_str().unwrap().trim_start_matches("pb").parse().unwrap();
+        let (day, at, ready): (String, String, String) =
+            c.query_row("SELECT day,at,settle_ready_on FROM pressing_batches WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        assert_eq!(day, d);
+        // 20:00 on that day, so the settle-ready date is the seed's settle days after that day (not after today)
+        assert!(ready > at, "settle-ready is after the pressing day");
+        let mdays: Vec<String> = {
+            let mut st = c.prepare("SELECT at FROM stock_movements WHERE ref_type='pressing' AND ref_id=?1")?;
+            let v = st.query_map([id.to_string()], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            v
+        };
+        assert_eq!(mdays.len(), 2, "seed out and cake in");
+        assert!(mdays.iter().all(|m| *m == at), "every stock movement uses the batch date");
+        let gday: String = c.query_row("SELECT day FROM godown_movements WHERE ref_type='pressing' AND ref_id=?1", [id.to_string()], |r| r.get(0))?;
+        assert_eq!(gday, d);
+        let future = day_of(Local::now() + chrono::Duration::days(1));
+        let e = purchasing::create_pressing_batch(
+            c,
+            &de(json!({ "seed": "groundnut", "seedKg": 1_000, "oilRawL": 400, "godownBarrelId": "GB-001", "operator": "Ambethkar", "day": future })),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(e.contains("cannot be in the future"), "{e}");
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn godown_actions_and_packing_take_a_date() {
+    let (_d, db) = mini_db();
+    setup(&db);
+    db.with(|c| {
+        let d = two_days_ago();
+        godown::add_godown_barrels(c, &de(json!({ "oil": "copra", "count": 1, "day": d })))?;
+        let created: String = c.query_row("SELECT created_at FROM godown_barrels WHERE oil='copra'", [], |r| r.get(0))?;
+        assert!(created.starts_with(&d[..4]));
+        press(c, "GB-001", 100_000, 0, 38_000, 55_000)?;
+        godown::record_stick_reading(c, &de(json!({ "barrelId": "GB-001", "measuredL": 37_000, "day": d, "time": "09:30" })))?;
+        let (rday, rat): (String, String) = c.query_row("SELECT day,at FROM godown_readings", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        assert_eq!(rday, d);
+        assert!(rat.contains("T"), "{rat}");
+        let o = godown::record_outsourced_oil(c, &de(json!({ "barrelId": "GB-001", "supplierName": "Mill", "litresL": 1_000, "cost": 10_000, "day": d })))?;
+        assert_eq!(o["date"].as_str().unwrap()[..4], created[..4]);
+        let day: String = c.query_row("SELECT day FROM godown_purchases", [], |r| r.get(0))?;
+        assert_eq!(day, d);
+        let f = day_of(Local::now() + chrono::Duration::days(1));
+        assert!(godown::record_stick_reading(c, &de(json!({ "barrelId": "GB-001", "measuredL": 1_000, "day": f }))).is_err());
+        assert!(godown::set_godown_status(c, &de(json!({ "barrelId": "GB-001", "action": "settle", "day": d }))).is_ok());
+        let started: String = c.query_row("SELECT settle_started_on FROM godown_barrels WHERE id='GB-001'", [], |r| r.get(0))?;
+        assert!(started.as_str() < iso(Local::now()).as_str());
         Ok(())
     })
     .unwrap();

@@ -1,5 +1,6 @@
 export * from './types';
 export * from './money';
+export * from './entryDate';
 export * from './fuzzy';
 export type { Api, CoreApi } from './api';
 export type { MockStore } from './areas/store';

@@ -4,7 +4,7 @@ import { MACHINES, MILL_SEEDS, formatRupees, parseQty, type Customer, type JobWo
 import { Badge, Button, EmptyState, Field, Input, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
 import { fmtQty } from '../mill/millUtil';
-import { fmtDate } from './common';
+import { fmtDate, todayYmd, useEntryDate } from './common';
 
 const sel = 'h-9 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink focus:border-primary focus:ring-2 focus:ring-primary/25';
 const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted';
@@ -27,6 +27,7 @@ export function JobWorkPane() {
   const [oil, setOil] = useState('');
   const [cake, setCake] = useState('');
   const [mode, setMode] = useState<'taken' | 'kept'>('taken');
+  const entry = useEntryDate();
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -46,11 +47,12 @@ export function JobWorkPane() {
   const save = async () => {
     setErr('');
     if (!customer) { setErr('Choose the customer from the list.'); return; }
+    if (!entry.day || entry.day > todayYmd()) { setErr('Choose a date that is today or earlier.'); return; }
     if (seedKg <= 0) { setErr('Enter the seed weight.'); return; }
     if (mode === 'kept' && (parseQty(cake) ?? 0) <= 0) { setErr('Enter the cake the shop keeps.'); return; }
     setBusy(true);
     try {
-      const j = await api.recordJobWork({ customerId: customer.id, seed, machine, seedKg, oilL: parseQty(oil) ?? 0, cakeKg: parseQty(cake) ?? 0, cakeMode: mode });
+      const j = await api.recordJobWork({ customerId: customer.id, seed, machine, seedKg, oilL: parseQty(oil) ?? 0, cakeKg: parseQty(cake) ?? 0, cakeMode: mode, day: entry.day });
       toast.show({ tone: 'success', title: 'Job work saved', detail: `${j.customerName}: ${formatRupees(j.charge, { decimals: false })} billed on credit (${j.billNumber || 'no charge'}).` });
       setWho(''); setKg(''); setOil(''); setCake(''); load();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save the job work'); } finally { setBusy(false); }
@@ -63,7 +65,8 @@ export function JobWorkPane() {
           <div className="text-sm font-semibold text-ink">New job work <span className="text-xs font-normal text-muted">the customer brings their own seed. Their seed and oil never become shop stock.</span></div>
           <Button variant="primary" icon={<Check size={15} />} disabled={busy} onClick={() => void save()} kbd="Ctrl+Enter">Save and bill</Button>
         </div>
-        <div className="grid grid-cols-[minmax(200px,2fr)_120px_120px_100px_100px_100px_170px] items-end gap-3">
+        <div className="grid grid-cols-[130px_minmax(180px,2fr)_120px_120px_90px_100px_90px_160px] items-end gap-3">
+          <Field label="Date"><Input type="date" value={entry.day} max={todayYmd()} onChange={(e) => entry.setDay(e.target.value)} aria-label="Date of the job work" className="num" /></Field>
           <Field label="Customer">
             <Input list="jobwork-customers" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Type a name or phone" data-autofocus />
             <datalist id="jobwork-customers">{customers.slice(0, 400).map((c) => <option key={c.id} value={label(c)} />)}</datalist>

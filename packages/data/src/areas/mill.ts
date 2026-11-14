@@ -224,7 +224,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const dayKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const hash = (s: string) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
-const DEFAULT_SETTINGS: MillSettings = { operators: ['Operator 1', 'Operator 2'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 };
+const DEFAULT_SETTINGS: MillSettings = { operators: ['Ambethkar'], rateCakeTaken: 800, rateCakeKept: 500, serviceSac: '998811', serviceGstRate: 5 };
 const oilKey = (s: MillSeed): MillStockKey => (s === 'sesame' ? 'oil_sesame' : s === 'copra' ? 'oil_coconut' : 'oil_groundnut');
 
 export function createMillMock(store: MockStore): MillApi {
@@ -327,13 +327,13 @@ export function createMillMock(store: MockStore): MillApi {
   const c = (i: number) => store.customers[i]?.id ?? 'c1';
   const op = (operator: string, seed: MillSeed, machine: Machine, kg: number, oil: number, cake: number, jag = 0) =>
     ({ operator, seed, machine, seedKg: kg * 1000, oilL: oil * 1000, cakeKg: cake * 1000, jaggeryKg: jag * 1000 });
-  seedDay(3, [op('Operator 1', 'groundnut', 'W', 120, 44.5, 70), op('Operator 1', 'sesame', 'W', 60, 21, 38, 6), op('Operator 2', 'groundnut', 'R', 150, 60, 82)],
+  seedDay(3, [op('Ambethkar', 'groundnut', 'W', 120, 44.5, 70), op('Ambethkar', 'sesame', 'W', 60, 21, 38, 6), op('Ambethkar', 'groundnut', 'R', 150, 60, 82)],
     [{ customerId: c(2), seed: 'groundnut', machine: 'W', seedKg: 40000, oilL: 15000, cakeKg: 22000, cakeMode: 'taken' }],
     [{ punnaku: 'kadalai_w', qtyKg: 120000 }, { punnaku: 'ellu_r', qtyKg: 45000 }], { kadalai_w: -2500 });
-  seedDay(2, [op('Operator 1', 'groundnut', 'W', 140, 51.5, 82), op('Operator 2', 'copra', 'W', 90, 52, 33), op('Operator 2', 'sesame', 'R', 70, 27.5, 40, 7)],
+  seedDay(2, [op('Ambethkar', 'groundnut', 'W', 140, 51.5, 82), op('Ambethkar', 'copra', 'W', 90, 52, 33), op('Ambethkar', 'sesame', 'R', 70, 27.5, 40, 7)],
     [{ customerId: c(5), seed: 'sesame', machine: 'W', seedKg: 25000, oilL: 9000, cakeKg: 15000, cakeMode: 'kept' }, { customerId: c(2), seed: 'groundnut', machine: 'R', seedKg: 30000, oilL: 11500, cakeKg: 17000, cakeMode: 'taken' }],
     [{ punnaku: 'kadalai_r', qtyKg: 80000 }], { sesame: -1000 });
-  seedDay(1, [op('Operator 1', 'groundnut', 'W', 130, 48, 76), op('Operator 2', 'groundnut', 'R', 110, 44, 60), op('Operator 1', 'copra', 'W', 80, 46, 29)],
+  seedDay(1, [op('Ambethkar', 'groundnut', 'W', 130, 48, 76), op('Ambethkar', 'groundnut', 'R', 110, 44, 60), op('Ambethkar', 'copra', 'W', 80, 46, 29)],
     [{ customerId: c(7), seed: 'groundnut', machine: 'W', seedKg: 50000, oilL: 19000, cakeKg: 28000, cakeMode: 'kept' }],
     [{ punnaku: 'coco', qtyKg: 60000 }, { punnaku: 'kadalai_w', qtyKg: 90000 }], { kadalai_r: 1500 });
 
@@ -342,8 +342,8 @@ export function createMillMock(store: MockStore): MillApi {
     const d = new Date(); d.setDate(d.getDate() - back);
     drafts.set(dayKey(d), { day: dayKey(d), supervisor: 'Mohan', note, opRows: ops, custRows: [], punnakuRows: [], physical: {} });
   };
-  draftDay(5, [op('Operator 1', 'groundnut', 'W', 100, 38, 58), op('Operator 2', 'sesame', 'W', 50, 18.5, 30, 5)], 'draft, never closed');
-  draftDay(4, [op('Operator 1', 'groundnut', 'R', 120, 45, 66)], 'draft, never closed');
+  draftDay(5, [op('Ambethkar', 'groundnut', 'W', 100, 38, 58), op('Ambethkar', 'sesame', 'W', 50, 18.5, 30, 5)], 'draft, never closed');
+  draftDay(4, [op('Ambethkar', 'groundnut', 'R', 120, 45, 66)], 'draft, never closed');
 
   const api: MillApi = {
     getMillSheet: async (day) => {
@@ -361,7 +361,7 @@ export function createMillMock(store: MockStore): MillApi {
       if (closed.has(day)) throw new Error('This sheet is already closed.');
       if (!drafts.has(day)) throw new Error('Fill and save the sheet before closing it.');
       if (!(managerPin ?? '').trim()) throw new Error('A manager PIN is needed to close the mill sheet (it adjusts stock)');
-      const m = store.users.find((u) => (u.role === 'owner' || u.role === 'manager') && u.pin === managerPin!.trim());
+      const m = store.users.find((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === managerPin!.trim());
       if (!m) throw new Error('Manager PIN is not correct');
       return clone(closeIt(day, m.name, m.name));
     },
@@ -386,7 +386,7 @@ export function createMillMock(store: MockStore): MillApi {
       const d = drafts.get(day);
       if (d && d.opRows.some((_, i) => !store.legacyImported?.has(String(legacyId(day, i))))) throw new Error('This day still has rows from an old manual sheet. Move them to Production (Mill day sheet, Old sheets) before closing the day.');
       if (!(managerPin ?? '').trim()) throw new Error('A manager PIN is needed to close the mill day (it adjusts stock)');
-      const m = store.users.find((u) => (u.role === 'owner' || u.role === 'manager') && u.pin === managerPin!.trim());
+      const m = store.users.find((u) => (u.role === 'owner' || u.role === 'admin' || u.role === 'manager') && u.pin === managerPin!.trim());
       if (!m) throw new Error('Manager PIN is not correct');
       const cur = await api.getMillDay(day);
       const meta = dayMeta.get(day);

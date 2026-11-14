@@ -359,8 +359,8 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
             conn,
             &PressingDraft {
                 seed: seed.to_string(), seed_kg: seed_g, cleaning_loss_kg: cleaning, jaggery_kg: jag, oil_raw_l: oil_ml, cake_kg: cake_g,
-                chekku: format!("Chekku {}", 1 + n % 3), operator: ["Murugesan", "Selvam", "Kannan"][n % 3].into(),
-                machine: if n % 4 == 3 && *seed != "copra" { "R".into() } else { "W".into() }, godown_barrel_id: None,
+                chekku: format!("Chekku {}", 1 + n % 3), operator: "Ambethkar".into(),
+                machine: if n % 4 == 3 && *seed != "copra" { "R".into() } else { "W".into() }, godown_barrel_id: None, day: None, time: None,
             },
             when,
         )?;
@@ -395,7 +395,7 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
             continue;
         }
         let used = ((expected as f64 * (1.0 + waste / 100.0)) as i64 + 5) / 10 * 10;
-        create_pack_run_at(conn, &PackRunDraft { barrel_id: barrel.into(), lines, used_l: used, packer: packer.into() }, at(days, 14, 15))?;
+        create_pack_run_at(conn, &PackRunDraft { barrel_id: barrel.into(), lines, used_l: used, packer: packer.into(), day: None, time: None }, at(days, 14, 15))?;
     }
     // a few stock adjustments
     for (code, reason, qty, note) in [("102", "leak", -2000i64, "200 ml bottles leaking at the cap"), ("101", "spill", -1250, "Spilled while filling a customer can"), ("104", "damage", -3000, "Bottles broken in rack")] {
@@ -455,17 +455,17 @@ fn seed_mill_sheets(conn: &mut Connection, now: chrono::DateTime<Local>) -> Resu
         let day = db::day_of(now - Duration::days(*days));
         let (ops, custs, puns) = match i {
             0 => (
-                vec![op("Operator 1", "groundnut", "W", 120, 44_500, 70_000, 0), op("Operator 1", "sesame", "W", 60, 21_000, 38_000, 6), op("Operator 2", "groundnut", "R", 150, 60_000, 82_000, 0)],
+                vec![op("Ambethkar", "groundnut", "W", 120, 44_500, 70_000, 0), op("Ambethkar", "sesame", "W", 60, 21_000, 38_000, 6), op("Ambethkar", "groundnut", "R", 150, 60_000, 82_000, 0)],
                 vec![(0usize, "groundnut", "W", 40i64, 15_000i64, 22i64, "taken")],
                 vec![("kadalai_w", 120i64), ("ellu_r", 45)],
             ),
             1 => (
-                vec![op("Operator 1", "groundnut", "W", 140, 51_500, 82_000, 0), op("Operator 2", "copra", "W", 90, 52_000, 33_000, 0), op("Operator 2", "sesame", "R", 70, 27_500, 40_000, 7)],
+                vec![op("Ambethkar", "groundnut", "W", 140, 51_500, 82_000, 0), op("Ambethkar", "copra", "W", 90, 52_000, 33_000, 0), op("Ambethkar", "sesame", "R", 70, 27_500, 40_000, 7)],
                 vec![(1, "sesame", "W", 25, 9_000, 15, "kept"), (0, "groundnut", "R", 30, 11_500, 17, "taken")],
                 vec![("kadalai_r", 80)],
             ),
             _ => (
-                vec![op("Operator 1", "groundnut", "W", 130, 48_000, 76_000, 0), op("Operator 2", "groundnut", "R", 110, 44_000, 60_000, 0), op("Operator 1", "copra", "W", 80, 46_000, 29_000, 0)],
+                vec![op("Ambethkar", "groundnut", "W", 130, 48_000, 76_000, 0), op("Ambethkar", "groundnut", "R", 110, 44_000, 60_000, 0), op("Ambethkar", "copra", "W", 80, 46_000, 29_000, 0)],
                 vec![(2, "groundnut", "W", 50, 19_000, 28, "kept")],
                 vec![("coco", 60), ("kadalai_w", 90)],
             ),

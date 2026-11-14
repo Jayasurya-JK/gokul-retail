@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, TriangleAlert } from 'lucide-react';
 import { PACK_WASTAGE_NORM_PCT, packMetrics, parseQty, type Barrel, type PackRun, type PackTarget } from '@gokul/data';
-import { Badge, Button, Dialog, Field, NumberInput, Select, cn, useToast } from '@gokul/ui';
+import { Badge, Button, Dialog, Field, Input, NumberInput, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { BarrelCard, fmtMilli, fmtNum, gradeTone, useKeys } from './common';
-
-const packers = ['Revathi', 'Kala', 'Murugesan'];
+import { BarrelCard, EntryDate, fmtMilli, fmtNum, gradeTone, todayYmd, useEntryDate, useKeys } from './common';
 
 export function PackForm({ open, barrels, initialBarrelId, onClose, onSaved }: {
   open: boolean; barrels: Barrel[]; initialBarrelId?: string | null; onClose: () => void; onSaved: (r: PackRun) => void;
@@ -15,15 +13,19 @@ export function PackForm({ open, barrels, initialBarrelId, onClose, onSaved }: {
   const [targets, setTargets] = useState<PackTarget[]>([]);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [used, setUsed] = useState<string | null>(null);
-  const [packer, setPacker] = useState(packers[0]);
+  const [packers, setPackers] = useState<string[]>([]);
+  const [packer, setPacker] = useState('');
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setCounts({}); setUsed(null); setErr(''); setPacker(packers[0]);
+    setCounts({}); setUsed(null); setErr(''); setPacker(''); resetEntry();
+    void api.getSettingsBundle().then((b) => setPackers(b.mill.operators)).catch(() => undefined);
     setBarrelId(initialBarrelId ?? barrels.find((b) => b.oilName)?.id ?? null);
-  }, [open, initialBarrelId, barrels]);
+  }, [open, initialBarrelId, barrels, resetEntry]);
   useEffect(() => {
     if (!barrelId) { setTargets([]); return; }
     let live = true;
@@ -41,9 +43,10 @@ export function PackForm({ open, barrels, initialBarrelId, onClose, onSaved }: {
 
   const save = async () => {
     if (!barrelId) return;
+    if (!entry.day || entry.day > todayYmd()) { setErr('Choose a date that is today or earlier.'); return; }
     setBusy(true);
     try {
-      const r = await api.createPackRun({ barrelId, lines: lines.filter((l) => l.count > 0).map((l) => ({ itemId: l.itemId, count: l.count })), usedL: usedMilli, packer });
+      const r = await api.createPackRun({ barrelId, lines: lines.filter((l) => l.count > 0).map((l) => ({ itemId: l.itemId, count: l.count })), usedL: usedMilli, packer, ...entry.when });
       toast.show({ tone: 'success', title: `Packing ${r.number} saved`, detail: `${r.packs} packs of ${r.oilName} added to stock.` });
       onSaved(r); onClose();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save packing.'); } finally { setBusy(false); }
@@ -56,6 +59,7 @@ export function PackForm({ open, barrels, initialBarrelId, onClose, onSaved }: {
       footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !hasPacks || over} onClick={() => void save()}>Save packing</Button></>}
     >
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+        <EntryDate entry={entry} label="Date of packing" className="max-w-[460px]" />
         <div>
           <span className="text-xs font-medium text-muted">Loose oil source (barrel)</span>
           <div className="mt-1 grid grid-cols-8 gap-2">
@@ -104,7 +108,8 @@ export function PackForm({ open, barrels, initialBarrelId, onClose, onSaved }: {
               <div className="flex items-center justify-between py-1.5"><dt className="text-muted">{barrel?.label ?? 'Barrel'} after</dt><dd className={cn('num font-medium', over ? 'text-danger' : 'text-ink')}>{barrel ? `${fmtMilli(Math.max(0, barrel.levelL - usedMilli))} L` : '--'}</dd></div>
             </dl>
             <Field label="Packed by" className="mt-3">
-              <Select value={packer} onChange={(e) => setPacker(e.target.value)} options={packers.map((v) => ({ value: v, label: v }))} />
+              <Input value={packer} list="packers" onChange={(e) => setPacker(e.target.value)} placeholder="Name" />
+              <datalist id="packers">{packers.map((v) => <option key={v} value={v} />)}</datalist>
             </Field>
             {hasPacks && m.grade !== 'good' && !over && (
               <p className={cn('mt-3 rounded-control px-2.5 py-2 text-xs', m.grade === 'poor' ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning')}>

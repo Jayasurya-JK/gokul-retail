@@ -2,6 +2,7 @@ import type { MockStore } from './store';
 import type { Item, Milli, Paise, Purchase, UnitCode } from '../types';
 import { rng } from '../seed';
 import { fuzzyFilter } from '../fuzzy';
+import { entryDate } from '../entryDate';
 
 // Area: Office purchases (GRN), suppliers and supplier ledger, production pressing and packing.
 // Quantities are Milli (thousandths of kg / L / pc), money is Paise, rates are GST-exclusive.
@@ -355,6 +356,9 @@ export interface PressingDraft extends PressingInput {
   machine?: 'W' | 'R';
   /** The godown barrel the oil goes into (production stock, not the store) */
   godownBarrelId?: string;
+  /** The date the batch was pressed (default today, past days allowed, no future) and an optional HH:MM time */
+  day?: string;
+  time?: string;
 }
 
 export interface PressingBatchesInput {
@@ -404,6 +408,8 @@ export interface PackRunDraft {
   /** Measured oil taken from the barrel; defaults to the expected quantity */
   usedL: Milli;
   packer: string;
+  day?: string;
+  time?: string;
 }
 
 export interface PackRunLine { itemId: string; name: string; label: string; sizeMl: number; count: number }
@@ -732,7 +738,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
 
   const godownFor: Record<SeedType, string[]> = { groundnut: ['GB-001', 'GB-002', 'GB-003'], sesame: ['GB-004', 'GB-005'], copra: ['GB-006', 'GB-007'] };
   const batchRecs: BatchRec[] = [];
-  const operators = ['Murugesan', 'Selvam', 'Kannan'];
+  const operators = ['Ambethkar'];
   const seedCycle: SeedType[] = ['groundnut', 'sesame', 'copra', 'groundnut', 'groundnut', 'sesame', 'copra', 'groundnut', 'sesame', 'groundnut', 'copra', 'sesame', 'groundnut', 'groundnut', 'copra', 'sesame'];
   const loadKg: Record<SeedType, number[]> = { groundnut: [300, 350, 400, 420], sesame: [180, 200, 250], copra: [200, 250, 300] };
   const pressedBarrels: Record<SeedType, string[]> = { groundnut: ['BR-01', 'BR-02', 'BR-03'], sesame: ['BR-04', 'BR-05'], copra: ['BR-06', 'BR-07'] };
@@ -758,7 +764,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
     batchRecs.push({
       id: `pb${i + 1}`, number: `PB-${String(412 - i).padStart(4, '0')}`, date: date.toISOString(), seed,
       seedKg: seedKg * 1000, cleaningLossKg: cleaning * 1000, jaggeryKg: jag * 1000, oilRawL: oilL * 1000, cakeKg: cakeKg * 1000,
-      chekku: `Chekku ${1 + (i % 3)}`, operator: operators[i % 3], settleReadyOn: readyOn.toISOString(),
+      chekku: `Chekku ${1 + (i % 3)}`, operator: operators[0], settleReadyOn: readyOn.toISOString(),
       clearOilL: inBarrel ? Math.round((oilL - sed) * 1000) : null, sedimentL: inBarrel ? Math.round(sed * 1000) : null,
       barrelId: inBarrel ? pressedBarrels[seed][i % pressedBarrels[seed].length] : null,
       movedOn: inBarrel ? readyOn.toISOString() : null,
@@ -839,7 +845,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
         if (gb.levelL + d.oilRawL > gb.capacityL) throw new Error(`${gb.label} has room for only ${((gb.capacityL - gb.levelL) / 1000).toFixed(1)} L.`);
       }
       batchSeq += 1;
-      const now = at ?? new Date();
+      const now = at ?? entryDate(d.day, d.time);
       const rec: BatchRec = {
         ...d, seedCostPerKg: stock.cost, jaggeryCost: jaggery && d.jaggeryKg > 0 ? Math.round((jaggery.cost * d.jaggeryKg) / 1000) : 0, source: 'entry',
         id: `pb${batchSeq}`, number: `PB-${String(batchNo).padStart(4, '0')}`, date: now.toISOString(),
@@ -991,6 +997,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
     },
     listPackRuns: async () => [...packRuns].sort((a, b) => b.date.localeCompare(a.date)),
     createPackRun: async (d) => {
+      const when = entryDate(d.day, d.time);
       const barrel = barrelById(d.barrelId);
       if (!barrel?.oilName) throw new Error('Choose a barrel that has oil.');
       const targets = targetsFor(barrel.oilName);
@@ -1016,7 +1023,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
       }
       packSeq += 1;
       const run: PackRun = {
-        id: `pk${packSeq}`, number: `PK-${String(230 + packSeq).padStart(4, '0')}`, date: new Date().toISOString(),
+        id: `pk${packSeq}`, number: `PK-${String(230 + packSeq).padStart(4, '0')}`, date: when.toISOString(),
         barrelId: barrel.id, barrelLabel: barrel.label, oilName, lines,
         expectedL: m.expectedL, usedL: d.usedL, wastageL: m.wastageL, wastagePct: m.wastagePct, packer: d.packer, packs: m.packs,
       };

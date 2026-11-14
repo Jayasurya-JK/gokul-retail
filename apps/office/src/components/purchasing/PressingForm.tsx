@@ -5,9 +5,7 @@ import {
 } from '@gokul/data';
 import { Badge, Button, Dialog, Field, NumberInput, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { fmtDate, fmtMilli, fmtNum, normPer100, useKeys, vsNormText, yieldTextCls, yieldTone } from './common';
-
-const operators = ['Murugesan', 'Selvam', 'Kannan'];
+import { EntryDate, fmtDate, fmtMilli, fmtNum, normPer100, todayYmd, useEntryDate, useKeys, vsNormText, yieldTextCls, yieldTone } from './common';
 
 /* ---------------- new pressing batch ---------------- */
 export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
@@ -22,7 +20,10 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   const [cake, setCake] = useState('');
   const [machine, setMachine] = useState<'W' | 'R'>('W');
   const [chekku, setChekku] = useState('Chekku 1');
-  const [operator, setOperator] = useState(operators[0]);
+  const [operators, setOperators] = useState<string[]>([]);
+  const [operator, setOperator] = useState('');
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [barrelId, setBarrelId] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,9 +31,10 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   useEffect(() => {
     if (open) {
       setSeed('groundnut'); setSeedKg(''); setClean(''); setJag(''); setOil(''); setCake('');
-      setMachine('W'); setChekku('Chekku 1'); setOperator(operators[0]); setBarrelId(''); setErr('');
+      setMachine('W'); setChekku('Chekku 1'); setBarrelId(''); setErr(''); resetEntry();
+      void api.getSettingsBundle().then((b) => { setOperators(b.mill.operators); setOperator(b.mill.operators[0] ?? ''); }).catch(() => undefined);
     }
-  }, [open]);
+  }, [open, resetEntry]);
 
   const prof = profiles.find((p) => p.seed === seed);
   const input = useMemo(() => ({
@@ -57,11 +59,14 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   const overFill = barrel !== null && input.oilRawL > freeL;
 
   const save = async () => {
+    if (!operator) { setErr('Choose the operator. Add operators in Settings if the list is empty.'); return; }
+    if (!entry.day) { setErr('Enter the date of the pressing.'); return; }
+    if (entry.day > todayYmd()) { setErr('The date cannot be in the future.'); return; }
     if (!barrel) { setErr(`Choose the godown ${prof?.label ?? ''} barrel the oil goes into. Add one in the Godown tab if there is none.`); return; }
     if (input.oilRawL > freeL) { setErr(`${barrel.label} has room for only ${fmtMilli(freeL)} L. Pick another barrel or record a stick reading first.`); return; }
     setBusy(true); setErr('');
     try {
-      const b = await api.createPressingBatch({ ...input, chekku, operator, machine, godownBarrelId: barrel.id });
+      const b = await api.createPressingBatch({ ...input, chekku, operator, machine, godownBarrelId: barrel.id, ...entry.when });
       toast.show({
         tone: 'success',
         title: `Batch ${b.number} recorded`,
@@ -72,16 +77,17 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   };
   useKeys((e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); } }, open, true);
 
-  const settleOn = prof ? new Date(Date.now() + prof.settleDays * 86400000).toISOString() : '';
+  const settleOn = prof && entry.day ? new Date(new Date(`${entry.day}T${entry.time || '12:00'}`).getTime() + prof.settleDays * 86400000).toISOString() : '';
   const sugg = (v: number) => String(Math.round(v * 10) / 10);
 
   return (
     <Dialog
-      open={open} onOpenChange={(o) => !o && onClose()} size="lg" title="New pressing batch" description="Record what went into the chekku and what came out."
+      open={open} onOpenChange={(o) => !o && onClose()} size="lg" title="Batch with details" description="Record what went into the chekku and what came out, on the day it happened."
       footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !barrel || overFill} onClick={() => void save()}>Save batch</Button></>}
     >
       <div className="grid grid-cols-[1fr_270px] gap-6">
         <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+          <EntryDate entry={entry} label="Date of pressing" />
           <div>
             <span className="text-xs font-medium text-muted">Seed</span>
             <div className="mt-1 grid grid-cols-3 gap-2">
@@ -121,7 +127,7 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
               </div>
             </div>
             <Select label="Chekku" value={chekku} onChange={(e) => setChekku(e.target.value)} options={['Chekku 1', 'Chekku 2', 'Chekku 3'].map((v) => ({ value: v, label: v }))} />
-            <Select label="Operator" value={operator} onChange={(e) => setOperator(e.target.value)} options={operators.map((v) => ({ value: v, label: v }))} />
+            <Select label="Operator" value={operator} onChange={(e) => setOperator(e.target.value)} options={operators.length ? operators.map((v) => ({ value: v, label: v })) : [{ value: '', label: 'Add operators in Settings' }]} />
           </div>
 
           <div>

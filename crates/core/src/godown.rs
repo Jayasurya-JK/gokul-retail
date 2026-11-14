@@ -174,6 +174,11 @@ pub struct AddBarrels {
     /// Capacity of each, millilitres (default 200 L).
     #[serde(default)]
     pub capacity_l: Option<i64>,
+    /// The date the barrels were put in use (default today; no future dates).
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 pub fn add_godown_barrels(conn: &mut Connection, d: &AddBarrels) -> Result<Value> {
@@ -187,7 +192,7 @@ pub fn add_godown_barrels(conn: &mut Connection, d: &AddBarrels) -> Result<Value
     if cap <= 0 {
         return invalid("The barrel size must be more than zero.");
     }
-    let now = Local::now();
+    let now = db::entry_time(d.day.as_deref(), d.time.as_deref())?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     for _ in 0..d.count {
         let n: i64 = tx.query_row("SELECT COALESCE(MAX(CAST(SUBSTR(id,4) AS INTEGER)),0)+1 FROM godown_barrels", [], |r| r.get(0))?;
@@ -256,10 +261,15 @@ pub struct StatusInput {
     pub barrel_id: String,
     /// "settle" (stop filling, start settling) | "ready" (settled early) | "reopen" (back to filling).
     pub action: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 pub fn set_godown_status(conn: &mut Connection, d: &StatusInput) -> Result<Value> {
     let now = Local::now();
+    let at = db::entry_time(d.day.as_deref(), d.time.as_deref())?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let Some(b) = load(&tx, &d.barrel_id)? else { return invalid("Barrel not found.") };
     let st = effective(&tx, &b, now);
@@ -268,7 +278,7 @@ pub fn set_godown_status(conn: &mut Connection, d: &StatusInput) -> Result<Value
             if st != "filling" {
                 return invalid(format!("{} is {}. Only a barrel that is being filled can be left to settle.", b.label, st));
             }
-            tx.execute("UPDATE godown_barrels SET status='settling', settle_started_on=?1 WHERE id=?2", params![iso(now), b.id])?;
+            tx.execute("UPDATE godown_barrels SET status='settling', settle_started_on=?1 WHERE id=?2", params![iso(at), b.id])?;
         }
         "ready" => {
             if st != "settling" {
@@ -284,7 +294,7 @@ pub fn set_godown_status(conn: &mut Connection, d: &StatusInput) -> Result<Value
         }
         _ => return invalid("Unknown action."),
     }
-    audit(&tx, now, OFFICE, &format!("godown_{}", d.action), "godown_barrel", &b.id, &format!("{} at {} L", b.label, fmt_l(b.level)))?;
+    audit(&tx, at, OFFICE, &format!("godown_{}", d.action), "godown_barrel", &b.id, &format!("{} at {} L", b.label, fmt_l(b.level)))?;
     tx.commit()?;
     let row = load(conn, &d.barrel_id)?.ok_or_else(|| db::internal("barrel vanished"))?;
     barrel_json(conn, &row, now)
@@ -300,12 +310,16 @@ pub struct StickInput {
     pub measured_l: i64,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 /// The stick is the truth: the barrel's level becomes the measured litres and the difference to the entries is kept as a
 /// variance (reading row + a ledger row), so a short or surplus barrel is visible, not hidden.
 pub fn record_stick_reading(conn: &mut Connection, d: &StickInput) -> Result<Value> {
-    let now = Local::now();
+    let now = db::entry_time(d.day.as_deref(), d.time.as_deref())?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let Some(b) = load(&tx, &d.barrel_id)? else { return invalid("Barrel not found.") };
     if d.measured_l < 0 {
@@ -349,6 +363,10 @@ pub struct OutsourcedInput {
     pub cost: i64,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 fn outsourced_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -373,7 +391,7 @@ pub fn record_outsourced_oil(conn: &mut Connection, d: &OutsourcedInput) -> Resu
     if d.cost < 0 {
         return invalid("The cost cannot be negative.");
     }
-    let now = Local::now();
+    let now = db::entry_time(d.day.as_deref(), d.time.as_deref())?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let Some(b) = load(&tx, &d.barrel_id)? else { return invalid("Choose a godown barrel.") };
     check_fill(&tx, &b.id, &b.oil, d.litres_l)?;
@@ -427,6 +445,10 @@ pub struct TransferInput {
     pub store_barrel_id: Option<String>,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 fn transfer_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -446,6 +468,7 @@ const TRANSFER_SELECT: &str = "SELECT t.id,t.number,t.at,t.oil,t.barrel_id,b.lab
 /// each with a ledger row, in one transaction. Only a settled ("ready") barrel can be transferred from.
 pub fn transfer_to_store(conn: &mut Connection, d: &TransferInput) -> Result<Value> {
     let now = Local::now();
+    let at = db::entry_time(d.day.as_deref(), d.time.as_deref())?;
     if d.litres_l <= 0 {
         return invalid("Enter the litres to move to the store.");
     }
@@ -480,24 +503,24 @@ pub fn transfer_to_store(conn: &mut Connection, d: &TransferInput) -> Result<Val
         }
         tx.execute(
             "UPDATE barrels SET level_ml = level_ml + ?1, oil_name = COALESCE(oil_name, ?2), seed = COALESCE(seed, ?3), filled_on = COALESCE(filled_on, ?4) WHERE id=?5",
-            params![d.litres_l, wanted, b.oil, iso(now), sb],
+            params![d.litres_l, wanted, b.oil, iso(at), sb],
         )?;
     }
-    let fy = fy_of(now);
+    let fy = fy_of(at);
     let seq = next_seq(&tx, TRANSFER_SERIES, &fy)?;
     let number = doc_number("GT", &fy, seq);
     tx.execute(
         "INSERT INTO godown_transfers(number,series,fy,seq,at,day,barrel_id,oil,item_id,item_name,litres_ml,store_barrel_id,note,by_name)
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
-        params![number, TRANSFER_SERIES, fy, seq, iso(now), db::day_of(now), b.id, b.oil, d.item_id, item_name, d.litres_l, store_barrel, d.note.trim(), db::actor_or(OFFICE)],
+        params![number, TRANSFER_SERIES, fy, seq, iso(at), db::day_of(at), b.id, b.oil, d.item_id, item_name, d.litres_l, store_barrel, d.note.trim(), db::actor_or(OFFICE)],
     )?;
     let id = tx.last_insert_rowid();
-    post(&tx, now, &b.id, "transfer", -d.litres_l, "godown_transfer", &id.to_string(), &format!("{number} to store: {item_name}"))?;
+    post(&tx, at, &b.id, "transfer", -d.litres_l, "godown_transfer", &id.to_string(), &format!("{number} to store: {item_name}"))?;
     // Keep a partly emptied barrel "ready" for good (it will not drift back); an emptied one is free again.
     tx.execute("UPDATE godown_barrels SET status='ready' WHERE id=?1 AND level_ml>0", [&b.id])?;
     become_empty(&tx, &b.id)?;
-    post_movement(&tx, &iso(now), &d.item_id, "production", d.litres_l, "godown_transfer", &id.to_string(), &format!("{number} from {}", b.label), OFFICE)?;
-    audit(&tx, now, OFFICE, "transfer_to_store", "godown_transfer", &number, &format!("{} L from {} to {item_name}", fmt_l(d.litres_l), b.label))?;
+    post_movement(&tx, &iso(at), &d.item_id, "production", d.litres_l, "godown_transfer", &id.to_string(), &format!("{number} from {}", b.label), OFFICE)?;
+    audit(&tx, at, OFFICE, "transfer_to_store", "godown_transfer", &number, &format!("{} L from {} to {item_name}", fmt_l(d.litres_l), b.label))?;
     let out = tx.query_row(&format!("{TRANSFER_SELECT} WHERE t.id=?1"), [id], transfer_json)?;
     tx.commit()?;
     Ok(out)

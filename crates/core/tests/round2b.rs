@@ -309,8 +309,8 @@ fn mill_day(db: &Db, o: &Session, day: &str, physical: Value) -> Value {
     let input = json!({
         "day": day, "supervisor": "Mohan", "note": "",
         "opRows": [
-            { "operator": "Operator 1", "seed": "groundnut", "machine": "W", "seedKg": 100_000, "oilL": 40_000, "cakeKg": 55_000, "jaggeryKg": 0 },
-            { "operator": "Operator 2", "seed": "groundnut", "machine": "R", "seedKg": 50_000, "oilL": 20_000, "cakeKg": 28_000, "jaggeryKg": 0 },
+            { "operator": "Ambethkar", "seed": "groundnut", "machine": "W", "seedKg": 100_000, "oilL": 40_000, "cakeKg": 55_000, "jaggeryKg": 0 },
+            { "operator": "Ambethkar", "seed": "groundnut", "machine": "R", "seedKg": 50_000, "oilL": 20_000, "cakeKg": 28_000, "jaggeryKg": 0 },
         ],
         "custRows": [
             { "customerId": "c1", "seed": "groundnut", "machine": "W", "seedKg": 30_000, "oilL": 11_000, "cakeKg": 17_000, "cakeMode": "kept" },

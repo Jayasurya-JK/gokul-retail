@@ -526,7 +526,7 @@ fn cashier_cannot_cancel_without_a_manager_pin_and_roles_are_enforced() {
         let saved = crm::save_roles(c, &roles)?;
         assert_eq!(saved[0]["perms"]["canCancelBill"], true, "owner can always do everything");
         assert_eq!(saved[0]["pinFor"], json!([]));
-        assert_eq!(saved[1]["perms"]["canCancelBill"], false);
+        assert_eq!(saved.iter().find(|r| r["id"] == "manager").unwrap()["perms"]["canCancelBill"], false);
         let b3 = bill_as(c, "Lakshmi");
         assert!(cancel(c, &b3, "Lakshmi", "").is_err());
         cancel(c, &b3, "Lakshmi", "1111")?; // the owner's PIN approves
@@ -849,7 +849,7 @@ fn demo_office_data_is_consistent() {
         let opts = crm::sales_filter_options(c)?;
         assert!(!opts["cashiers"].as_array().unwrap().is_empty());
         // roles and users exist
-        assert_eq!(crm::list_roles(c)?.len(), 3);
+        assert_eq!(crm::list_roles(c)?.len(), 5);
         assert_eq!(crm::list_user_accounts(c)?.len(), 5);
         Ok(())
     })

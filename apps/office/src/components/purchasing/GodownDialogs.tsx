@@ -3,7 +3,7 @@ import { ArrowRightLeft, Check, Plus, RotateCcw, Save, Timer, Truck } from 'luci
 import type { GodownBarrel, GodownStatus, Item, SeedType, Supplier } from '@gokul/data';
 import { Badge, Button, Dialog, Field, Input, Money, NumberInput, Select, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
-import { fmtDateYear, fmtMilli, todayYmd } from './common';
+import { EntryDate, fmtMilli, useEntryDate } from './common';
 
 // Every action on a godown barrel lives here. Amounts are typed as the shop floor says them (L and rupees) and are
 // converted to the Api units at the edge: litres x 1000 for milli-litres, rupees x 100 for paise.
@@ -23,7 +23,6 @@ const STATUS_LABEL: Record<GodownStatus, string> = { empty: 'Empty', filling: 'F
 const litresToMilli = (s: string) => Math.round((parseFloat(s) || 0) * 1000);
 const rupeesToPaise = (s: string) => Math.round((parseFloat(s) || 0) * 100);
 const reason = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
-const dayText = (ymd: string) => (ymd ? fmtDateYear(new Date(`${ymd}T00:00:00`).toISOString()) : '');
 
 function ErrorBox({ children }: { children: string }) {
   return <div role="alert" className="rounded-control bg-danger-soft px-3 py-2 text-sm text-danger">{children}</div>;
@@ -40,13 +39,15 @@ export function AddBarrelsDialog({ open, existing, onClose, onSaved }: {
   const [count, setCount] = useState('1');
   const [capacity, setCapacity] = useState('200');
   const [prefix, setPrefix] = useState('');
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setOil('groundnut'); setCount('1'); setCapacity('200'); setPrefix(''); setErr(''); setBusy(false);
-  }, [open]);
+    setOil('groundnut'); setCount('1'); setCapacity('200'); setPrefix(''); setErr(''); setBusy(false); resetEntry();
+  }, [open, resetEntry]);
 
   const save = async () => {
     const n = parseInt(count, 10) || 0;
@@ -56,7 +57,7 @@ export function AddBarrelsDialog({ open, existing, onClose, onSaved }: {
     setBusy(true); setErr('');
     try {
       const before = new Set(existing.map((b) => b.id));
-      const list = await api.addGodownBarrels({ oil, count: n, capacityL: cap });
+      const list = await api.addGodownBarrels({ oil, count: n, capacityL: cap, ...entry.when });
       // The Api numbers barrels itself; a name prefix is applied with a follow-up edit so the names read the way the shop says them.
       const fresh = list.filter((b) => !before.has(b.id));
       const p = prefix.trim();
@@ -106,6 +107,7 @@ export function AddBarrelsDialog({ open, existing, onClose, onSaved }: {
             <Input label="Name prefix (optional)" value={prefix} onChange={(e) => { setPrefix(e.target.value); setErr(''); }} placeholder="e.g. Groundnut" hint="Leave blank to use the usual oil numbers, like Groundnut 8." />
           </div>
         </div>
+        <EntryDate entry={entry} />
         {err && <ErrorBox>{err}</ErrorBox>}
         <button type="submit" className="hidden" />
       </form>
@@ -200,17 +202,19 @@ export function StatusDialog({ target, onClose, onSaved }: {
   target: { barrel: GodownBarrel; action: StatusAction } | null; onClose: () => void; onSaved: () => void;
 }) {
   const toast = useToast();
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setErr(''); setBusy(false); }, [target]);
+  useEffect(() => { setErr(''); setBusy(false); resetEntry(); }, [target, resetEntry]);
 
   const save = async () => {
     if (!target) return;
     const { barrel, action } = target;
     setBusy(true); setErr('');
     try {
-      const b = await api.setGodownStatus({ barrelId: barrel.id, action });
+      const b = await api.setGodownStatus({ barrelId: barrel.id, action, ...entry.when });
       toast.show({ tone: 'success', title: action === 'reopen' ? 'Barrel reopened' : action === 'settle' ? 'Barrel settling' : 'Barrel ready', detail: statusCopy[action].done(b) });
       onSaved(); onClose();
     } catch (e) {
@@ -240,6 +244,7 @@ export function StatusDialog({ target, onClose, onSaved }: {
           </div>
         )}
         {b && copy && <p className="text-sm text-muted">{copy.body(b)}</p>}
+        <EntryDate entry={entry} />
         {err && <ErrorBox>{err}</ErrorBox>}
         <button type="submit" className="hidden" />
       </form>
@@ -254,10 +259,12 @@ export function StickReadingDialog({ barrel, onClose, onSaved }: {
   const toast = useToast();
   const [measured, setMeasured] = useState('');
   const [note, setNote] = useState('');
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setMeasured(''); setNote(''); setErr(''); setBusy(false); }, [barrel]);
+  useEffect(() => { setMeasured(''); setNote(''); setErr(''); setBusy(false); resetEntry(); }, [barrel, resetEntry]);
 
   const entered = measured.trim() === '' ? null : litresToMilli(measured);
   const variance = barrel && entered !== null ? entered - barrel.levelL : null;
@@ -269,7 +276,7 @@ export function StickReadingDialog({ barrel, onClose, onSaved }: {
     if (entered > barrel.capacityL) { setErr(`${barrel.label} holds ${fmtMilli(barrel.capacityL, 0)} L at most. Check the reading.`); return; }
     setBusy(true); setErr('');
     try {
-      await api.recordStickReading({ barrelId: barrel.id, measuredL: entered, note: note.trim() });
+      await api.recordStickReading({ barrelId: barrel.id, measuredL: entered, note: note.trim(), ...entry.when });
       toast.show({
         tone: 'success',
         title: 'Stick reading saved',
@@ -321,6 +328,7 @@ export function StickReadingDialog({ barrel, onClose, onSaved }: {
 
         <p className="text-xs text-subtle">The stick is the truth: the barrel level becomes the measured litres and the difference to the entries is kept as a variance.</p>
         <Input label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. end of day" />
+        <EntryDate entry={entry} />
         {err && <ErrorBox>{err}</ErrorBox>}
         <button type="submit" className="hidden" />
       </form>
@@ -340,7 +348,8 @@ export function OutsourcedOilDialog({ open, barrels, onClose, onSaved }: {
   const [litres, setLitres] = useState('');
   const [cost, setCost] = useState('');
   const [invoice, setInvoice] = useState('');
-  const [day, setDay] = useState(todayYmd());
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -356,8 +365,8 @@ export function OutsourcedOilDialog({ open, barrels, onClose, onSaved }: {
     const first = barrels.find(isFillable);
     setOil(first?.oil ?? 'groundnut');
     setBarrelId(first?.id ?? '');
-    setSupplierId(''); setLitres(''); setCost(''); setInvoice(''); setDay(todayYmd()); setErr(''); setBusy(false);
-  }, [open, barrels]);
+    setSupplierId(''); setLitres(''); setCost(''); setInvoice(''); resetEntry(); setErr(''); setBusy(false);
+  }, [open, barrels, resetEntry]);
 
   const oilBarrels = fillable.filter((b) => b.oil === oil);
   const barrel = barrels.find((b) => b.id === barrelId) ?? null;
@@ -379,8 +388,8 @@ export function OutsourcedOilDialog({ open, barrels, onClose, onSaved }: {
     if (costP < 0) { setErr('The cost cannot be negative.'); return; }
     setBusy(true); setErr('');
     try {
-      const note = [invoice.trim() ? `Invoice ${invoice.trim()}` : '', day ? `dated ${dayText(day)}` : ''].filter(Boolean).join(' ');
-      await api.recordOutsourcedOil({ barrelId: barrel.id, supplierId, supplierName: supplier?.name, litresL: litresM, cost: costP, note });
+      const note = invoice.trim() ? `Invoice ${invoice.trim()}` : '';
+      await api.recordOutsourcedOil({ barrelId: barrel.id, supplierId, supplierName: supplier?.name, litresL: litresM, cost: costP, note, ...entry.when });
       toast.show({ tone: 'success', title: 'Bought oil recorded', detail: `${fmtMilli(litresM)} L ${barrel.oilName} from ${supplier?.name ?? 'supplier'}` });
       onSaved(); onClose();
     } catch (e) {
@@ -422,10 +431,8 @@ export function OutsourcedOilDialog({ open, barrels, onClose, onSaved }: {
           <Field label="Invoice no">
             <Input value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="e.g. KCM/1042" className="num" />
           </Field>
-          <Field label="Invoice date">
-            <Input type="date" value={day} max={todayYmd()} onChange={(e) => setDay(e.target.value)} />
-          </Field>
         </div>
+        <EntryDate entry={entry} label="Date bought" />
 
         {barrel && litresM > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm">
@@ -454,6 +461,8 @@ export function TransferToStoreDialog({ barrel, onClose, onSaved }: {
   const [itemId, setItemId] = useState('');
   const [litres, setLitres] = useState('');
   const [note, setNote] = useState('');
+  const entry = useEntryDate();
+  const resetEntry = entry.reset;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -461,9 +470,9 @@ export function TransferToStoreDialog({ barrel, onClose, onSaved }: {
     if (!barrel) return;
     // Default to everything in the barrel; a partly emptied barrel can move only some litres.
     setLitres(String(Math.floor(barrel.levelL / 100) / 10));
-    setItemId(''); setNote(''); setErr(''); setBusy(false);
+    setItemId(''); setNote(''); setErr(''); setBusy(false); resetEntry();
     void api.listItems().then(setItems).catch(() => setItems([]));
-  }, [barrel]);
+  }, [barrel, resetEntry]);
 
   const oilItems = useMemo(
     () => (barrel ? items.filter((i) => looseOilFor(i, barrel.oilName)) : []),
@@ -486,7 +495,7 @@ export function TransferToStoreDialog({ barrel, onClose, onSaved }: {
     if (litresM > barrel.levelL) { setErr(`${barrel.label} holds only ${fmtMilli(barrel.levelL)} L.`); return; }
     setBusy(true); setErr('');
     try {
-      const t = await api.transferToStore({ barrelId: barrel.id, itemId: item.id, litresL: litresM, note: note.trim() });
+      const t = await api.transferToStore({ barrelId: barrel.id, itemId: item.id, litresL: litresM, note: note.trim(), ...entry.when });
       toast.show({
         tone: 'success',
         title: `${fmtMilli(t.litresL)} L moved to the store`,
@@ -548,6 +557,7 @@ export function TransferToStoreDialog({ barrel, onClose, onSaved }: {
 
         <p className="text-xs text-subtle">The litres leave the godown barrel and are added to this item's store stock. Godown oil never appears in store or POS stock until this transfer.</p>
         {tooMuch && <div className="rounded-control bg-warning-soft px-3 py-2 text-sm text-warning">The barrel holds {fmtMilli(barrel?.levelL ?? 0)} L. Move that much or less.</div>}
+        <EntryDate entry={entry} />
         {err && <ErrorBox>{err}</ErrorBox>}
         <button type="submit" className="hidden" />
       </form>

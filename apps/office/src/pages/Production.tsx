@@ -7,7 +7,6 @@ import {
 import { api } from '../store';
 import { PressingForm } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
-import { PressingGrid } from '../components/purchasing/PressingGrid';
 import { JobWorkPane } from '../components/purchasing/JobWorkPane';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
@@ -264,7 +263,6 @@ export function Production() {
   const [selBatch, setSelBatch] = useState<string | null>(null);
   const [selRun, setSelRun] = useState<string | null>(null);
   const [seedFilter, setSeedFilter] = useState('all');
-  const [operators, setOperators] = useState<string[]>([]);
   const [newBatch, setNewBatch] = useState(false);
   const [newPack, setNewPack] = useState(false);
   const [packBarrel, setPackBarrel] = useState<string | null>(null);
@@ -277,7 +275,7 @@ export function Production() {
     setSelBatch((c) => opts?.batch ?? c ?? b[0]?.id ?? null);
     setSelRun((c) => opts?.run ?? c ?? r[0]?.id ?? null);
   }, []);
-  useEffect(() => { void load(); void api.getSettingsBundle().then((b) => setOperators(b.mill.operators)).catch(() => undefined); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   useRefreshOnFocus(() => { void load(); });
 
   const shown = useMemo(() => batches.filter((b) => seedFilter === 'all' || b.seed === seedFilter), [batches, seedFilter]);
@@ -340,7 +338,6 @@ export function Production() {
       >
         <TabPanel value="pressing" className="flex min-h-0 flex-1 flex-row outline-none data-[state=inactive]:hidden">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <PressingGrid profiles={profiles} barrels={godownBarrels} operators={operators} onSaved={(saved) => { setGodownKey((k) => k + 1); void load({ batch: saved[0]?.id }); }} />
           <FilterBar
             trailing={<span>{month.low > 0 && <span className="mr-3 font-medium text-warning">{month.low} low yield in 30 days</span>}{shown.length} shown</span>}
           >

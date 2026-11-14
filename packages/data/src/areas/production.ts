@@ -1,6 +1,7 @@
 import type { MockStore } from './store';
 import type { Milli, Paise } from '../types';
 import type { PressingBatch, SeedType } from './purchasing';
+import { entryDate } from '../entryDate';
 import { buildMillAnalysis, type MillAnalysis, type MillAnalysisQuery } from './analysis';
 
 // Area: godown barrels (production stock), transfers to the store, outsourced oil and the Mill daily report.
@@ -40,18 +41,18 @@ export interface OutsourcedOil {
   id: string; number: string; date: string; oil: SeedType; oilName: string; barrelId: string; barrelLabel: string;
   supplierId?: string | null; supplierName: string; litresL: Milli; cost: Paise; ratePerL: Paise; note: string; by?: string;
 }
-export interface OutsourcedInput { barrelId: string; supplierId?: string; supplierName?: string; litresL: Milli; cost: Paise; note?: string }
+export interface OutsourcedInput { barrelId: string; supplierId?: string; supplierName?: string; litresL: Milli; cost: Paise; note?: string; day?: string; time?: string }
 
 export interface GodownTransfer {
   id: string; number: string; date: string; oil: SeedType; oilName: string; barrelId: string; barrelLabel: string;
   itemId: string; itemName: string; litresL: Milli; storeBarrelId?: string | null; note: string; by?: string;
 }
-export interface TransferInput { barrelId: string; itemId: string; litresL: Milli; storeBarrelId?: string; note?: string }
+export interface TransferInput { barrelId: string; itemId: string; litresL: Milli; storeBarrelId?: string; note?: string; day?: string; time?: string }
 
-export interface AddBarrelsInput { oil: SeedType; count: number; capacityL?: Milli }
+export interface AddBarrelsInput { oil: SeedType; count: number; capacityL?: Milli; day?: string; time?: string }
 export interface EditBarrelInput { id: string; label: string; capacityL: Milli; active: boolean }
-export interface StatusInput { barrelId: string; action: 'settle' | 'ready' | 'reopen' }
-export interface StickInput { barrelId: string; measuredL: Milli; note?: string }
+export interface StatusInput { barrelId: string; action: 'settle' | 'ready' | 'reopen'; day?: string; time?: string }
+export interface StickInput { barrelId: string; measuredL: Milli; note?: string; day?: string; time?: string }
 
 /* ---- Mill daily report ---- */
 export interface MillDailySeed { seed: SeedType; label: string; opening: Milli; bought: Milli; toPress: Milli; other: Milli; closing: Milli }
@@ -214,6 +215,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
       };
     },
     addGodownBarrels: async (d) => {
+      entryDate(d.day, d.time);
       if (d.count < 1 || d.count > 30) throw new Error('Add between 1 and 30 barrels at a time.');
       const cap = d.capacityL ?? 200000;
       for (let i = 0; i < d.count; i++) {
@@ -236,10 +238,11 @@ export function createProductionMock(store: MockStore): ProductionApi {
       return { ...refresh(b) };
     },
     setGodownStatus: async (d) => {
+      const when = entryDate(d.day, d.time);
       const b = refresh(need(d.barrelId));
       if (d.action === 'settle') {
         if (b.status !== 'filling') throw new Error(`${b.label} is ${b.status}. Only a barrel that is being filled can be left to settle.`);
-        stored.set(b.id, 'settling'); b.settleStartedOn = new Date().toISOString();
+        stored.set(b.id, 'settling'); b.settleStartedOn = when.toISOString();
       } else if (d.action === 'ready') {
         if (b.status !== 'settling') throw new Error(`${b.label} is ${b.status}. Only a settling barrel can be marked ready.`);
         stored.set(b.id, 'ready');
@@ -250,16 +253,18 @@ export function createProductionMock(store: MockStore): ProductionApi {
       return { ...refresh(b) };
     },
     recordStickReading: async (d) => {
+      const when = entryDate(d.day, d.time);
       const b = need(d.barrelId);
       if (d.measuredL < 0) throw new Error('The reading cannot be negative.');
       if (d.measuredL > b.capacityL) throw new Error(`${b.label} holds ${lit(b.capacityL)} L at most. Check the reading.`);
       const variance = d.measuredL - b.levelL;
-      state.readings.push({ barrelId: b.id, at: new Date().toISOString(), measuredL: d.measuredL, systemL: b.levelL, varianceL: variance, note: d.note ?? '' });
-      if (variance !== 0) post(b, 'stick', variance, `Stick ${lit(d.measuredL)} L, entries ${lit(b.levelL - variance)} L`);
+      state.readings.push({ barrelId: b.id, at: when.toISOString(), measuredL: d.measuredL, systemL: b.levelL, varianceL: variance, note: d.note ?? '' });
+      if (variance !== 0) post(b, 'stick', variance, `Stick ${lit(d.measuredL)} L, entries ${lit(b.levelL - variance)} L`, undefined, when.toISOString());
       if (b.levelL === 0) { stored.set(b.id, 'empty'); b.filledOn = null; b.settleStartedOn = null; } else if (stored.get(b.id) === 'empty') stored.set(b.id, 'filling');
       return { ...refresh(b) };
     },
     recordOutsourcedOil: async (d) => {
+      const when = entryDate(d.day, d.time);
       const b = refresh(need(d.barrelId));
       if (d.litresL <= 0) throw new Error('Enter the litres bought.');
       const supplier = d.supplierId ? store.suppliers.find((s) => s.id === d.supplierId)?.name : d.supplierName?.trim();
@@ -268,16 +273,17 @@ export function createProductionMock(store: MockStore): ProductionApi {
       if (b.levelL + d.litresL > b.capacityL) throw new Error(`${b.label} has room for only ${lit(b.capacityL - b.levelL)} L.`);
       gpSeq += 1;
       const rec: OutsourcedOil = {
-        id: `gp${gpSeq}`, number: `GP-26-${String(gpSeq).padStart(6, '0')}`, date: new Date().toISOString(), oil: b.oil, oilName: b.oilName, barrelId: b.id, barrelLabel: b.label,
+        id: `gp${gpSeq}`, number: `GP-26-${String(gpSeq).padStart(6, '0')}`, date: when.toISOString(), oil: b.oil, oilName: b.oilName, barrelId: b.id, barrelLabel: b.label,
         supplierId: d.supplierId ?? null, supplierName: supplier, litresL: d.litresL, cost: d.cost, ratePerL: Math.round((d.cost * 1000) / d.litresL), note: d.note ?? '', by: 'Suresh Kumar',
       };
       state.outsourced.push(rec);
-      post(b, 'outsourced', d.litresL, `Outsourced oil ${rec.number} from ${supplier}`);
-      stored.set(b.id, 'filling'); b.filledOn = b.filledOn ?? new Date().toISOString(); b.settleStartedOn = null;
+      post(b, 'outsourced', d.litresL, `Outsourced oil ${rec.number} from ${supplier}`, undefined, when.toISOString());
+      stored.set(b.id, 'filling'); b.filledOn = b.filledOn ?? when.toISOString(); b.settleStartedOn = null;
       return rec;
     },
     listOutsourcedOil: async () => [...state.outsourced].sort((a, c) => c.date.localeCompare(a.date)),
     transferToStore: async (d) => {
+      const when = entryDate(d.day, d.time);
       const b = refresh(need(d.barrelId));
       if (d.litresL <= 0) throw new Error('Enter the litres to move to the store.');
       if (b.status !== 'ready') throw new Error(`${b.label} is ${b.status}. Oil can go to the store only after it has settled (mark the barrel ready first).`);
@@ -286,11 +292,11 @@ export function createProductionMock(store: MockStore): ProductionApi {
       if (!item || !item.loose) throw new Error('The oil can only go to a loose-oil item (sold by the litre at the counter).');
       gtSeq += 1;
       const rec: GodownTransfer = {
-        id: `gt${gtSeq}`, number: `GT-26-${String(gtSeq).padStart(6, '0')}`, date: new Date().toISOString(), oil: b.oil, oilName: b.oilName, barrelId: b.id, barrelLabel: b.label,
+        id: `gt${gtSeq}`, number: `GT-26-${String(gtSeq).padStart(6, '0')}`, date: when.toISOString(), oil: b.oil, oilName: b.oilName, barrelId: b.id, barrelLabel: b.label,
         itemId: item.id, itemName: item.name, litresL: d.litresL, storeBarrelId: d.storeBarrelId ?? null, note: d.note ?? '', by: 'Suresh Kumar',
       };
       state.transfers.push(rec);
-      post(b, 'transfer', -d.litresL, `${rec.number} to store: ${item.name}`);
+      post(b, 'transfer', -d.litresL, `${rec.number} to store: ${item.name}`, undefined, when.toISOString());
       item.stock += d.litresL;
       if (b.levelL === 0) { stored.set(b.id, 'empty'); b.filledOn = null; b.settleStartedOn = null; } else stored.set(b.id, 'ready');
       return rec;

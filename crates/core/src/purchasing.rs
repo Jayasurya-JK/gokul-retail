@@ -883,6 +883,11 @@ pub struct PressingDraft {
     /// The godown barrel the oil goes into (required by the Production screen; older callers send nothing and the oil is only recorded on the batch).
     #[serde(default)]
     pub godown_barrel_id: Option<String>,
+    /// The date the batch was pressed (yyyy-mm-dd, default today, past dates allowed, no future) and an optional time (HH:MM).
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 fn default_machine() -> String {
@@ -895,7 +900,7 @@ fn fmt_kg(milli: i64) -> String {
 
 /// Seed (and jaggery) out of the godown, cake into stock, all as ledger movements. The oil goes into a godown barrel (production stock); it reaches the store only by a transfer.
 pub fn create_pressing_batch(conn: &mut Connection, d: &PressingDraft) -> Result<Value> {
-    create_pressing_batch_at(conn, d, Local::now())
+    create_pressing_batch_at(conn, d, db::entry_time(d.day.as_deref(), d.time.as_deref())?)
 }
 
 pub fn create_pressing_batch_at(conn: &mut Connection, d: &PressingDraft, now: chrono::DateTime<Local>) -> Result<Value> {
@@ -1180,6 +1185,10 @@ pub struct PackRunDraft {
     pub used_l: i64,
     #[serde(default)]
     pub packer: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
 }
 
 fn pack_run_json(conn: &Connection, id: i64) -> Result<Value> {
@@ -1219,7 +1228,7 @@ pub fn list_pack_runs(conn: &Connection) -> Result<Vec<Value>> {
 
 /// Oil out of the barrel and the loose item, packed items in. Wastage = oil used minus oil in the packs.
 pub fn create_pack_run(conn: &mut Connection, d: &PackRunDraft) -> Result<Value> {
-    create_pack_run_at(conn, d, Local::now())
+    create_pack_run_at(conn, d, db::entry_time(d.day.as_deref(), d.time.as_deref())?)
 }
 
 pub fn create_pack_run_at(conn: &mut Connection, d: &PackRunDraft, now: chrono::DateTime<Local>) -> Result<Value> {

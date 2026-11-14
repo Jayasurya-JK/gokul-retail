@@ -109,7 +109,7 @@ pub fn mill_settings(conn: &Connection) -> MillSettings {
         .as_array()
         .map(|a| a.iter().filter_map(|x| x.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
         .filter(|a: &Vec<String>| !a.is_empty())
-        .unwrap_or_else(|| vec!["Operator 1".into(), "Operator 2".into()]);
+        .unwrap_or_else(|| vec!["Ambethkar".into()]);
     MillSettings {
         operators,
         rate_taken: v["rateCakeTaken"].as_i64().unwrap_or(800),
@@ -120,7 +120,7 @@ pub fn mill_settings(conn: &Connection) -> MillSettings {
 }
 
 pub fn default_mill_bundle() -> Value {
-    json!({ "operators": ["Operator 1", "Operator 2"], "rateCakeTaken": 800, "rateCakeKept": 500, "serviceSac": "998811", "serviceGstRate": 5 })
+    json!({ "operators": ["Ambethkar"], "rateCakeTaken": 800, "rateCakeKept": 500, "serviceSac": "998811", "serviceGstRate": 5 })
 }
 
 // ---------- items ----------
@@ -747,6 +747,8 @@ pub fn close_sheet(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
                 operator: r.operator.trim().to_string(),
                 machine: machine_of(&r.machine),
                 godown_barrel_id: None,
+                day: None,
+                time: None,
             },
             at,
         )?;

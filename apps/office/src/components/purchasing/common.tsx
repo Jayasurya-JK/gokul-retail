@@ -1,7 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Droplets } from 'lucide-react';
 import type { Barrel, BatchPhase, PayStatus, PressingMetrics, SeedType, YieldGrade } from '@gokul/data';
-import { Badge, cn, type Tone } from '@gokul/ui';
+import { Badge, Field, Input, cn, type Tone } from '@gokul/ui';
 
 const dateFmt = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' });
 const dateYearFmt = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -14,6 +14,27 @@ export const todayYmd = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+/** The date (and optional time) an entry really happened. Defaults to today; past dates are allowed for old paper records. */
+export function useEntryDate() {
+  const [day, setDay] = useState(todayYmd());
+  const [time, setTime] = useState('');
+  const reset = useCallback(() => { setDay(todayYmd()); setTime(''); }, []);
+  return { day, time, setDay, setTime, reset, when: { day: day || undefined, time: time || undefined } };
+}
+
+export function EntryDate({ entry, label = 'Date', className }: { entry: ReturnType<typeof useEntryDate>; label?: string; className?: string }) {
+  return (
+    <div className={cn('grid grid-cols-2 gap-3', className)}>
+      <Field label={label} hint="Today, or an earlier day for an old record. Not a future day.">
+        <Input type="date" value={entry.day} max={todayYmd()} onChange={(e) => entry.setDay(e.target.value)} aria-label={label} className="num" />
+      </Field>
+      <Field label="Time (optional)" hint="Leave blank for now, or 8 pm for an old day.">
+        <Input type="time" value={entry.time} onChange={(e) => entry.setTime(e.target.value)} aria-label="Time" className="num" />
+      </Field>
+    </div>
+  );
+}
 
 /** milli-units to a readable number with Indian grouping, trimming needless zeros */
 export function fmtMilli(m: number, maxDecimals = 1): string {
