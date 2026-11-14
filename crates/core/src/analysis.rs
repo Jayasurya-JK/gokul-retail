@@ -148,7 +148,7 @@ pub fn get_mill_analysis(conn: &Connection, q: &AnalysisQuery) -> Result<Value> 
 
     let mut st = conn.prepare(
         "SELECT id,number,day,seed,machine,operator,seed_g,cleaning_loss_g,oil_raw_ml,cake_g,norm_kg_per_l,seed_cost_per_kg,jaggery_cost
-         FROM pressing_batches WHERE day>=?1 AND day<=?2 ORDER BY day, id",
+         FROM pressing_batches WHERE status='active' AND day>=?1 AND day<=?2 ORDER BY day, id",
     )?;
     let rows = st
         .query_map([&q.from, &q.to], |r| {
@@ -327,7 +327,7 @@ pub fn get_mill_analysis(conn: &Connection, q: &AnalysisQuery) -> Result<Value> 
         }
         let base = seed_base(seed).expect("seed");
         let stock_milli: i64 = conn.query_row("SELECT stock FROM items WHERE id=?1", [base.rm], |r| r.get(0)).unwrap_or(0);
-        let mut s2 = conn.prepare("SELECT SUM(seed_g) FROM pressing_batches WHERE seed=?1 GROUP BY day ORDER BY day DESC LIMIT 14")?;
+        let mut s2 = conn.prepare("SELECT SUM(seed_g) FROM pressing_batches WHERE status='active' AND seed=?1 GROUP BY day ORDER BY day DESC LIMIT 14")?;
         let days = s2.query_map([seed], |r| r.get::<_, i64>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
         let avg = if days.is_empty() { 0.0 } else { days.iter().sum::<i64>() as f64 / days.len() as f64 / 1000.0 };
         let stock_kg = stock_milli as f64 / 1000.0;

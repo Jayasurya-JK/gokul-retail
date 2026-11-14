@@ -464,7 +464,7 @@ fn oil_opening(conn: &Connection, day: &str, key: &str) -> Result<i64> {
     };
     // Oil pressed but still settling (not yet in a barrel) at the start of the day.
     let unmoved: i64 = conn.query_row(
-        "SELECT COALESCE(SUM(oil_raw_ml),0) FROM pressing_batches WHERE seed=?1 AND day < ?2 AND (barrel_id IS NULL OR moved_on >= ?3)",
+        "SELECT COALESCE(SUM(oil_raw_ml),0) FROM pressing_batches WHERE status='active' AND seed=?1 AND day < ?2 AND (barrel_id IS NULL OR moved_on >= ?3)",
         params![seed, day, start],
         |r| r.get(0),
     )?;
@@ -481,7 +481,7 @@ fn compute_stock(conn: &Connection, day: &str, project: Option<&SheetInput>) -> 
         if d.group == "oil" {
             l.opening = oil_opening(conn, day, d.key)?;
             l.pressed = conn.query_row(
-                "SELECT COALESCE(SUM(oil_raw_ml),0) FROM pressing_batches WHERE day=?1 AND seed=?2",
+                "SELECT COALESCE(SUM(oil_raw_ml),0) FROM pressing_batches WHERE status='active' AND day=?1 AND seed=?2",
                 params![day, match d.key { "oil_sesame" => "sesame", "oil_coconut" => "copra", _ => "groundnut" }],
                 |r| r.get(0),
             )?;
@@ -976,6 +976,9 @@ pub fn save_day(conn: &mut Connection, i: &DayInput) -> Result<Value> {
 pub fn close_day(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
     let day = c.day.clone();
     day_start(&day)?;
+    if day.as_str() > db::day_of(Local::now()).as_str() {
+        return invalid("The date cannot be in the future.");
+    }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     if sheet_status(&tx, &day)?.as_deref() == Some("closed") {
         return invalid("This day is already closed.");

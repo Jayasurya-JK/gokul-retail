@@ -96,7 +96,7 @@ fn effective(conn: &Connection, r: &Row, now: DateTime<Local>) -> &'static str {
 fn barrel_json(conn: &Connection, r: &Row, now: DateTime<Local>) -> Result<Value> {
     let last: Option<(String, i64, i64, i64)> = conn
         .query_row(
-            "SELECT at,measured_ml,system_ml,variance_ml FROM godown_readings WHERE barrel_id=?1 ORDER BY id DESC LIMIT 1",
+            "SELECT at,measured_ml,system_ml,variance_ml FROM godown_readings WHERE barrel_id=?1 AND id NOT IN (SELECT reading_id FROM godown_reading_voids) ORDER BY id DESC LIMIT 1",
             [&r.id],
             |x| Ok((x.get(0)?, x.get(1)?, x.get(2)?, x.get(3)?)),
         )
@@ -426,7 +426,7 @@ pub fn record_outsourced_oil(conn: &mut Connection, d: &OutsourcedInput) -> Resu
 }
 
 pub fn list_outsourced_oil(conn: &Connection, limit: i64) -> Result<Vec<Value>> {
-    let mut st = conn.prepare(&format!("{OUTSOURCED_SELECT} ORDER BY p.at DESC, p.id DESC LIMIT ?1"))?;
+    let mut st = conn.prepare(&format!("{OUTSOURCED_SELECT} WHERE p.status='active' ORDER BY p.at DESC, p.id DESC LIMIT ?1"))?;
     let v = st.query_map([limit.clamp(1, 2000)], outsourced_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
 }
@@ -544,13 +544,199 @@ pub fn get_godown_barrel(conn: &Connection, id: &str) -> Result<Value> {
             Ok(json!({ "at": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?, "qtyL": r.get::<_, i64>(2)?, "note": r.get::<_, String>(3)?, "by": r.get::<_, String>(4)? }))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut st = conn.prepare("SELECT at,measured_ml,system_ml,variance_ml,note,by_name FROM godown_readings WHERE barrel_id=?1 ORDER BY id DESC LIMIT 60")?;
+    let mut st = conn.prepare("SELECT at,measured_ml,system_ml,variance_ml,note,by_name,id FROM godown_readings WHERE barrel_id=?1 AND id NOT IN (SELECT reading_id FROM godown_reading_voids) ORDER BY id DESC LIMIT 60")?;
     let readings = st
         .query_map([id], |r| {
-            Ok(json!({ "at": r.get::<_, String>(0)?, "measuredL": r.get::<_, i64>(1)?, "systemL": r.get::<_, i64>(2)?, "varianceL": r.get::<_, i64>(3)?, "note": r.get::<_, String>(4)?, "by": r.get::<_, String>(5)? }))
+            Ok(json!({ "at": r.get::<_, String>(0)?, "measuredL": r.get::<_, i64>(1)?, "systemL": r.get::<_, i64>(2)?, "varianceL": r.get::<_, i64>(3)?, "note": r.get::<_, String>(4)?, "by": r.get::<_, String>(5)?, "id": format!("gr{}", r.get::<_, i64>(6)?) }))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(json!({ "barrel": barrel_json(conn, &b, now)?, "ledger": ledger, "readings": readings }))
+}
+
+// =====================================================================
+// Corrections (owner and admin only). The ledgers are append-only, so an edit or delete posts a REVERSING row dated on the
+// original day (note "Correction of ...") and, for an edit, the corrected rows after it. Nothing is updated or deleted in a ledger.
+// =====================================================================
+
+/// Can `ml` that went into this barrel be taken out again without a mess? The oil must still be where it was put:
+/// the barrel has not started settling (or been marked ready, or transferred from) and still holds at least that much.
+pub(crate) fn check_reversible(tx: &Connection, id: &str, ml: i64, what: &str) -> Result<()> {
+    let Some(b) = load(tx, id)? else { return invalid("The godown barrel was not found.") };
+    let st = effective(tx, &b, Local::now());
+    if st == "settling" || st == "ready" {
+        return invalid(format!(
+            "{what} cannot be changed: {} is {st}, so the oil has moved on. Reopen the barrel first if settling was started by mistake.",
+            b.label
+        ));
+    }
+    if b.level < ml {
+        return invalid(format!(
+            "{what} cannot be changed: {} holds only {} L now, so some of that oil has already left the barrel.",
+            b.label,
+            fmt_l(b.level)
+        ));
+    }
+    Ok(())
+}
+
+/// The reversing godown row, dated on the original moment. A barrel that ends up empty becomes free again.
+pub(crate) fn reverse_fill(tx: &Connection, at: DateTime<Local>, barrel: &str, kind: &str, ml: i64, ref_type: &str, ref_id: &str, note: &str) -> Result<()> {
+    post(tx, at, barrel, kind, -ml, ref_type, ref_id, note)?;
+    become_empty(tx, barrel)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutsourcedEdit {
+    pub id: String,
+    pub barrel_id: String,
+    #[serde(default)]
+    pub supplier_id: Option<String>,
+    #[serde(default)]
+    pub supplier_name: String,
+    pub litres_l: i64,
+    #[serde(default)]
+    pub cost: i64,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub day: Option<String>,
+    #[serde(default)]
+    pub time: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordRef {
+    pub id: String,
+}
+
+struct OutRec {
+    number: String,
+    at: String,
+    barrel: String,
+    litres: i64,
+    cost: i64,
+    supplier: String,
+    status: String,
+}
+
+fn load_outsourced(tx: &Connection, id: &str) -> Result<(i64, OutRec)> {
+    let Some(n) = db::parse_id("gp", id) else { return invalid("Oil purchase not found.") };
+    let r = tx
+        .query_row(
+            "SELECT number,at,barrel_id,litres_ml,cost,supplier_name,status FROM godown_purchases WHERE id=?1",
+            [n],
+            |r| Ok(OutRec { number: r.get(0)?, at: r.get(1)?, barrel: r.get(2)?, litres: r.get(3)?, cost: r.get(4)?, supplier: r.get(5)?, status: r.get(6)? }),
+        )
+        .optional()?;
+    let Some(r) = r else { return invalid("Oil purchase not found.") };
+    if r.status != "active" {
+        return invalid("This oil purchase was already deleted.");
+    }
+    Ok((n, r))
+}
+
+fn reverse_outsourced(tx: &Connection, n: i64, r: &OutRec) -> Result<()> {
+    check_reversible(tx, &r.barrel, r.litres, &format!("Oil purchase {}", r.number))?;
+    let when = parse_iso(&r.at).unwrap_or_else(Local::now);
+    reverse_fill(tx, when, &r.barrel, "outsourced", r.litres, "godown_purchase", &n.to_string(), &format!("Correction of {}", r.number))
+}
+
+pub fn delete_outsourced_oil(conn: &mut Connection, d: &RecordRef) -> Result<Value> {
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (n, r) = load_outsourced(&tx, &d.id)?;
+    reverse_outsourced(&tx, n, &r)?;
+    tx.execute("UPDATE godown_purchases SET status='deleted', deleted_at=?1, deleted_by=?2 WHERE id=?3", params![iso(now), db::actor_or(OFFICE), n])?;
+    audit(
+        &tx, now, OFFICE, "delete", "godown_purchase", &r.number,
+        &format!("deleted: {} L from {} into {}, cost {} paise, was dated {}", fmt_l(r.litres), r.supplier, r.barrel, r.cost, r.at),
+    )?;
+    tx.commit()?;
+    Ok(json!({ "id": d.id, "number": r.number, "deleted": true }))
+}
+
+pub fn edit_outsourced_oil(conn: &mut Connection, d: &OutsourcedEdit) -> Result<Value> {
+    if d.litres_l <= 0 {
+        return invalid("Enter the litres bought.");
+    }
+    if d.cost < 0 {
+        return invalid("The cost cannot be negative.");
+    }
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (n, r) = load_outsourced(&tx, &d.id)?;
+    let at = if d.day.as_deref().map(str::trim).unwrap_or("").is_empty() { parse_iso(&r.at).unwrap_or(now) } else { db::entry_time(d.day.as_deref(), d.time.as_deref())? };
+    reverse_outsourced(&tx, n, &r)?;
+    let Some(b) = load(&tx, &d.barrel_id)? else { return invalid("Choose a godown barrel.") };
+    check_fill(&tx, &b.id, &b.oil, d.litres_l)?;
+    let (sid, sname): (Option<String>, String) = match d.supplier_id.as_deref().filter(|s| !s.is_empty()) {
+        Some(id) => {
+            let nm: Option<String> = tx.query_row("SELECT name FROM suppliers WHERE id=?1", [id], |x| x.get(0)).optional()?;
+            let Some(nm) = nm else { return invalid("That supplier does not exist.") };
+            (Some(id.to_string()), nm)
+        }
+        None => {
+            let nm = d.supplier_name.trim();
+            if nm.is_empty() {
+                return invalid("Enter the manufacturer or supplier you bought the oil from.");
+            }
+            (None, nm.to_string())
+        }
+    };
+    tx.execute(
+        "UPDATE godown_purchases SET at=?1, day=?2, barrel_id=?3, oil=?4, supplier_id=?5, supplier_name=?6, litres_ml=?7, cost=?8, note=?9, edited_at=?10, edited_by=?11 WHERE id=?12",
+        params![iso(at), db::day_of(at), b.id, b.oil, sid, sname, d.litres_l, d.cost, d.note.trim(), iso(now), db::actor_or(OFFICE), n],
+    )?;
+    fill(&tx, at, &b.id, "outsourced", d.litres_l, "godown_purchase", &n.to_string(), &format!("Outsourced oil {} from {sname} (corrected)", r.number))?;
+    audit(
+        &tx, now, OFFICE, "edit", "godown_purchase", &r.number,
+        &format!(
+            "was {} L from {} into {}, cost {} paise, {}; now {} L from {sname} into {}, cost {} paise, {}",
+            fmt_l(r.litres), r.supplier, r.barrel, r.cost, r.at, fmt_l(d.litres_l), b.id, d.cost, iso(at)
+        ),
+    )?;
+    let out = tx.query_row(&format!("{OUTSOURCED_SELECT} WHERE p.id=?1"), [n], outsourced_json)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+/// Delete (void) a stick reading: only the latest reading of its barrel, so the barrel's story stays in order. The variance it posted is
+/// reversed with a correction row; the reading itself stays on file, marked deleted.
+pub fn delete_stick_reading(conn: &mut Connection, d: &RecordRef) -> Result<Value> {
+    let now = Local::now();
+    let Some(rid) = db::parse_id("gr", &d.id) else { return invalid("Reading not found.") };
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let row: Option<(String, String, i64, i64, i64)> = tx
+        .query_row("SELECT barrel_id,at,measured_ml,system_ml,variance_ml FROM godown_readings WHERE id=?1", [rid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+        .optional()?;
+    let Some((barrel, at, measured, system, variance)) = row else { return invalid("Reading not found.") };
+    let voided: i64 = tx.query_row("SELECT COUNT(*) FROM godown_reading_voids WHERE reading_id=?1", [rid], |r| r.get(0))?;
+    if voided > 0 {
+        return invalid("This reading was already deleted.");
+    }
+    let later: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM godown_readings WHERE barrel_id=?1 AND id>?2 AND id NOT IN (SELECT reading_id FROM godown_reading_voids)",
+        params![barrel, rid],
+        |r| r.get(0),
+    )?;
+    if later > 0 {
+        return invalid("A later stick reading exists for this barrel. Delete the later reading first.");
+    }
+    let Some(b) = load(&tx, &barrel)? else { return invalid("The godown barrel was not found.") };
+    if b.level - variance < 0 || b.level - variance > b.capacity {
+        return invalid(format!("This reading cannot be deleted: {} has changed since (it holds {} L now).", b.label, fmt_l(b.level)));
+    }
+    let when = parse_iso(&at).unwrap_or(now);
+    if variance != 0 {
+        post(&tx, when, &barrel, "stick", -variance, "reading", &barrel, &format!("Correction of stick reading {}", d.id))?;
+    }
+    become_empty(&tx, &barrel)?;
+    tx.execute("INSERT INTO godown_reading_voids(reading_id,at,by_name) VALUES(?1,?2,?3)", params![rid, iso(now), db::actor_or(OFFICE)])?;
+    audit(&tx, now, OFFICE, "delete", "godown_reading", &d.id, &format!("{}: stick {} L, entries {} L, variance {} L ({at})", b.label, fmt_l(measured), fmt_l(system), fmt_l(variance)))?;
+    tx.commit()?;
+    Ok(json!({ "id": d.id, "deleted": true }))
 }
 
 // =====================================================================
@@ -617,7 +803,7 @@ pub fn mill_daily(conn: &Connection, day: &str) -> Result<Value> {
             let closing = before(&end)?;
             let reading: Option<(String, i64, i64)> = conn
                 .query_row(
-                    "SELECT at,measured_ml,variance_ml FROM godown_readings WHERE barrel_id=?1 AND day=?2 ORDER BY id DESC LIMIT 1",
+                    "SELECT at,measured_ml,variance_ml FROM godown_readings WHERE barrel_id=?1 AND day=?2 AND id NOT IN (SELECT reading_id FROM godown_reading_voids) ORDER BY id DESC LIMIT 1",
                     params![r.id, day],
                     |x| Ok((x.get(0)?, x.get(1)?, x.get(2)?)),
                 )
@@ -676,7 +862,7 @@ pub fn mill_daily(conn: &Connection, day: &str) -> Result<Value> {
 
     let mut st = conn.prepare(&format!("{TRANSFER_SELECT} WHERE t.day=?1 ORDER BY t.id"))?;
     let transfers = st.query_map([day], transfer_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut st = conn.prepare(&format!("{OUTSOURCED_SELECT} WHERE p.day=?1 ORDER BY p.id"))?;
+    let mut st = conn.prepare(&format!("{OUTSOURCED_SELECT} WHERE p.status='active' AND p.day=?1 ORDER BY p.id"))?;
     let outsourced = st.query_map([day], outsourced_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
 
     Ok(json!({

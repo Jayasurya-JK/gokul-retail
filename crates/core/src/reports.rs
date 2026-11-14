@@ -962,7 +962,7 @@ fn day_close(conn: &Connection, p: &ReportParams) -> Result<Value> {
 fn yield_report(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let data = run(
         conn,
-        "SELECT day,number,seed,seed_g,cleaning_loss_g,jaggery_g,oil_raw_ml,cake_g,norm_kg_per_l,norm_density,barrel_id FROM pressing_batches WHERE day >= ?1 AND day <= ?2 ORDER BY id DESC",
+        "SELECT day,number,seed,seed_g,cleaning_loss_g,jaggery_g,oil_raw_ml,cake_g,norm_kg_per_l,norm_density,barrel_id FROM pressing_batches WHERE status='active' AND day >= ?1 AND day <= ?2 ORDER BY id DESC",
         vec![p.from.clone().into(), p.to.clone().into()],
     )?;
     let rows: Vec<Value> = data

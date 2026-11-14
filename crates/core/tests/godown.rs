@@ -384,3 +384,112 @@ fn godown_actions_and_packing_take_a_date() {
     })
     .unwrap();
 }
+
+// ---------- R6: edit and delete by reversal + re-post ----------
+
+fn item_stock(c: &Connection, id: &str) -> i64 {
+    c.query_row("SELECT stock FROM items WHERE id=?1", [id], |r| r.get(0)).unwrap()
+}
+fn ledger_cnt(c: &Connection, table: &str) -> i64 {
+    c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap()
+}
+fn id_num(b: &Value) -> String {
+    b["id"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn editing_a_batch_reverses_and_reposts_and_deleting_hides_it() {
+    let (_d, db) = mini_db();
+    setup(&db);
+    db.with(|c| {
+        let d = two_days_ago();
+        let seed0 = item_stock(c, "rm-gn");
+        let b = purchasing::create_pressing_batch(
+            c,
+            &de(json!({ "seed": "groundnut", "seedKg": 100_000, "cleaningLossKg": 2_000, "oilRawL": 38_000, "cakeKg": 55_000, "godownBarrelId": "GB-001", "operator": "Ambethkar", "day": d })),
+        )?;
+        let id = id_num(&b);
+        let mv0 = ledger_cnt(c, "stock_movements");
+        // edit: more seed and oil, another day, a different barrel
+        let e = purchasing::edit_pressing_batch(
+            c,
+            &de(json!({ "id": id, "seed": "groundnut", "seedKg": 120_000, "cleaningLossKg": 2_000, "oilRawL": 45_000, "cakeKg": 60_000, "godownBarrelId": "GB-002", "operator": "Ambethkar", "day": day_of(Local::now() - chrono::Duration::days(1)) })),
+        )?;
+        assert_eq!(e["number"], b["number"], "the number is kept");
+        assert_eq!(item_stock(c, "rm-gn"), seed0 - 120_000);
+        assert_eq!(barrel(c, "GB-001")["levelL"], 0);
+        assert_eq!(barrel(c, "GB-001")["status"], "empty");
+        assert_eq!(barrel(c, "GB-002")["levelL"], 45_000);
+        assert_eq!(ledger_sum(c, "GB-002"), 45_000);
+        // reversal rows carry the original date and the note; the old rows still exist
+        assert!(ledger_cnt(c, "stock_movements") >= mv0 + 4);
+        let corr: i64 = c.query_row("SELECT COUNT(*) FROM stock_movements WHERE note LIKE 'Correction of PB-%'", [], |r| r.get(0))?;
+        assert_eq!(corr, 2, "seed and cake reversed");
+        let (day, by): (String, Option<String>) = c.query_row("SELECT day,edited_by FROM pressing_batches", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        assert_ne!(day, d);
+        assert!(by.is_some());
+        let mill = godown::mill_daily(c, &d)?;
+        assert_eq!(mill["totals"]["batches"], 0, "the batch moved off the old day");
+        // delete
+        purchasing::delete_pressing_batch(c, &de(json!({ "id": id })))?;
+        assert_eq!(item_stock(c, "rm-gn"), seed0);
+        assert_eq!(barrel(c, "GB-002")["levelL"], 0);
+        assert_eq!(purchasing::list_pressing_batches(c)?.len(), 0);
+        assert!(purchasing::delete_pressing_batch(c, &de(json!({ "id": id }))).is_err(), "already deleted");
+        // number is never reused
+        let n = press(c, "GB-001", 10_000, 0, 4_000, 0)?;
+        assert_ne!(n["number"], b["number"]);
+        let audits: i64 = c.query_row("SELECT COUNT(*) FROM audit_log WHERE entity='pressing_batch' AND action IN ('edit','delete')", [], |r| r.get(0))?;
+        assert_eq!(audits, 2);
+        // the append-only ledgers are untouched by triggers
+        assert!(c.execute("DELETE FROM stock_movements", []).is_err());
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_batch_whose_oil_has_moved_on_cannot_be_changed() {
+    let (_d, db) = mini_db();
+    setup(&db);
+    db.with(|c| {
+        let b = press(c, "GB-001", 100_000, 0, 38_000, 55_000)?;
+        godown::set_godown_status(c, &de(json!({ "barrelId": "GB-001", "action": "settle" })))?;
+        let e = purchasing::delete_pressing_batch(c, &de(json!({ "id": id_num(&b) }))).unwrap_err().to_string();
+        assert!(e.contains("settling"), "{e}");
+        assert!(purchasing::edit_pressing_batch(c, &de(json!({ "id": id_num(&b), "seed": "groundnut", "seedKg": 1000, "oilRawL": 400, "godownBarrelId": "GB-001", "operator": "A" }))).is_err());
+        assert_eq!(barrel(c, "GB-001")["levelL"], 38_000, "a refusal changes nothing");
+        // reopen, then sell the cake: the cake can no longer be reversed
+        godown::set_godown_status(c, &de(json!({ "barrelId": "GB-001", "action": "reopen" })))?;
+        c.execute("UPDATE items SET stock=0 WHERE id='i9'", [])?;
+        let e = purchasing::delete_pressing_batch(c, &de(json!({ "id": id_num(&b) }))).unwrap_err().to_string();
+        assert!(e.contains("oil cake"), "{e}");
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn outsourced_oil_and_stick_readings_can_be_corrected() {
+    let (_d, db) = mini_db();
+    setup(&db);
+    db.with(|c| {
+        let o = godown::record_outsourced_oil(c, &de(json!({ "barrelId": "GB-001", "supplierName": "Mill", "litresL": 50_000, "cost": 100_000 })))?;
+        let e = godown::edit_outsourced_oil(c, &de(json!({ "id": o["id"], "barrelId": "GB-001", "supplierName": "Mill", "litresL": 60_000, "cost": 120_000, "day": two_days_ago() })))?;
+        assert_eq!(e["litresL"], 60_000);
+        assert_eq!(barrel(c, "GB-001")["levelL"], 60_000);
+        let r = godown::record_stick_reading(c, &de(json!({ "barrelId": "GB-001", "measuredL": 58_000 })))?;
+        assert_eq!(r["levelL"], 58_000);
+        let rid = godown::get_godown_barrel(c, "GB-001")?["readings"][0]["id"].clone();
+        // a reading was taken after the purchase: the purchase still reverses (level is enough) but the reading goes first
+        godown::delete_stick_reading(c, &de(json!({ "id": rid })))?;
+        assert_eq!(barrel(c, "GB-001")["levelL"], 60_000);
+        assert!(godown::get_godown_barrel(c, "GB-001")?["readings"].as_array().unwrap().is_empty());
+        godown::delete_outsourced_oil(c, &de(json!({ "id": o["id"] })))?;
+        assert_eq!(barrel(c, "GB-001")["levelL"], 0);
+        assert!(godown::list_outsourced_oil(c, 50)?.is_empty());
+        assert_eq!(ledger_sum(c, "GB-001"), 0);
+        Ok(())
+    })
+    .unwrap();
+}

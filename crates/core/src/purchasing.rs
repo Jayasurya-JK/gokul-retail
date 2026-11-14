@@ -799,7 +799,7 @@ fn oil_item_id(conn: &Connection, oil_name: &str) -> Result<String> {
 
 const BATCH_SELECT: &str = "SELECT b.id,b.number,b.at,b.seed,b.seed_g,b.cleaning_loss_g,b.jaggery_g,b.oil_raw_ml,b.cake_g,b.chekku,b.operator,
     b.settle_ready_on,b.norm_kg_per_l,b.norm_density,b.clear_oil_ml,b.sediment_ml,b.barrel_id,br.label,b.moved_on,b.machine,
-    b.godown_barrel_id,gb.label,b.seed_cost_per_kg,b.jaggery_cost,b.source
+    b.godown_barrel_id,gb.label,b.seed_cost_per_kg,b.jaggery_cost,b.source,b.edited_at,b.edited_by
     FROM pressing_batches b LEFT JOIN barrels br ON br.id=b.barrel_id LEFT JOIN godown_barrels gb ON gb.id=b.godown_barrel_id";
 
 fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -829,12 +829,13 @@ fn batch_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "barrelLabel": r.get::<_, Option<String>>(17)?, "movedOn": r.get::<_, Option<String>>(18)?, "machine": r.get::<_, String>(19)?,
         "godownBarrelId": godown, "godownBarrelLabel": r.get::<_, Option<String>>(21)?, "normKgPerL": kg_per_l, "oilKgPerL": density,
         "seedCostPerKg": r.get::<_, Option<i64>>(22)?, "jaggeryCost": r.get::<_, Option<i64>>(23)?, "source": r.get::<_, String>(24)?,
+        "editedAt": r.get::<_, Option<String>>(25)?, "editedBy": r.get::<_, Option<String>>(26)?,
         "metrics": pressing_metrics(seed_g, clean, jag, oil, cake, kg_per_l, density),
     }))
 }
 
 pub fn list_pressing_batches(conn: &Connection) -> Result<Vec<Value>> {
-    let mut st = conn.prepare(&format!("{BATCH_SELECT} ORDER BY b.at DESC, b.id DESC LIMIT 1000"))?;
+    let mut st = conn.prepare(&format!("{BATCH_SELECT} WHERE b.status='active' ORDER BY b.at DESC, b.id DESC LIMIT 1000"))?;
     let v = st.query_map([], batch_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
 }
@@ -845,7 +846,7 @@ fn get_batch(conn: &Connection, id: i64) -> Result<Value> {
 
 /// CoreApi `listProduction` (plain kg / litres, as the dashboard shows them).
 pub fn list_production(conn: &Connection) -> Result<Vec<Value>> {
-    let mut st = conn.prepare("SELECT id,at,seed,seed_g,oil_raw_ml,cake_g,barrel_id FROM pressing_batches ORDER BY at DESC, id DESC LIMIT 200")?;
+    let mut st = conn.prepare("SELECT id,at,seed,seed_g,oil_raw_ml,cake_g,barrel_id FROM pressing_batches WHERE status='active' ORDER BY at DESC, id DESC LIMIT 200")?;
     let v = st
         .query_map([], |r| {
             let seed: String = r.get(2)?;
@@ -910,8 +911,17 @@ pub fn create_pressing_batch_at(conn: &mut Connection, d: &PressingDraft, now: c
     Ok(out)
 }
 
-/// The pressing batch inside the caller's transaction (the caller commits): used by the Production screen and the mill daily sheet.
-pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::DateTime<Local>) -> Result<Value> {
+/// What a pressing draft was checked against: the seed, machine and the items and godown barrel it touches.
+struct Checked {
+    base: &'static SeedBase,
+    machine: String,
+    jaggery_id: Option<String>,
+    cake_id: Option<String>,
+    godown: Option<String>,
+}
+
+/// Every rule a pressing batch must pass (seed in stock, jaggery, barrel that can take the oil). Used when pressing and when correcting.
+fn check_draft(tx: &Connection, d: &PressingDraft) -> Result<Checked> {
     let Some(base) = seed_base(&d.seed) else { return invalid("Choose the seed.") };
     if d.seed_kg <= 0 {
         return invalid("Enter the seed weight.");
@@ -943,22 +953,44 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
     } else {
         None
     };
-    let cake_id = if d.cake_kg > 0 {
-        Some(crate::mill::ensure_punnaku_item(tx, base.key, &machine)?)
-    } else {
-        None
-    };
+    let cake_id = if d.cake_kg > 0 { Some(crate::mill::ensure_punnaku_item(tx, base.key, &machine)?) } else { None };
     let godown = match d.godown_barrel_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(id) => Some(crate::godown::check_fill(tx, id, &d.seed, d.oil_raw_l)?),
         None => None,
     };
+    Ok(Checked { base, machine, jaggery_id, cake_id, godown })
+}
+
+/// The ledger rows of a batch: oil into the godown barrel, seed (and jaggery) out, cake in.
+fn post_batch_effects(tx: &Connection, now: chrono::DateTime<Local>, bid: i64, number: &str, c: &Checked, d: &PressingDraft, suffix: &str) -> Result<()> {
+    let at = iso(now);
+    if let Some(g) = &c.godown {
+        tx.execute("UPDATE pressing_batches SET godown_barrel_id=?1 WHERE id=?2", params![g, bid])?;
+        crate::godown::fill(tx, now, g, "press", d.oil_raw_l, "pressing", &bid.to_string(), &format!("Oil from {number}{suffix}"))?;
+    } else {
+        tx.execute("UPDATE pressing_batches SET godown_barrel_id=NULL WHERE id=?1", params![bid])?;
+    }
+    post_movement(tx, &at, c.base.rm, "production", -d.seed_kg, "pressing", &bid.to_string(), &format!("Pressed in {number}{suffix}"), OFFICE)?;
+    if let Some(j) = &c.jaggery_id {
+        post_movement(tx, &at, j, "production", -d.jaggery_kg, "pressing", &bid.to_string(), &format!("Jaggery used in {number}{suffix}"), OFFICE)?;
+    }
+    if let Some(ck) = &c.cake_id {
+        post_movement(tx, &at, ck, "production", d.cake_kg, "pressing", &bid.to_string(), &format!("Oil cake from {number}{suffix}"), OFFICE)?;
+    }
+    Ok(())
+}
+
+/// The pressing batch inside the caller's transaction (the caller commits): used by the Production screen and the mill daily sheet.
+pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::DateTime<Local>) -> Result<Value> {
+    let c = check_draft(tx, d)?;
+    let base = c.base;
     let norm = seed_norm(tx, &d.seed);
     // The seed price and jaggery cost of the day, stamped so cost per litre uses the last purchase price.
     let seed_cost: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [base.rm], |r| r.get(0))?;
-    let jaggery_cost: i64 = match &jaggery_id {
+    let jaggery_cost: i64 = match &c.jaggery_id {
         Some(j) => {
-            let c: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [j], |r| r.get(0))?;
-            (c * d.jaggery_kg + 500) / 1000
+            let cost: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [j], |r| r.get(0))?;
+            (cost * d.jaggery_kg + 500) / 1000
         }
         None => 0,
     };
@@ -971,25 +1003,171 @@ pub fn create_pressing_in_tx(tx: &Connection, d: &PressingDraft, now: chrono::Da
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         params![
             number, PRESS_SERIES, fy, seq, iso(now), db::day_of(now), d.seed, d.seed_kg, d.cleaning_loss_kg, d.jaggery_kg, d.oil_raw_l,
-            d.cake_kg, d.chekku.trim(), d.operator.trim(), iso(ready), norm.kg_per_l.to_string(), norm.density.to_string(), machine
+            d.cake_kg, d.chekku.trim(), d.operator.trim(), iso(ready), norm.kg_per_l.to_string(), norm.density.to_string(), c.machine
         ],
     )?;
     let bid = tx.last_insert_rowid();
     tx.execute("UPDATE pressing_batches SET seed_cost_per_kg=?1, jaggery_cost=?2 WHERE id=?3", params![seed_cost, jaggery_cost, bid])?;
-    let at = iso(now);
-    if let Some(g) = &godown {
-        tx.execute("UPDATE pressing_batches SET godown_barrel_id=?1 WHERE id=?2", params![g, bid])?;
-        crate::godown::fill(tx, now, g, "press", d.oil_raw_l, "pressing", &bid.to_string(), &format!("Oil from {number}"))?;
-    }
-    post_movement(tx, &at, base.rm, "production", -d.seed_kg, "pressing", &bid.to_string(), &format!("Pressed in {number}"), OFFICE)?;
-    if let Some(j) = &jaggery_id {
-        post_movement(tx, &at, j, "production", -d.jaggery_kg, "pressing", &bid.to_string(), &format!("Jaggery used in {number}"), OFFICE)?;
-    }
-    if let Some(c) = &cake_id {
-        post_movement(tx, &at, c, "production", d.cake_kg, "pressing", &bid.to_string(), &format!("Oil cake from {number}"), OFFICE)?;
-    }
-    audit(tx, now, OFFICE, "create", "pressing_batch", &number, &format!("{} kg {} ({machine}), {} L oil", d.seed_kg / 1000, base.label, d.oil_raw_l / 1000))?;
+    post_batch_effects(tx, now, bid, &number, &c, d, "")?;
+    audit(tx, now, OFFICE, "create", "pressing_batch", &number, &format!("{} kg {} ({}), {} L oil", d.seed_kg / 1000, base.label, c.machine, d.oil_raw_l / 1000))?;
     get_batch(tx, bid)
+}
+
+// ---------- corrections (owner and admin only): reversal + re-post, never an update of a ledger ----------
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PressingEdit {
+    pub id: String,
+    #[serde(flatten)]
+    pub draft: PressingDraft,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PressingDelete {
+    pub id: String,
+}
+
+struct SavedBatch {
+    number: String,
+    at: String,
+    day: String,
+    seed: String,
+    machine: String,
+    seed_g: i64,
+    clean_g: i64,
+    jag_g: i64,
+    oil_ml: i64,
+    cake_g: i64,
+    godown: Option<String>,
+    store_barrel: Option<String>,
+    status: String,
+    jaggery_cost: Option<i64>,
+}
+
+fn load_batch(tx: &Connection, id: &str) -> Result<(i64, SavedBatch)> {
+    let Some(bid) = parse_id("pb", id) else { return invalid("Batch not found.") };
+    let b = tx
+        .query_row(
+            "SELECT number,at,day,seed,machine,seed_g,cleaning_loss_g,jaggery_g,oil_raw_ml,cake_g,godown_barrel_id,barrel_id,status,jaggery_cost FROM pressing_batches WHERE id=?1",
+            [bid],
+            |r| {
+                Ok(SavedBatch {
+                    number: r.get(0)?, at: r.get(1)?, day: r.get(2)?, seed: r.get(3)?, machine: r.get(4)?, seed_g: r.get(5)?, clean_g: r.get(6)?,
+                    jag_g: r.get(7)?, oil_ml: r.get(8)?, cake_g: r.get(9)?, godown: r.get(10)?, store_barrel: r.get(11)?, status: r.get(12)?, jaggery_cost: r.get(13)?,
+                })
+            },
+        )
+        .optional()?;
+    let Some(b) = b else { return invalid("Batch not found.") };
+    if b.status != "active" {
+        return invalid("This batch was already deleted.");
+    }
+    Ok((bid, b))
+}
+
+/// Post the reversing rows of a batch, dated on its original moment, after checking that the oil can come back out cleanly.
+fn reverse_batch(tx: &Connection, bid: i64, b: &SavedBatch) -> Result<()> {
+    let what = format!("Batch {}", b.number);
+    if b.store_barrel.is_some() {
+        return invalid(format!("{what} was moved into a store barrel (the old way, before godown barrels), so it cannot be changed."));
+    }
+    let Some(base) = seed_base(&b.seed) else { return invalid("Unknown seed on this batch.") };
+    if let Some(g) = &b.godown {
+        crate::godown::check_reversible(tx, g, b.oil_ml, &what)?;
+    }
+    let cake_id = if b.cake_g > 0 { Some(crate::mill::ensure_punnaku_item(tx, base.key, &b.machine)?) } else { None };
+    if let Some(ck) = &cake_id {
+        let have: i64 = tx.query_row("SELECT stock FROM items WHERE id=?1", [ck], |r| r.get(0))?;
+        if have < b.cake_g {
+            return invalid(format!("{what} cannot be changed: its oil cake ({} kg) has already been sold or used, only {} kg is in stock.", fmt_kg(b.cake_g), fmt_kg(have)));
+        }
+    }
+    let when = crate::db::parse_iso(&b.at).unwrap_or_else(Local::now);
+    let at = &b.at;
+    let ref_id = bid.to_string();
+    let note = format!("Correction of {}", b.number);
+    post_movement(tx, at, base.rm, "production", b.seed_g, "pressing", &ref_id, &note, OFFICE)?;
+    if b.jag_g > 0 {
+        if let Some(j) = find_item_by_name(tx, JAGGERY_ITEM)? {
+            post_movement(tx, at, &j, "production", b.jag_g, "pressing", &ref_id, &note, OFFICE)?;
+        }
+    }
+    if let Some(ck) = &cake_id {
+        post_movement(tx, at, ck, "production", -b.cake_g, "pressing", &ref_id, &note, OFFICE)?;
+    }
+    if let Some(g) = &b.godown {
+        crate::godown::reverse_fill(tx, when, g, "press", b.oil_ml, "pressing", &ref_id, &note)?;
+    }
+    Ok(())
+}
+
+fn describe_batch(b: &SavedBatch) -> String {
+    format!(
+        "{} on {} ({}): {} kg {} ({}), cleaning {} kg, jaggery {} kg, oil {} L, cake {} kg, barrel {}",
+        b.number, b.at, b.day, b.seed_g / 1000, b.seed, b.machine, b.clean_g / 1000, b.jag_g / 1000, b.oil_ml / 1000, b.cake_g / 1000, b.godown.as_deref().unwrap_or("none")
+    )
+}
+
+/// Delete a saved batch: the reversing stock and godown rows are posted; the batch is marked deleted and leaves every list.
+/// Its number is never used again and everything stays in the audit log.
+pub fn delete_pressing_batch(conn: &mut Connection, d: &PressingDelete) -> Result<Value> {
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (bid, b) = load_batch(&tx, &d.id)?;
+    reverse_batch(&tx, bid, &b)?;
+    tx.execute("UPDATE pressing_batches SET status='deleted', deleted_at=?1, deleted_by=?2 WHERE id=?3", params![iso(now), db::actor_or(OFFICE), bid])?;
+    audit(&tx, now, OFFICE, "delete", "pressing_batch", &b.number, &format!("deleted: {}", describe_batch(&b)))?;
+    tx.commit()?;
+    Ok(json!({ "id": d.id, "number": b.number, "deleted": true }))
+}
+
+/// Edit a saved batch (date, operator, machine, seed, oil, cake, vellam, godown barrel): reverse the old postings on the original date,
+/// then post the corrected ones on the new date, all in one transaction. A refusal leaves everything as it was.
+pub fn edit_pressing_batch(conn: &mut Connection, e: &PressingEdit) -> Result<Value> {
+    let now = Local::now();
+    let d = &e.draft;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (bid, b) = load_batch(&tx, &e.id)?;
+    if d.seed != b.seed {
+        return invalid("The seed of a saved batch cannot be changed. Delete the batch and enter it again.");
+    }
+    let at = if d.day.as_deref().map(str::trim).unwrap_or("").is_empty() { crate::db::parse_iso(&b.at).unwrap_or(now) } else { db::entry_time(d.day.as_deref(), d.time.as_deref())? };
+    if d.operator.trim().is_empty() {
+        return invalid("Choose the operator.");
+    }
+    reverse_batch(&tx, bid, &b)?;
+    let c = check_draft(&tx, d)?;
+    let norm = seed_norm(&tx, &d.seed);
+    let jaggery_cost: i64 = match (&c.jaggery_id, b.jaggery_cost) {
+        (Some(_), Some(old)) if b.jag_g > 0 => (old * d.jaggery_kg + b.jag_g / 2) / b.jag_g,
+        (Some(j), _) => {
+            let cost: i64 = tx.query_row("SELECT cost FROM items WHERE id=?1", [j], |r| r.get(0))?;
+            (cost * d.jaggery_kg + 500) / 1000
+        }
+        (None, _) => 0,
+    };
+    tx.execute(
+        "UPDATE pressing_batches SET at=?1, day=?2, seed_g=?3, cleaning_loss_g=?4, jaggery_g=?5, oil_raw_ml=?6, cake_g=?7, chekku=?8, operator=?9,
+         settle_ready_on=?10, machine=?11, jaggery_cost=?12, edited_at=?13, edited_by=?14 WHERE id=?15",
+        params![
+            iso(at), db::day_of(at), d.seed_kg, d.cleaning_loss_kg, d.jaggery_kg, d.oil_raw_l, d.cake_kg, d.chekku.trim(), d.operator.trim(),
+            iso(at + Duration::days(norm.settle_days)), c.machine, jaggery_cost, iso(now), db::actor_or(OFFICE), bid
+        ],
+    )?;
+    post_batch_effects(&tx, at, bid, &b.number, &c, d, " (corrected)")?;
+    audit(
+        &tx, now, OFFICE, "edit", "pressing_batch", &b.number,
+        &format!(
+            "was {}; now {}: {} kg, cleaning {} kg, jaggery {} kg, oil {} L, cake {} kg, barrel {}, operator {}",
+            describe_batch(&b), iso(at), d.seed_kg / 1000, d.cleaning_loss_kg / 1000, d.jaggery_kg / 1000, d.oil_raw_l / 1000, d.cake_kg / 1000,
+            c.godown.as_deref().unwrap_or("none"), d.operator.trim()
+        ),
+    )?;
+    let out = get_batch(&tx, bid)?;
+    tx.commit()?;
+    Ok(out)
 }
 
 /// The pressing grid: every complete row becomes one batch, all in ONE transaction (all rows or none).
@@ -1282,7 +1460,7 @@ pub fn create_pack_run_at(conn: &mut Connection, d: &PackRunDraft, now: chrono::
 
 /// The pressing batches of one day (Mill daily sheet).
 pub(crate) fn batches_on(conn: &Connection, day: &str) -> Result<Vec<Value>> {
-    let mut st = conn.prepare(&format!("{BATCH_SELECT} WHERE b.day=?1 ORDER BY b.at, b.id"))?;
+    let mut st = conn.prepare(&format!("{BATCH_SELECT} WHERE b.status='active' AND b.day=?1 ORDER BY b.at, b.id"))?;
     let v = st.query_map([day], batch_json)?.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(v)
 }

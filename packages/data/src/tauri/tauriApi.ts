@@ -60,7 +60,7 @@ export const REAL_METHODS = [
   'setItemsGst', 'setItemsBrand', 'listItemsPage', 'itemMovements', 'listCategoriesWithCounts', 'addCategory', 'renameCategory', 'deleteCategory', 'moveCategory',
   'listBrands', 'addBrand', 'renameBrand', 'deleteBrand', 'moveBrand', 'createAdjustment', 'listAdjustments', 'startStockTake', 'postStockTake',
   'searchPurchasable', 'listGrns', 'getGrn', 'createGrn', 'listSupplierSummaries', 'getSupplierLedger', 'saveSupplier', 'recordSupplierPayment',
-  'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'createPressingBatches', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
+  'listSeedProfiles', 'saveSeedNorms', 'listPressingBatches', 'createPressingBatch', 'createPressingBatches', 'editPressingBatch', 'deletePressingBatch', 'moveBatchToBarrel', 'listBarrels', 'listPackTargets',
   'listPackRuns', 'createPackRun',
   'listSalesBills', 'salesFilterOptions', 'listCustomerRows', 'getCustomerProfile', 'saveCustomer', 'setCustomerCredit', 'getCustomerWallet', 'listPointsHistory', 'pointsOverview', 'listPointsCustomers', 'getPointsLedger', 'pointsExpiring', 'setLoyaltyGoLive', 'pointsReport', 'listReceivables', 'getStatement',
   'recordCollection', 'logReminder', 'listRoles', 'saveRoles', 'listUserAccounts', 'saveUserAccount', 'resetUserPin', 'getSettingsBundle',
@@ -69,7 +69,7 @@ export const REAL_METHODS = [
   'getMillSheet', 'saveMillSheet', 'closeMillSheet', 'getMillDay', 'saveMillDay', 'closeMillDay', 'recordJobWork', 'listJobWork', 'listMillSheets', 'getUiPref', 'setUiPref', 'printLabels', 'labelPreview', 'getHardware',
   'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
   'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
-  'listOutsourcedOil', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
+  'listOutsourcedOil', 'editOutsourcedOil', 'deleteOutsourcedOil', 'deleteStickReading', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -173,6 +173,8 @@ export function createTauriApi(): Api {
     listPressingBatches: () => call<PressingBatch[]>('listPressingBatches'),
     createPressingBatch: (draft: PressingDraft) => call<PressingBatch>('createPressingBatch', draft),
     createPressingBatches: (input: PressingBatchesInput) => call<PressingBatch[]>('createPressingBatches', input),
+    editPressingBatch: (input) => call<PressingBatch>('editPressingBatch', input),
+    deletePressingBatch: (input) => call<{ id: string; number: string; deleted: true }>('deletePressingBatch', input),
     moveBatchToBarrel: (draft: MoveToBarrelDraft) => call<PressingBatch>('moveBatchToBarrel', draft),
     listBarrels: () => call<Barrel[]>('listBarrels'),
     listPackTargets: (barrelId: string) => call<PackTarget[]>('listPackTargets', barrelId),
@@ -253,6 +255,9 @@ export function createTauriApi(): Api {
     setGodownStatus: (input: StatusInput) => call<GodownBarrel>('setGodownStatus', input),
     recordStickReading: (input: StickInput) => call<GodownBarrel>('recordStickReading', input),
     recordOutsourcedOil: (input: OutsourcedInput) => call<OutsourcedOil>('recordOutsourcedOil', input),
+    editOutsourcedOil: (input) => call<OutsourcedOil>('editOutsourcedOil', input),
+    deleteOutsourcedOil: (input) => call<{ id: string; number: string; deleted: true }>('deleteOutsourcedOil', input),
+    deleteStickReading: (input) => call<{ id: string; deleted: true }>('deleteStickReading', input),
     listOutsourcedOil: (limit?: number) => call<OutsourcedOil[]>('listOutsourcedOil', limit ?? null),
     transferToStore: (input: TransferInput) => call<GodownTransfer>('transferToStore', input),
     listGodownTransfers: (limit?: number) => call<GodownTransfer[]>('listGodownTransfers', limit ?? null),

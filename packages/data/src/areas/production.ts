@@ -13,7 +13,7 @@ import { buildMillAnalysis, type MillAnalysis, type MillAnalysisQuery } from './
 
 export type GodownStatus = 'empty' | 'filling' | 'settling' | 'ready';
 
-export interface GodownReading { at: string; measuredL: Milli; systemL: Milli; varianceL: Milli; note?: string; by?: string }
+export interface GodownReading { id?: string; at: string; measuredL: Milli; systemL: Milli; varianceL: Milli; note?: string; by?: string }
 
 export interface GodownBarrel {
   id: string;
@@ -47,6 +47,8 @@ export interface GodownTransfer {
   id: string; number: string; date: string; oil: SeedType; oilName: string; barrelId: string; barrelLabel: string;
   itemId: string; itemName: string; litresL: Milli; storeBarrelId?: string | null; note: string; by?: string;
 }
+export interface OutsourcedEditInput extends OutsourcedInput { id: string }
+
 export interface TransferInput { barrelId: string; itemId: string; litresL: Milli; storeBarrelId?: string; note?: string; day?: string; time?: string }
 
 export interface AddBarrelsInput { oil: SeedType; count: number; capacityL?: Milli; day?: string; time?: string }
@@ -86,6 +88,11 @@ export interface ProductionApi {
   recordStickReading(input: StickInput): Promise<GodownBarrel>;
   recordOutsourcedOil(input: OutsourcedInput): Promise<OutsourcedOil>;
   listOutsourcedOil(limit?: number): Promise<OutsourcedOil[]>;
+  /** Owner and admin only (reversal + re-post). Refused when the oil has moved on from the barrel. */
+  editOutsourcedOil(input: OutsourcedEditInput): Promise<OutsourcedOil>;
+  deleteOutsourcedOil(input: { id: string }): Promise<{ id: string; number: string; deleted: true }>;
+  /** Owner and admin only: voids the latest stick reading of a barrel and reverses its variance */
+  deleteStickReading(input: { id: string }): Promise<{ id: string; deleted: true }>;
   /** Settled oil from a godown barrel to a store loose-oil item (adds to its stock) */
   transferToStore(input: TransferInput): Promise<GodownTransfer>;
   listGodownTransfers(limit?: number): Promise<GodownTransfer[]>;
@@ -156,12 +163,14 @@ export function createProductionMock(store: MockStore): ProductionApi {
   };
   store.godown = state;
 
+  const voided = new Set<string>();
+  const deletedGp = new Set<string>();
   const refresh = (b: GodownBarrel): GodownBarrel => {
     const st = stored.get(b.id) ?? 'empty';
     b.storedStatus = st;
     b.status = godownStatus({ levelL: b.levelL, settleStartedOn: b.settleStartedOn, settleDays: b.settleDays, stored: st });
     b.readyOn = b.settleStartedOn ? new Date(new Date(b.settleStartedOn).getTime() + b.settleDays * DAY).toISOString() : null;
-    b.lastReading = [...state.readings].reverse().find((r) => r.barrelId === b.id) ?? null;
+    b.lastReading = [...state.readings].reverse().find((r) => r.barrelId === b.id && !voided.has(r.id as string)) ?? null;
     return b;
   };
   const byId = (id: string) => state.barrels.find((b) => b.id === id);
@@ -201,7 +210,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
   seedMoves();
   state.barrels.forEach(refresh);
 
-  let gtSeq = 3; let gpSeq = 1;
+  let gtSeq = 3; let gpSeq = 1; let rdSeq = 100;
   const findLoose = (id: string) => store.items.find((i) => i.id === id);
 
   return {
@@ -211,7 +220,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
       return {
         barrel: { ...b },
         ledger: state.moves.filter((m) => m.barrelId === id).sort((a, c) => c.at.localeCompare(a.at)).map(({ barrelId: _b, ref: _r, ...m }) => m),
-        readings: state.readings.filter((r) => r.barrelId === id).sort((a, c) => c.at.localeCompare(a.at)).map(({ barrelId: _b, ...r }) => r),
+        readings: state.readings.filter((r) => r.barrelId === id && !voided.has(r.id as string)).sort((a, c) => c.at.localeCompare(a.at)).map(({ barrelId: _b, ...r }) => r),
       };
     },
     addGodownBarrels: async (d) => {
@@ -258,7 +267,8 @@ export function createProductionMock(store: MockStore): ProductionApi {
       if (d.measuredL < 0) throw new Error('The reading cannot be negative.');
       if (d.measuredL > b.capacityL) throw new Error(`${b.label} holds ${lit(b.capacityL)} L at most. Check the reading.`);
       const variance = d.measuredL - b.levelL;
-      state.readings.push({ barrelId: b.id, at: when.toISOString(), measuredL: d.measuredL, systemL: b.levelL, varianceL: variance, note: d.note ?? '' });
+      rdSeq += 1;
+      state.readings.push({ id: `gr${rdSeq}`, barrelId: b.id, at: when.toISOString(), measuredL: d.measuredL, systemL: b.levelL, varianceL: variance, note: d.note ?? '' });
       if (variance !== 0) post(b, 'stick', variance, `Stick ${lit(d.measuredL)} L, entries ${lit(b.levelL - variance)} L`, undefined, when.toISOString());
       if (b.levelL === 0) { stored.set(b.id, 'empty'); b.filledOn = null; b.settleStartedOn = null; } else if (stored.get(b.id) === 'empty') stored.set(b.id, 'filling');
       return { ...refresh(b) };
@@ -281,7 +291,51 @@ export function createProductionMock(store: MockStore): ProductionApi {
       stored.set(b.id, 'filling'); b.filledOn = b.filledOn ?? when.toISOString(); b.settleStartedOn = null;
       return rec;
     },
-    listOutsourcedOil: async () => [...state.outsourced].sort((a, c) => c.date.localeCompare(a.date)),
+    listOutsourcedOil: async () => state.outsourced.filter((o) => !deletedGp.has(o.id)).sort((a, c) => c.date.localeCompare(a.date)),
+    editOutsourcedOil: async (d) => {
+      const rec = state.outsourced.find((o) => o.id === d.id);
+      if (!rec || deletedGp.has(rec.id)) throw new Error('Oil purchase not found.');
+      if (d.litresL <= 0) throw new Error('Enter the litres bought.');
+      const old = refresh(need(rec.barrelId));
+      if (old.status === 'settling' || old.status === 'ready') throw new Error(`Oil purchase ${rec.number} cannot be changed: ${old.label} is ${old.status}, so the oil has moved on. Reopen the barrel first if settling was started by mistake.`);
+      if (old.levelL < rec.litresL) throw new Error(`Oil purchase ${rec.number} cannot be changed: ${old.label} holds only ${lit(old.levelL)} L now, so some of that oil has already left the barrel.`);
+      const when = d.day ? entryDate(d.day, d.time) : new Date(rec.date);
+      post(old, 'outsourced', -rec.litresL, `Correction of ${rec.number}`, undefined, rec.date);
+      if (old.levelL === 0) { stored.set(old.id, 'empty'); old.filledOn = null; }
+      const b = refresh(need(d.barrelId));
+      const supplier = d.supplierId ? store.suppliers.find((s) => s.id === d.supplierId)?.name : d.supplierName?.trim();
+      const refuse = (m: string) => { post(old, 'outsourced', rec.litresL, `Correction of ${rec.number}`, undefined, rec.date); stored.set(old.id, 'filling'); throw new Error(m); };
+      if (!supplier) refuse('Enter the manufacturer or supplier you bought the oil from.');
+      if (b.status === 'settling' || b.status === 'ready') refuse(`${b.label} is ${b.status} and cannot take fresh oil. Pick a barrel that is filling or empty.`);
+      if (b.levelL + d.litresL > b.capacityL) refuse(`${b.label} has room for only ${lit(b.capacityL - b.levelL)} L.`);
+      Object.assign(rec, { barrelId: b.id, barrelLabel: b.label, oil: b.oil, oilName: b.oilName, supplierId: d.supplierId ?? null, supplierName: supplier as string, litresL: d.litresL, cost: d.cost, ratePerL: Math.round((d.cost * 1000) / d.litresL), note: d.note ?? '', date: when.toISOString() });
+      post(b, 'outsourced', d.litresL, `Outsourced oil ${rec.number} from ${supplier} (corrected)`, undefined, when.toISOString());
+      stored.set(b.id, 'filling'); b.filledOn = b.filledOn ?? when.toISOString(); b.settleStartedOn = null;
+      return rec;
+    },
+    deleteOutsourcedOil: async ({ id }) => {
+      const rec = state.outsourced.find((o) => o.id === id);
+      if (!rec || deletedGp.has(rec.id)) throw new Error('Oil purchase not found.');
+      const b = refresh(need(rec.barrelId));
+      if (b.status === 'settling' || b.status === 'ready') throw new Error(`Oil purchase ${rec.number} cannot be changed: ${b.label} is ${b.status}, so the oil has moved on. Reopen the barrel first if settling was started by mistake.`);
+      if (b.levelL < rec.litresL) throw new Error(`Oil purchase ${rec.number} cannot be changed: ${b.label} holds only ${lit(b.levelL)} L now, so some of that oil has already left the barrel.`);
+      post(b, 'outsourced', -rec.litresL, `Correction of ${rec.number}`, undefined, rec.date);
+      if (b.levelL === 0) { stored.set(b.id, 'empty'); b.filledOn = null; b.settleStartedOn = null; }
+      deletedGp.add(id);
+      return { id, number: rec.number, deleted: true as const };
+    },
+    deleteStickReading: async ({ id }) => {
+      const r = state.readings.find((x) => x.id === id && !voided.has(x.id as string));
+      if (!r) throw new Error('Reading not found.');
+      const later = state.readings.some((x) => x.barrelId === r.barrelId && !voided.has(x.id as string) && x.at > r.at);
+      if (later) throw new Error('A later stick reading exists for this barrel. Delete the later reading first.');
+      const b = need(r.barrelId);
+      if (b.levelL - r.varianceL < 0 || b.levelL - r.varianceL > b.capacityL) throw new Error(`This reading cannot be deleted: ${b.label} has changed since (it holds ${lit(b.levelL)} L now).`);
+      if (r.varianceL !== 0) post(b, 'stick', -r.varianceL, `Correction of stick reading ${id}`, undefined, r.at);
+      if (b.levelL === 0) { stored.set(b.id, 'empty'); b.filledOn = null; b.settleStartedOn = null; }
+      voided.add(id);
+      return { id, deleted: true as const };
+    },
     transferToStore: async (d) => {
       const when = entryDate(d.day, d.time);
       const b = refresh(need(d.barrelId));
@@ -342,7 +396,7 @@ export function createProductionMock(store: MockStore): ProductionApi {
         .filter((c) => c.made > 0);
       return {
         day, seeds, oils, barrels, cake, batches,
-        transfers: state.transfers.filter((t) => inDay(t.date)), outsourced: state.outsourced.filter((o) => inDay(o.date)),
+        transfers: state.transfers.filter((t) => inDay(t.date)), outsourced: state.outsourced.filter((o) => !deletedGp.has(o.id) && inDay(o.date)),
         totals: {
           batches: batches.length, seedInKg: sumM('seedInKg'), cleaningKg: sumM('cleaningKg'), oilL, oilKg: sumM('oilKg'), cakeKg: sumM('cakeKg'), lossKg: sumM('lossKg'),
           lossPct: net > 0 ? (sumM('lossKg') / net) * 100 : 0, kgSeedPerL: oilL > 0 ? net / oilL : 0,

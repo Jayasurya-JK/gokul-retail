@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Flame, TriangleAlert } from 'lucide-react';
 import {
   parseQty, pressingMetrics, type GodownBarrel, type PressingBatch, type SeedProfile, type SeedType,
@@ -8,8 +8,10 @@ import { api } from '../../store';
 import { EntryDate, fmtDate, fmtMilli, fmtNum, normPer100, todayYmd, useEntryDate, useKeys, vsNormText, yieldTextCls, yieldTone } from './common';
 
 /* ---------------- new pressing batch ---------------- */
-export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
-  open: boolean; profiles: SeedProfile[]; barrels: GodownBarrel[]; onClose: () => void; onSaved: (b: PressingBatch) => void;
+const todayYmdOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export function PressingForm({ open, profiles, barrels, edit, onClose, onSaved }: {
+  open: boolean; profiles: SeedProfile[]; barrels: GodownBarrel[]; edit?: PressingBatch | null; onClose: () => void; onSaved: (b: PressingBatch) => void;
 }) {
   const toast = useToast();
   const [seed, setSeed] = useState<SeedType>('groundnut');
@@ -24,17 +26,28 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   const [operator, setOperator] = useState('');
   const entry = useEntryDate();
   const resetEntry = entry.reset;
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
   const [barrelId, setBarrelId] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setSeed('groundnut'); setSeedKg(''); setClean(''); setJag(''); setOil(''); setCake('');
-      setMachine('W'); setChekku('Chekku 1'); setBarrelId(''); setErr(''); resetEntry();
-      void api.getSettingsBundle().then((b) => { setOperators(b.mill.operators); setOperator(b.mill.operators[0] ?? ''); }).catch(() => undefined);
+      const kg = (m: number) => (m ? String(m / 1000) : '');
+      if (edit) {
+        setSeed(edit.seed); setSeedKg(kg(edit.seedKg)); setClean(kg(edit.cleaningLossKg)); setJag(kg(edit.jaggeryKg)); setOil(kg(edit.oilRawL)); setCake(kg(edit.cakeKg));
+        setMachine(edit.machine ?? 'W'); setChekku(edit.chekku || 'Chekku 1'); setBarrelId(edit.godownBarrelId ?? ''); setErr('');
+        const d = new Date(edit.date);
+        entryRef.current.setDay(todayYmdOf(d)); entryRef.current.setTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+        void api.getSettingsBundle().then((b) => { setOperators(b.mill.operators.includes(edit.operator) ? b.mill.operators : [edit.operator, ...b.mill.operators].filter(Boolean)); setOperator(edit.operator); }).catch(() => undefined);
+      } else {
+        setSeed('groundnut'); setSeedKg(''); setClean(''); setJag(''); setOil(''); setCake('');
+        setMachine('W'); setChekku('Chekku 1'); setBarrelId(''); setErr(''); resetEntry();
+        void api.getSettingsBundle().then((b) => { setOperators(b.mill.operators); setOperator(b.mill.operators[0] ?? ''); }).catch(() => undefined);
+      }
     }
-  }, [open, resetEntry]);
+  }, [open, resetEntry, edit]);
 
   const prof = profiles.find((p) => p.seed === seed);
   const input = useMemo(() => ({
@@ -46,8 +59,8 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
 
   // Only a barrel of the same oil that is still filling (or empty) can take this batch.
   const fillable = useMemo(
-    () => barrels.filter((b) => b.active && b.oil === seed && (b.status === 'filling' || b.status === 'empty')),
-    [barrels, seed],
+    () => barrels.filter((b) => b.active && b.oil === seed && (b.status === 'filling' || b.status === 'empty' || b.id === edit?.godownBarrelId)),
+    [barrels, seed, edit],
   );
   useEffect(() => {
     if (!open) return;
@@ -55,7 +68,8 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
   }, [open, fillable]);
 
   const barrel = fillable.find((b) => b.id === barrelId) ?? null;
-  const freeL = barrel ? barrel.capacityL - barrel.levelL : 0;
+  const ownL = (b: GodownBarrel | null) => (edit && b && b.id === edit.godownBarrelId ? edit.oilRawL : 0);
+  const freeL = barrel ? barrel.capacityL - barrel.levelL + ownL(barrel) : 0;
   const overFill = barrel !== null && input.oilRawL > freeL;
 
   const save = async () => {
@@ -66,10 +80,11 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
     if (input.oilRawL > freeL) { setErr(`${barrel.label} has room for only ${fmtMilli(freeL)} L. Pick another barrel or record a stick reading first.`); return; }
     setBusy(true); setErr('');
     try {
-      const b = await api.createPressingBatch({ ...input, chekku, operator, machine, godownBarrelId: barrel.id, ...entry.when });
+      const body = { ...input, chekku, operator, machine, godownBarrelId: barrel.id, ...entry.when };
+      const b = edit ? await api.editPressingBatch({ ...body, id: edit.id }) : await api.createPressingBatch(body);
       toast.show({
         tone: 'success',
-        title: `Batch ${b.number} recorded`,
+        title: edit ? `Batch ${b.number} corrected` : `Batch ${b.number} recorded`,
         detail: `${fmtMilli(b.oilRawL)} L raw ${b.oilName} into ${barrel.label}. It settles before the transfer to store.`,
       });
       onSaved(b); onClose();
@@ -82,8 +97,8 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
 
   return (
     <Dialog
-      open={open} onOpenChange={(o) => !o && onClose()} size="lg" title="Batch with details" description="Record what went into the chekku and what came out, on the day it happened."
-      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !barrel || overFill} onClick={() => void save()}>Save batch</Button></>}
+      open={open} onOpenChange={(o) => !o && onClose()} size="lg" title={edit ? `Edit batch ${edit.number}` : 'Batch with details'} description={edit ? 'The old postings are reversed on the original date and the corrected ones are posted.' : 'Record what went into the chekku and what came out, on the day it happened.'}
+      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" icon={<Check size={15} />} kbd="Ctrl+S" disabled={busy || !barrel || overFill} onClick={() => void save()}>{edit ? 'Save changes' : 'Save batch'}</Button></>}
     >
       <div className="grid grid-cols-[1fr_270px] gap-6">
         <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
@@ -93,8 +108,8 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
             <div className="mt-1 grid grid-cols-3 gap-2">
               {profiles.map((p) => (
                 <button
-                  key={p.seed} type="button" onClick={() => setSeed(p.seed)} data-autofocus={p.seed === 'groundnut' ? true : undefined}
-                  className={cn('rounded-card border px-3 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-primary/50', seed === p.seed ? 'border-primary bg-primary-soft' : 'border-line bg-surface hover:border-subtle')}
+                  key={p.seed} type="button" disabled={!!edit && p.seed !== edit.seed} onClick={() => setSeed(p.seed)} data-autofocus={p.seed === 'groundnut' ? true : undefined}
+                  className={cn('rounded-card border px-3 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-40', seed === p.seed ? 'border-primary bg-primary-soft' : 'border-line bg-surface hover:border-subtle')}
                 >
                   <div className="text-sm font-semibold text-ink">{p.label}</div>
                   <div className="num text-xs text-muted">{fmtMilli(p.stock, 0)} kg in godown</div>
@@ -142,7 +157,7 @@ export function PressingForm({ open, profiles, barrels, onClose, onSaved }: {
             ) : (
               <div className="mt-1 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
                 {fillable.map((b) => {
-                  const free = b.capacityL - b.levelL;
+                  const free = b.capacityL - b.levelL + ownL(b);
                   const tight = input.oilRawL > 0 && input.oilRawL > free;
                   return (
                     <button

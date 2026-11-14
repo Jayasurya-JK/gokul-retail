@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Factory, Flame, PackageOpen, Plus, Warehouse, Wheat } from 'lucide-react';
+import { Factory, Flame, PackageOpen, Pencil, Plus, Warehouse, Wheat } from 'lucide-react';
 import { type Barrel, type GodownBarrel, type PackRun, type PressingBatch, type SeedProfile, type SeedType } from '@gokul/data';
 import {
   Badge, Button, DataTable, EmptyState, FilterBar, PageHeader, Select, TabPanel, Tabs, cn, type ColumnDef, useRefreshOnFocus
@@ -7,6 +7,7 @@ import {
 import { api } from '../store';
 import { PressingForm } from '../components/purchasing/PressingForm';
 import { PackForm } from '../components/purchasing/PackForm';
+import { DeleteRecord, useCanEditRecords } from '../components/purchasing/DeleteRecord';
 import { JobWorkPane } from '../components/purchasing/JobWorkPane';
 import { GodownPane } from '../components/purchasing/GodownPane';
 import {
@@ -43,7 +44,10 @@ function YieldTrend({ batches, seed, selectedId, norm }: { batches: PressingBatc
 }
 
 /* ---------------- batch detail ---------------- */
-function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all: PressingBatch[]; profiles: SeedProfile[]; onOpenGodown: () => void }) {
+function BatchDetail({ b, all, profiles, onOpenGodown, onEdit, onDeleted }: {
+  b: PressingBatch; all: PressingBatch[]; profiles: SeedProfile[]; onOpenGodown: () => void; onEdit: () => void; onDeleted: () => void;
+}) {
+  const canEdit = useCanEditRecords();
   const m = b.metrics;
   const phase = phaseInfo[b.phase];
   const base = m.netSeedKg + b.jaggeryKg / 1000;
@@ -69,7 +73,18 @@ function BatchDetail({ b, all, profiles, onOpenGodown }: { b: PressingBatch; all
             <div className="text-xs text-subtle">
               {fmtDateYear(b.date)}, {fmtTime(b.date)} - {(b.machine ?? 'W') === 'R' ? 'R · Rotary' : 'W · Wood-pressed'} - {b.chekku} - {b.operator}
             </div>
+            {b.editedAt && <div className="text-[11px] text-subtle">Corrected {fmtDateYear(b.editedAt)}{b.editedBy ? ` by ${b.editedBy}` : ''}</div>}
           </div>
+          {canEdit && (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button size="sm" icon={<Pencil size={13} />} onClick={onEdit}>Edit</Button>
+              <DeleteRecord
+                title={`Delete batch ${b.number}?`}
+                message={`${b.number} (${fmtMilli(b.seedKg, 0)} kg ${b.seedLabel}, ${fmtMilli(b.oilRawL)} L oil) leaves the lists, the analysis and the day sheet. Its seed goes back to stock and its oil and cake come out.`}
+                doneText={`${b.number} deleted`} onConfirm={() => api.deletePressingBatch({ id: b.id })} onDone={onDeleted}
+              />
+            </div>
+          )}
         </div>
         <div className="mt-3" title={`Oil weight is ${fmtNum(m.yieldPct)}% of the clean seed`}>
           <div className="text-xs text-muted">Yield</div>
@@ -264,6 +279,7 @@ export function Production() {
   const [selRun, setSelRun] = useState<string | null>(null);
   const [seedFilter, setSeedFilter] = useState('all');
   const [newBatch, setNewBatch] = useState(false);
+  const [editBatch, setEditBatch] = useState<PressingBatch | null>(null);
   const [newPack, setNewPack] = useState(false);
   const [packBarrel, setPackBarrel] = useState<string | null>(null);
 
@@ -350,7 +366,12 @@ export function Production() {
             />
           </div>
           </div>
-          {batch && <BatchDetail b={batch} all={batches} profiles={profiles} onOpenGodown={() => setTab('godown')} />}
+          {batch && (
+            <BatchDetail
+              b={batch} all={batches} profiles={profiles} onOpenGodown={() => setTab('godown')} onEdit={() => setEditBatch(batch)}
+              onDeleted={() => { setSelBatch(null); setGodownKey((k) => k + 1); void load(); }}
+            />
+          )}
         </TabPanel>
         <TabPanel value="godown" className="flex min-h-0 flex-1 flex-col outline-none data-[state=inactive]:hidden">
           <GodownPane reloadKey={godownKey} onBarrels={setGodownBarrels} selectedId={godownSelId} onSelect={setGodownSelId} />
@@ -376,6 +397,11 @@ export function Production() {
         open={newBatch} profiles={profiles} barrels={godownBarrels}
         onClose={() => setNewBatch(false)}
         onSaved={(b) => { setTab('pressing'); setGodownKey((k) => k + 1); void load({ batch: b.id }); }}
+      />
+      <PressingForm
+        open={editBatch !== null} edit={editBatch} profiles={profiles} barrels={godownBarrels}
+        onClose={() => setEditBatch(null)}
+        onSaved={(b) => { setGodownKey((k) => k + 1); void load({ batch: b.id }); }}
       />
       <PackForm open={newPack} barrels={barrels} initialBarrelId={packBarrel} onClose={() => setNewPack(false)} onSaved={(r) => { setTab('packing'); void load({ run: r.id }); }} />
     </>

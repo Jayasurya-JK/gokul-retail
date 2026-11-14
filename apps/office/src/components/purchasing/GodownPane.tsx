@@ -3,6 +3,7 @@ import { ArrowRightLeft, Check, Flame, Pencil, Plus, RotateCcw, Scale, Timer, Tr
 import type { GodownBarrel, GodownDetail, GodownMove, GodownStatus, GodownTransfer, OutsourcedOil, SeedType } from '@gokul/data';
 import { Badge, Button, EmptyState, Money, cn, useRefreshOnFocus, type Tone } from '@gokul/ui';
 import { api } from '../../store';
+import { DeleteRecord } from './DeleteRecord';
 import { fmtDate, fmtDateYear, fmtMilli, fmtNum, seedColor, SectionLabel, KV } from './common';
 import {
   AddBarrelsDialog, EditBarrelDialog, OutsourcedOilDialog, StatusDialog, StickReadingDialog, TransferToStoreDialog, type StatusAction,
@@ -136,7 +137,7 @@ function OilGroup({ oil, label, barrels, selId, onPick }: {
 }
 
 /* ---------------- detail side panel ---------------- */
-function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, onOutsourced, onTransfer }: {
+function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, onOutsourced, onTransfer, onChanged }: {
   detail: GodownDetail | null;
   loading: boolean;
   transfers: GodownTransfer[] | null;
@@ -145,6 +146,7 @@ function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, on
   onStick: (b: GodownBarrel) => void;
   onOutsourced: () => void;
   onTransfer: (b: GodownBarrel) => void;
+  onChanged: () => void;
 }) {
   if (!detail) {
     return (
@@ -219,11 +221,13 @@ function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, on
             </p>
           ) : (
             <div className="space-y-2">
-              {readings.map((r) => (
+              {readings.map((r, idx) => (
                 <div key={`${r.at}-${r.measuredL}`} className="rounded-card border border-line bg-surface-2 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="num text-sm font-semibold text-ink">{fmtMilli(r.measuredL)} L</span>
-                    <span className="text-[11px] text-muted">{fmtDate(r.at)}</span>
+                    <span className="flex items-center gap-1 text-[11px] text-muted">{fmtDate(r.at)}{r.id && idx === 0 && (
+                      <DeleteRecord title="Delete this stick reading?" message={`The ${fmtMilli(r.measuredL)} L reading of ${fmtDate(r.at)} is removed and its variance is reversed.`} doneText="Stick reading deleted" onConfirm={() => api.deleteStickReading({ id: r.id as string })} onDone={onChanged} />
+                    )}</span>
                   </div>
                   <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-subtle">
                     <span className="num">Entries said {fmtMilli(r.systemL)} L</span>
@@ -301,7 +305,7 @@ function DetailPanel({ detail, loading, transfers, onEdit, onStatus, onStick, on
 }
 
 /* ---------------- bought (outsourced) oil ---------------- */
-function OutsourcedList({ rows, onAdd }: { rows: OutsourcedOil[] | null; onAdd: () => void }) {
+function OutsourcedList({ rows, onAdd, onChanged }: { rows: OutsourcedOil[] | null; onAdd: () => void; onChanged: () => void }) {
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -326,6 +330,7 @@ function OutsourcedList({ rows, onAdd }: { rows: OutsourcedOil[] | null; onAdd: 
                 <div className="num text-sm font-semibold text-ink">{fmtMilli(o.litresL)} L</div>
                 <div className="num text-[11px] text-muted"><Money paise={o.cost} /></div>
               </div>
+              <DeleteRecord title={`Delete ${o.number}?`} message={`${fmtMilli(o.litresL)} L bought from ${o.supplierName} comes out of ${o.barrelLabel}.`} doneText={`${o.number} deleted`} onConfirm={() => api.deleteOutsourcedOil({ id: o.id })} onDone={onChanged} />
             </div>
           ))}
         </div>
@@ -438,7 +443,7 @@ export function GodownPane({ reloadKey = 0, onBarrels, selectedId, onSelect }: {
                   <OilGroup key={g.oil} oil={g.oil} label={g.label} barrels={g.barrels} selId={selId} onPick={pick} />
                 ))
               )}
-              <OutsourcedList rows={outsourced} onAdd={() => setOutsourcing(true)} />
+              <OutsourcedList rows={outsourced} onAdd={() => setOutsourcing(true)} onChanged={() => void refresh()} />
             </div>
           )}
         </div>
@@ -452,6 +457,7 @@ export function GodownPane({ reloadKey = 0, onBarrels, selectedId, onSelect }: {
             onStick={setSticking}
             onOutsourced={() => setOutsourcing(true)}
             onTransfer={setTransferring}
+            onChanged={() => void refresh()}
           />
         )}
       </div>
