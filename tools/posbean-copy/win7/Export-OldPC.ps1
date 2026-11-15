@@ -10,8 +10,11 @@
 #     (dependents first, Stop-Service without -Force), copy every database file found
 #     and every engine data directory into database-files\, verify sizes, then ALWAYS
 #     restart the services in reverse order.
-#   Phase B (POSBean may be running again): copy the D: drive, the POSBean program
-#     folder and the C: user Desktop/Documents folders. Database files are excluded.
+#   Phase B (POSBean may be running again). External disk destination: copy the WHOLE C: drive
+#     (C-drive\) and the WHOLE D: drive (D-drive\) with robocopy /R:0 /W:0. Locked Windows files
+#     are skipped and logged (normal). Fallback (C:\GokulExport): copy D:, the POSBean folder and
+#     Desktop/Documents only, because copying C: would copy the output into itself.
+#     Database files are excluded from all Phase B copies.
 #   ZIP: OldPC-<stamp>-DATABASE.zip (database-files, inventory.txt, verify.txt) and
 #     OldPC-<stamp>-REST.zip (everything else). Made with the Windows shell (Shell.Application).
 #
@@ -54,6 +57,8 @@ $ProgramRegex = 'POSBean|POS|SQL|Firebird|MySQL|Access'
 $PosBeanRegex = 'POSBean'
 $StopTimeoutSec = 90
 $SpaceFactor = 2.2
+# External disk: needed = (C: used + D: used) x 1.1
+$ExternalFactor = 1.1
 $ZipMaxFileBytes = 3.9 * 1GB
 $DbZipItems = @('database-files', 'inventory.txt', 'verify.txt')
 
@@ -281,15 +286,16 @@ function Invoke-Robo {
         [string[]]$Options,
         [string]$FileName = '',
         [string[]]$ExcludeFiles = @(),
-        [string[]]$ExcludeDirs = @()
+        [string[]]$ExcludeDirs = @(),
+        [string]$Retry = '1'
     )
     $list = New-Object System.Collections.ArrayList
     [void]$list.Add($Source)
     [void]$list.Add($Target)
     if ($FileName -ne '') { [void]$list.Add($FileName) }
     foreach ($o in $Options) { [void]$list.Add($o) }
-    [void]$list.Add('/R:1')
-    [void]$list.Add('/W:1')
+    [void]$list.Add('/R:' + $Retry)
+    [void]$list.Add('/W:' + $Retry)
     [void]$list.Add('/NP')
     [void]$list.Add('/TEE')
     [void]$list.Add('/LOG+:' + $script:CopyLog)
@@ -605,7 +611,8 @@ Say ''
 Say 'STEP 2 - Choose where the copy goes' 'Cyan'
 $cFree = [double]$cDisk.FreeSpace
 $needC = ($dbBytes + $dUsedBytes) * $SpaceFactor
-$needExt = ($dUsedBytes + $dbBytes + $posBytes + $userBytes) * 1.2
+$cUsedBytes = [double]($cDisk.Size - $cDisk.FreeSpace)
+$needExt = ($cUsedBytes + $dUsedBytes) * $ExternalFactor
 $scriptDrive = ([string](Split-Path -Qualifier $ScriptDir)).ToUpper()
 $extDisk = $disks | Where-Object { $_.DeviceID -eq $scriptDrive } | Select-Object -First 1
 $toExternal = $false
@@ -632,7 +639,7 @@ if ($toExternal) {
     $destIsExport = $false
     $spaceOk = $true
     $destText = 'the new disk ' + $scriptDrive + ' (the drive this script runs from)'
-    $spaceLine = $scriptDrive + ' free ' + (GB $extDisk.FreeSpace) + ' GB; needs more than ' + (GB $needExt) + ' GB (D: used + databases + POSBean folder + Desktop/Documents, x 1.2).   -> OK'
+    $spaceLine = $scriptDrive + ' free ' + (GB $extDisk.FreeSpace) + ' GB; needs more than ' + (GB $needExt) + ' GB = (C: used ' + (GB $cUsedBytes) + ' GB + D: used ' + (GB $dUsedBytes) + ' GB) x 1.1.   -> OK'
 } else {
     $outName = 'OldPC-' + $stamp
     if (Test-Path -LiteralPath ($ExportRoot + '\' + $outName)) {
@@ -686,13 +693,57 @@ Say ('Output folder: ' + $script:OutDir)
 Say ('Inventory written: ' + $inventoryPath) 'Green'
 
 # ---------- Time estimates ----------
-$phaseBBytes = $dUsedBytes + $posBytes + $userBytes
+if ($toExternal) {
+    $phaseBBytes = $cUsedBytes + $dUsedBytes
+    $phaseBDesc = 'the WHOLE C: drive and the WHOLE D: drive'
+} else {
+    $phaseBBytes = $dUsedBytes + $posBytes + $userBytes
+    $phaseBDesc = 'the D: drive, POSBean folder and Desktop/Documents'
+}
 Say ''
 Say 'TIME ESTIMATE' 'Cyan'
 Say ('Phase A (POSBean closed) copies only the database files: ' + (GB $dbBytes) + ' GB.')
 Say ('   at 30 MB/s (USB 2): about ' + (Get-MinText -Bytes $dbBytes -MBps 30) + '   at 100 MB/s (USB 3): about ' + (Get-MinText -Bytes $dbBytes -MBps 100))
-Say ('Phase B (POSBean may run) copies the D: drive, POSBean folder and Desktop/Documents: about ' + (GB $phaseBBytes) + ' GB.')
+Say ('Phase B (POSBean may run) copies ' + $phaseBDesc + ': about ' + (GB $phaseBBytes) + ' GB.')
 Say ('   at 30 MB/s: about ' + (Get-MinText -Bytes $phaseBBytes -MBps 30) + '   at 100 MB/s: about ' + (Get-MinText -Bytes $phaseBBytes -MBps 100))
+
+# ---------- PRE-CHECK screen (one console screen, for the owner to photograph) ----------
+
+if (-not $WhatIf) { Clear-Host }
+Say '================================ PRE-CHECK ================================' 'Cyan'
+Say ('Windows: ' + $os.Caption + '  (version ' + $os.Version + ')')
+Say ('C: used ' + (GB $cUsedBytes) + ' GB      D: used ' + (GB $dUsedBytes) + ' GB')
+if ($toExternal) {
+    Say ('Destination: ' + $plannedOut + '   (' + $scriptDrive + ' free ' + (GB $extDisk.FreeSpace) + ' GB)')
+} else {
+    Say ('Destination: ' + $plannedOut + '   (C: free ' + (GB $cFree) + ' GB; fallback)')
+}
+Say ('POSBean folders found: ' + $posbeanFolders.Count)
+foreach ($pf in $posbeanFolders) { Say ('   - ' + $pf) }
+Say ('Database services found: ' + $services.Count)
+foreach ($s in $services) { Say ('   ' + $s.Name + '   status ' + $s.State) }
+Say 'Planned stop order (dependents first):'
+if ($StopPlan.Count -eq 0) { Say '   (no database engine is running)' }
+$stopNo = 0
+foreach ($n in $StopPlan) { $stopNo = $stopNo + 1; Say ('   ' + $stopNo + '. ' + $n) }
+Say 'Engine data directories:'
+if ($EngineDirs.Count -eq 0) { Say '   (none)' }
+foreach ($e in $EngineDirs) { Say ('   ' + $e.Service + ' -> ' + $e.Dir) }
+Say ('Database files: ' + $dbFiles.Count + '   total ' + (GB $dbBytes) + ' GB')
+Say '10 largest database files:'
+$topDb = @($dbFiles | Sort-Object -Property Size -Descending | Select-Object -First 10)
+foreach ($t in $topDb) { Say ('   ' + (MB $t.Size) + ' MB   ' + $t.Path) }
+Say ('Time, Phase A (POSBean closed): about ' + (Get-MinText -Bytes $dbBytes -MBps 30) + ' at 30 MB/s, ' + (Get-MinText -Bytes $dbBytes -MBps 100) + ' at 100 MB/s')
+Say ('Time, Phase B (POSBean may run): about ' + (Get-MinText -Bytes $phaseBBytes -MBps 30) + ' at 30 MB/s, ' + (Get-MinText -Bytes $phaseBBytes -MBps 100) + ' at 100 MB/s')
+Say '==========================================================================='
+
+if (-not $WhatIf) {
+    $go = ([string](Read-Host 'PRE-CHECK done. Take a PHOTO of this screen and send it. When you are told to continue, type GO (anything else exits safely)')).Trim()
+    if ($go -cne 'GO') {
+        Say 'Not GO. Exiting safely. Nothing was stopped, copied, zipped or removed.' 'Yellow'
+        exit 0
+    }
+}
 
 # ---------- WHAT-IF: print the plan and stop here ----------
 
@@ -721,17 +772,29 @@ if ($WhatIf) {
     Say ('     - Copy ALL ' + $dbFiles.Count + ' database file(s), ' + (GB $dbBytes) + ' GB, into ' + $plannedOut + '\database-files\<drive>\<original path>, then verify sizes.')
     Say '     - Restart the services in a finally block, then print: BILLING CAN START AGAIN NOW.'
     Say '5. PHASE B (POSBean may run again):'
-    if ($dDisk) {
-        Say ('     - Copy the whole D: drive to ' + $plannedOut + '\D-drive, excluding database file extensions, engine data directories and ' + $ExportRoot + '.')
+    if ($toExternal) {
+        Say ('     - Copy the WHOLE C: drive to ' + $plannedOut + '\C-drive\  (robocopy /E /COPY:DAT /DCOPY:T /R:0 /W:0 /XJ /NP).')
+        Say '          Excluded files: pagefile.sys, hiberfil.sys, swapfile.sys, database file extensions (already in database-files\).'
+        Say ('          Excluded folders: $RECYCLE.BIN, System Volume Information, engine data dirs, ' + $ExportRoot + ', the output folder.')
+        if ($dDisk) {
+            Say ('     - Copy the WHOLE D: drive to ' + $plannedOut + '\D-drive\  with the same options.')
+        } else {
+            Say '     - No D: drive on this PC: skipped.'
+        }
+        Say '     - Skipped locked Windows files are NORMAL. database-files\ is the important part.'
+        Say '     - POSBean program folder(s) and Desktop/Documents are inside C:, so they are copied by the C: copy.'
+        Say '     POSBean program folder(s) found (kept in inventory.txt):'
+        if ($posbeanFolders.Count -eq 0) { Say '          (none found)' }
+        foreach ($pf in $posbeanFolders) { Say ('          - ' + $pf) }
     } else {
-        Say '     - No D: drive on this PC: skipped.'
+        Say ('     - Copy the whole D: drive to ' + $plannedOut + '\D-drive, excluding database file extensions, engine data directories and ' + $ExportRoot + '.')
+        Say ('     - Copy POSBean program folder(s) to ' + $plannedOut + '\posbean-program\, excluding database file extensions:')
+        if ($posbeanFolders.Count -eq 0) { Say '          (none found)' }
+        foreach ($pf in $posbeanFolders) { Say ('          - ' + $pf) }
+        Say ('     - Copy C: user Desktop and Documents to ' + $plannedOut + '\C-user-files\, excluding database file extensions:')
+        if ($userFolders.Count -eq 0) { Say '          (none found)' }
+        foreach ($uf in $userFolders) { Say ('          - ' + $uf.Path) }
     }
-    Say ('     - Copy POSBean program folder(s) to ' + $plannedOut + '\posbean-program\, excluding database file extensions:')
-    if ($posbeanFolders.Count -eq 0) { Say '          (none found)' }
-    foreach ($pf in $posbeanFolders) { Say ('          - ' + $pf) }
-    Say ('     - Copy C: user Desktop and Documents to ' + $plannedOut + '\C-user-files\, excluding database file extensions:')
-    if ($userFolders.Count -eq 0) { Say '          (none found)' }
-    foreach ($uf in $userFolders) { Say ('          - ' + $uf.Path) }
     Say '6. Write README-in-backup.txt and verify.txt (OK / MISSING / SIZE MISMATCH per database file).'
     if ($destIsExport) {
         Say '7. ZIP (next to the folder, in C:\GokulExport):'
@@ -888,39 +951,77 @@ if (-not $phaseAOk) {
 Say ''
 Say '==================== PHASE B: copy the rest (POSBean may be running) ====================' 'Cyan'
 
-Say 'STEP 4 - Copy the whole D: drive (database files excluded: they were live)' 'Cyan'
-if ($dDisk) {
-    $dTarget = Join-Path $script:OutDir 'D-drive'
-    $excDirs = @('$RECYCLE.BIN', 'System Volume Information', $ExportRoot, $script:OutDir)
-    foreach ($e in $EngineDirs) { $excDirs += $e.Dir }
-    $code = Invoke-Robo -Source 'D:\' -Target $dTarget -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $excDirs
-    [void](Test-RoboCode -Code $code -What 'D: copy')
-} else {
-    Say 'No D: drive on this PC. Skipping the D: copy.'
+# Whole-drive copies (external disk): locked Windows files are skipped fast and logged.
+# Robocopy code 8-15 means some files were skipped. That is NORMAL here.
+function Test-WholeCopy {
+    param([int]$Code, [string]$What)
+    if ($Code -lt 8) {
+        Say ($What + ' - done (robocopy code ' + $Code + ', OK).') 'Green'
+        return $true
+    }
+    if ($Code -lt 16) {
+        Say ($What + ' - done. Some files were skipped (robocopy code ' + $Code + '). Skipped locked Windows files are NORMAL. Details are in copy-log.txt.') 'Yellow'
+        return $true
+    }
+    Problem ($What + ' - the copy FAILED (robocopy code ' + $Code + '). Details are in copy-log.txt.')
+    return $false
 }
 
-Say ''
-Say 'STEP 5 - Copy the POSBean program folder(s) and C: Desktop/Documents' 'Cyan'
-$pbIndex = 0
-foreach ($pf in $posbeanFolders) {
-    $pbIndex++
-    $leaf = Split-Path -Path $pf -Leaf
-    $safeLeaf = $leaf -replace '[^A-Za-z0-9._-]', '_'
-    $pbTarget = $script:OutDir + '\posbean-program\' + $pbIndex + '-' + $safeLeaf
-    $pbExc = @($ExportRoot, $script:OutDir)
-    foreach ($e in $EngineDirs) { $pbExc += $e.Dir }
-    $code = Invoke-Robo -Source $pf -Target $pbTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $pbExc
-    [void](Test-RoboCode -Code $code -What ('POSBean program folder ' + $pf))
+$skipSysFiles = @('pagefile.sys', 'hiberfil.sys', 'swapfile.sys')
+$wholeExcFiles = @($LiveExcludeExt + $skipSysFiles)
+$wholeExcDirs = @('$RECYCLE.BIN', 'System Volume Information', $ExportRoot, $script:OutDir)
+foreach ($e in $EngineDirs) { $wholeExcDirs += $e.Dir }
+
+if ($toExternal) {
+    Say 'STEP 4 - Copy the WHOLE C: drive to C-drive\ (database files excluded: they are in database-files\)' 'Cyan'
+    $code = Invoke-Robo -Source 'C:\' -Target (Join-Path $script:OutDir 'C-drive') -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -Retry '0' -ExcludeFiles $wholeExcFiles -ExcludeDirs $wholeExcDirs
+    [void](Test-WholeCopy -Code $code -What 'C: whole-drive copy')
+
+    Say ''
+    Say 'STEP 5 - Copy the WHOLE D: drive to D-drive\ (database files excluded)' 'Cyan'
+    if ($dDisk) {
+        $code = Invoke-Robo -Source 'D:\' -Target (Join-Path $script:OutDir 'D-drive') -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -Retry '0' -ExcludeFiles $wholeExcFiles -ExcludeDirs $wholeExcDirs
+        [void](Test-WholeCopy -Code $code -What 'D: whole-drive copy')
+    } else {
+        Say 'No D: drive on this PC. Skipping the D: copy.'
+    }
+} else {
+    # Fallback (destination is C:\GokulExport): copying all of C: would copy the output into itself,
+    # so only D:, the POSBean folder and Desktop/Documents are copied.
+    Say 'STEP 4 - Copy the whole D: drive (database files excluded: they were live)' 'Cyan'
+    if ($dDisk) {
+        $dTarget = Join-Path $script:OutDir 'D-drive'
+        $excDirs = @('$RECYCLE.BIN', 'System Volume Information', $ExportRoot, $script:OutDir)
+        foreach ($e in $EngineDirs) { $excDirs += $e.Dir }
+        $code = Invoke-Robo -Source 'D:\' -Target $dTarget -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $excDirs
+        [void](Test-RoboCode -Code $code -What 'D: copy')
+    } else {
+        Say 'No D: drive on this PC. Skipping the D: copy.'
+    }
+
+    Say ''
+    Say 'STEP 5 - Copy the POSBean program folder(s) and C: Desktop/Documents' 'Cyan'
+    $pbIndex = 0
+    foreach ($pf in $posbeanFolders) {
+        $pbIndex++
+        $leaf = Split-Path -Path $pf -Leaf
+        $safeLeaf = $leaf -replace '[^A-Za-z0-9._-]', '_'
+        $pbTarget = $script:OutDir + '\posbean-program\' + $pbIndex + '-' + $safeLeaf
+        $pbExc = @($ExportRoot, $script:OutDir)
+        foreach ($e in $EngineDirs) { $pbExc += $e.Dir }
+        $code = Invoke-Robo -Source $pf -Target $pbTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $pbExc
+        [void](Test-RoboCode -Code $code -What ('POSBean program folder ' + $pf))
+    }
+    if ($posbeanFolders.Count -eq 0) {
+        Say 'No POSBean program folder was found. If you know where it is, copy it by hand into posbean-program.' 'Yellow'
+    }
+    foreach ($uf in $userFolders) {
+        $ufTarget = $script:OutDir + '\C-user-files\' + $uf.User + '\' + $uf.Sub
+        $code = Invoke-Robo -Source $uf.Path -Target $ufTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt
+        [void](Test-RoboCode -Code $code -What ('C: ' + $uf.User + ' ' + $uf.Sub))
+    }
+    if ($userFolders.Count -eq 0) { Say 'No Desktop or Documents folders found under C:\Users.' }
 }
-if ($posbeanFolders.Count -eq 0) {
-    Say 'No POSBean program folder was found. If you know where it is, copy it by hand into posbean-program.' 'Yellow'
-}
-foreach ($uf in $userFolders) {
-    $ufTarget = $script:OutDir + '\C-user-files\' + $uf.User + '\' + $uf.Sub
-    $code = Invoke-Robo -Source $uf.Path -Target $ufTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt
-    [void](Test-RoboCode -Code $code -What ('C: ' + $uf.User + ' ' + $uf.Sub))
-}
-if ($userFolders.Count -eq 0) { Say 'No Desktop or Documents folders found under C:\Users.' }
 
 # README in the backup folder
 $readme = @(
@@ -930,8 +1031,11 @@ $readme = @(
     '                 These were copied while POSBean was closed and the database services were stopped.',
     '                 Use these files to read the POSBean data.',
     '',
-    'D-drive\, posbean-program\ and C-user-files\ do NOT contain database files, because those',
+    'C-drive\, D-drive\, posbean-program\ and C-user-files\ do NOT contain database files, because those',
     'database files were live (possibly open) while POSBean could run. The clean copies are in database-files\.',
+    'database-files\ is the important part.',
+    '',
+    'Locked Windows system files that were skipped during the copy are NORMAL. They are listed in copy-log.txt.',
     '',
     'verify.txt lists each database file copy as OK, MISSING or SIZE MISMATCH.',
     'run-log.txt and copy-log.txt hold the full record of the run.'
