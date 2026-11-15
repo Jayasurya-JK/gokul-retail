@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FileText, Printer, ReceiptIndianRupee, Search } from 'lucide-react';
-import { billTitleFor, formatQty, formatRupees, invoiceFromBill, needsFullInvoice, placeText, printNumber, supplierFromSettings, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
+import { billTitleFor, formatQty, formatRupees, invoiceFromBill, needsFullInvoice, placeText, printNumber, supplierFromSettings, type GstSlab, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
 import {
   Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, InvoiceDialog, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, TaxInvoicePreview, Tabs, TabPanel,
   dateRangePresets, useToast, type ColumnDef, type DateRange, useRefreshOnFocus
@@ -98,14 +98,7 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
             ))}
           </div>
           <SectionLabel>GST summary</SectionLabel>
-          <div className="mb-4 overflow-hidden rounded-control border border-line text-xs">
-            <div className="grid grid-cols-4 bg-surface-2 px-3 py-1.5 font-semibold text-muted"><span>Slab</span><span className="text-right">Taxable</span><span className="text-right">CGST</span><span className="text-right">SGST</span></div>
-            {t.slabs.map((s) => (
-              <div key={s.rate} className="grid grid-cols-4 border-t border-line/70 px-3 py-1.5 num">
-                <span>{s.rate}%</span><span className="text-right">{formatRupees(s.taxable)}</span><span className="text-right">{formatRupees(s.cgst)}</span><span className="text-right">{formatRupees(s.sgst)}</span>
-              </div>
-            ))}
-          </div>
+          <GstSummary slabs={t.slabs} />
           <div className="mb-4 space-y-1 text-sm">
             <div className="flex justify-between text-muted"><span>Sub total</span><Money paise={t.gross} /></div>
             {t.discount > 0 && <div className="flex justify-between text-muted"><span>Discount</span><Money paise={-t.discount} /></div>}
@@ -252,5 +245,32 @@ export function Sales() {
         {sel && <BillDetail key={sel.id} bill={sel} settings={settings} />}
       </div>
     </>
+  );
+}
+
+/** Tax per slab: CGST + SGST for a same-state bill, IGST for an inter-state bill (all three if a bill ever carries both), cess only when there is some. */
+function GstSummary({ slabs }: { slabs: GstSlab[] }) {
+  const hasIgst = slabs.some((s) => s.igst !== 0);
+  const hasSplit = slabs.some((s) => s.cgst !== 0 || s.sgst !== 0) || !hasIgst;
+  const hasCess = slabs.some((s) => s.cess !== 0);
+  const cols: { head: string; get: (s: GstSlab) => string }[] = [
+    { head: 'Slab', get: (s) => `${s.rate}%` },
+    { head: 'Taxable', get: (s) => formatRupees(s.taxable) },
+    ...(hasSplit ? [{ head: 'CGST', get: (s: GstSlab) => formatRupees(s.cgst) }, { head: 'SGST', get: (s: GstSlab) => formatRupees(s.sgst) }] : []),
+    ...(hasIgst ? [{ head: 'IGST', get: (s: GstSlab) => formatRupees(s.igst) }] : []),
+    ...(hasCess ? [{ head: 'Cess', get: (s: GstSlab) => formatRupees(s.cess) }] : []),
+  ];
+  const grid = { gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` };
+  return (
+    <div className="mb-4 overflow-hidden rounded-control border border-line text-xs">
+      <div className="grid bg-surface-2 px-3 py-1.5 font-semibold text-muted" style={grid}>
+        {cols.map((c, i) => <span key={c.head} className={i ? 'text-right' : ''}>{c.head}</span>)}
+      </div>
+      {slabs.map((s) => (
+        <div key={s.rate} className="grid border-t border-line/70 px-3 py-1.5 num" style={grid}>
+          {cols.map((c, i) => <span key={c.head} className={i ? 'text-right' : ''}>{c.get(s)}</span>)}
+        </div>
+      ))}
+    </div>
   );
 }
