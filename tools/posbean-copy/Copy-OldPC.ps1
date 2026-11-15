@@ -705,7 +705,7 @@ try {
                     Say ('Already stopped: ' + $name)
                     continue
                 }
-                Stop-Service -Name $name -ErrorAction Stop
+                $svcCtl = Get-Service -Name $name -ErrorAction Stop; $svcCtl.Stop()  # clean SCM stop (same as net stop); Stop-Service refuses any service that has dependents, even stopped ones
                 [void]$StoppedServices.Add($name)
                 $svcObj = Get-Service -Name $name -ErrorAction Stop
                 $svcObj.WaitForStatus('Stopped', (New-TimeSpan -Seconds $StopTimeoutSec))
