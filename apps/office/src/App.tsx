@@ -24,6 +24,7 @@ import { Users } from './pages/Users';
 import { SettingsPage } from './pages/SettingsPage';
 import { ItemEditor } from './pages/ItemEditor';
 import { HsnHelper } from './pages/HsnHelper';
+import { GstReturns } from './pages/GstReturns';
 import { Expenses } from './pages/Expenses';
 import { MillDailyPage } from './pages/MillDaily';
 
@@ -98,6 +99,7 @@ function Shell() {
         <Route path="/mill" element={<Navigate to="/mill-daily" replace />} />
         <Route path="/items/new" element={<ItemEditor />} />
         <Route path="/items/hsn" element={<HsnHelper />} />
+        <Route path="/gst" element={<GstReturns />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </OfficeLayout>

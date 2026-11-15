@@ -1,4 +1,4 @@
-import { BarChart3, Barcode, Boxes, ClipboardList, Factory, Gauge, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
+import { BarChart3, Barcode, Boxes, FileSpreadsheet, ClipboardList, Factory, Gauge, LayoutDashboard, Package, ReceiptIndianRupee, Settings, ShieldCheck, ShoppingCart, Star, Tags, Truck, Users, Wallet } from 'lucide-react';
 import type { NavGroup } from '@gokul/ui';
 
 export const nav: NavGroup[] = [
@@ -37,7 +37,13 @@ export const nav: NavGroup[] = [
     ],
   },
   { title: 'Money', items: [{ path: '/expenses', label: 'Expenses', icon: <Wallet />, keywords: 'petty cash tea transport wages rent categories' }] },
-  { title: 'Insights', items: [{ path: '/reports', label: 'Reports', icon: <BarChart3 />, keywords: 'gst gstr hsn profit cash' }] },
+  {
+    title: 'Insights',
+    items: [
+      { path: '/reports', label: 'Reports', icon: <BarChart3 />, keywords: 'gst gstr hsn profit cash' },
+      { path: '/gst', label: 'GST returns', icon: <FileSpreadsheet />, keywords: 'gstr1 gstr-1 gstr3b gstr-3b json excel b2b b2cl b2cs cdnr hsn table 12 file return ca auditor' },
+    ],
+  },
   {
     title: 'Admin',
     items: [
