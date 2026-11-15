@@ -22,6 +22,7 @@ for (const c of cases) {
   assert.ok(got, `${c.name}: no suggestion`);
   assert.deepEqual([got.hsn, got.confidence, got.matched], [c.hsn, c.confidence, c.matched], c.name);
   assert.deepEqual(got.alternatives.map((a) => a.hsn), c.alt, `${c.name}: alternatives`);
+  if ('rate' in c) assert.equal(got.rate, c.rate, `${c.name}: rate`);
 }
 assert.equal(m.hsnOk('1508'), true);
 assert.equal(m.hsnOk('150810'), true);

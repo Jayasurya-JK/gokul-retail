@@ -55,7 +55,7 @@
     "cutlet"
    ],
    "rate": 18,
-   "rateNote": "Biscuits and bakery wares; papad is nil rated (confirm with CA)",
+   "rateNote": "Biscuits and bakery wares 18%, not sure if cut after 22 Sep 2025, may be 5%; papad is nil rated; namkeen and murukku 5% (confirm with CA)",
    "base": "medium",
    "exclude": [
     "oil cake",
@@ -249,8 +249,8 @@
     "arathi camphor",
     "aarthi camphor"
    ],
-   "rate": 12,
-   "rateNote": "Rate differs by grade (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Camphor for pooja 5% (was 12% until 21 Sep 2025); likely rate, differs by grade (confirm with CA)",
    "base": "medium",
    "alt": [
     {
@@ -299,7 +299,7 @@
     "nannari sarbath"
    ],
    "rate": 18,
-   "rateNote": "Confectionery; rate differs by item (confirm with CA)",
+   "rateNote": "Confectionery 18%, not sure if cut after 22 Sep 2025, may be 5%; Indian sweets (mithai) 5% (confirm with CA)",
    "base": "medium",
    "exclude": [
     "sweet corn",
@@ -352,7 +352,7 @@
     "choco spread"
    ],
    "rate": 18,
-   "rateNote": "Rate differs by item (confirm with CA)",
+   "rateNote": "Chocolate 18%, not sure if cut after 22 Sep 2025, may be 5% (confirm with CA)",
    "base": "medium"
   },
   {
@@ -557,7 +557,8 @@
     "sattu"
    ],
    "rate": 0,
-   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Flours: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -575,7 +576,8 @@
     "gothumai maavu"
    ],
    "rate": 0,
-   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Flours: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -593,8 +595,8 @@
     "vennai",
     "venn"
    ],
-   "rate": 12,
-   "rateNote": "Ghee 12% until Sep 2025, 5% from 22 Sep 2025 (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Ghee 5% (was 12% until 21 Sep 2025) (confirm with CA)",
    "base": "high",
    "exclude": [
     "ghee rice"
@@ -664,8 +666,9 @@
     "pana vellam",
     "panai vellam"
    ],
-   "rate": 5,
-   "rateNote": "Unbranded jaggery is nil rated, pre-packed branded 5% (confirm with CA)",
+   "rate": 0,
+   "ratePacked": 5,
+   "rateNote": "Loose jaggery nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -695,8 +698,8 @@
     "kolam powder",
     "kolam podi"
    ],
-   "rate": 12,
-   "rateNote": "Rate differs by item; some pooja items nil or 5% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Kumkum and pooja powders 5% (was 12% until 21 Sep 2025); likely rate, differs by item (confirm with CA)",
    "base": "medium",
    "alt": [
     {
@@ -723,8 +726,8 @@
     "safety matches",
     "match"
    ],
-   "rate": 12,
-   "rateNote": "Matches 12%, from 22 Sep 2025 may be 5% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Matches 5% (was 12% until 21 Sep 2025) (confirm with CA)",
    "base": "high",
    "exclude": [
     "match box game"
@@ -759,7 +762,8 @@
     "kezhvaragu"
    ],
    "rate": 0,
-   "rateNote": "Unbranded nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Cereals: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "medium",
    "exclude": [
     "flour",
@@ -814,8 +818,8 @@
     "vada mix",
     "sambar mix"
    ],
-   "rate": 12,
-   "rateNote": "Savoury snacks 12%; some 18% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Pre-packed savoury snacks, namkeen, bhujia, mixture 5% (was 12% until 21 Sep 2025); some items 18% (confirm with CA)",
    "base": "medium"
   },
   {
@@ -830,8 +834,8 @@
     "aamanakku",
     "amanakku oil"
    ],
-   "rate": 12,
-   "rateNote": "Often 12% or 18%; depends on use (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Vegetable oils incl. castor 5% (was 12% until 21 Sep 2025); non-edible grades may differ (confirm with CA)",
    "base": "high",
    "alt": [
     {
@@ -924,8 +928,8 @@
     "thalai ennai",
     "thalaiyenai"
    ],
-   "rate": 18,
-   "rateNote": "Cosmetic; usually 18% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Hair oil 5% (was 18% until 21 Sep 2025) (confirm with CA)",
    "base": "medium",
    "alt": [
     {
@@ -950,8 +954,8 @@
     "pooja ennai",
     "diya oil"
    ],
-   "rate": 12,
-   "rateNote": "Not edible; rate differs from edible oil (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Pooja lamp oil from vegetable oil 5% (was 12% until 21 Sep 2025); likely rate, mineral oil differs (confirm with CA)",
    "base": "medium",
    "alt": [
     {
@@ -992,8 +996,8 @@
     "veppennai",
     "vepa ennai"
    ],
-   "rate": 12,
-   "rateNote": "Depends on use (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Vegetable oil 5% (was 12% until 21 Sep 2025); likely rate, depends on grade and use (confirm with CA)",
    "base": "medium"
   },
   {
@@ -1145,8 +1149,8 @@
     "gongura",
     "avakai"
    ],
-   "rate": 12,
-   "rateNote": "Pickles 12%; confirm with CA",
+   "rate": 5,
+   "rateNote": "Pickles and prepared vegetables 5% (was 12% until 21 Sep 2025) (confirm with CA)",
    "base": "medium",
    "exclude": [
     "powder",
@@ -1220,8 +1224,8 @@
     "pancha loha",
     "dhoop kit"
    ],
-   "rate": 12,
-   "rateNote": "Rate differs by item (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Pooja items 5% (was 12% until 21 Sep 2025); likely rate, differs by item (confirm with CA)",
    "base": "low",
    "alt": [
     {
@@ -1250,7 +1254,8 @@
     "pottukadalai"
    ],
    "rate": 0,
-   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Pulses: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high",
    "exclude": [
     "flour",
@@ -1274,7 +1279,8 @@
     "split moong"
    ],
    "rate": 0,
-   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Pulses: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -1307,7 +1313,8 @@
     "legume"
    ],
    "rate": 0,
-   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Pulses: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "medium",
    "exclude": [
     "flour",
@@ -1330,7 +1337,8 @@
     "pigeon pea"
    ],
    "rate": 0,
-   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Pulses: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -1350,7 +1358,8 @@
     "udad"
    ],
    "rate": 0,
-   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Pulses: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -1376,7 +1385,8 @@
     "parboiled"
    ],
    "rate": 0,
-   "rateNote": "Unbranded rice nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Rice: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high",
    "exclude": [
     "flour",
@@ -1423,7 +1433,8 @@
     "thinai maavu"
    ],
    "rate": 0,
-   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Flours: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -1607,7 +1618,8 @@
     "godhumai rava"
    ],
    "rate": 0,
-   "rateNote": "Nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Flours: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high"
   },
   {
@@ -1633,8 +1645,8 @@
     "mehendi",
     "mehandi"
    ],
-   "rate": 18,
-   "rateNote": "Cosmetics 18% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Shampoo 5% (was 18% until 21 Sep 2025) (confirm with CA)",
    "base": "medium"
   },
   {
@@ -1703,8 +1715,8 @@
     "rin bar",
     "nirma bar"
    ],
-   "rate": 18,
-   "rateNote": "Soap 18% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Toilet soap bars 5% (was 18% until 21 Sep 2025) (confirm with CA)",
    "base": "medium",
    "alt": [
     {
@@ -2067,8 +2079,8 @@
     "datun",
     "charcoal tooth powder"
    ],
-   "rate": 18,
-   "rateNote": "Oral hygiene 18% (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Toothpaste and tooth powder 5% (was 18% until 21 Sep 2025) (confirm with CA)",
    "base": "medium"
   },
   {
@@ -2087,8 +2099,8 @@
     "instant noodles",
     "rice noodles"
    ],
-   "rate": 12,
-   "rateNote": "Rate differs for instant noodles (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Vermicelli, pasta, instant noodles 5% (was 12% until 21 Sep 2025) (confirm with CA)",
    "base": "high"
   },
   {
@@ -2104,7 +2116,8 @@
     "wheat grain"
    ],
    "rate": 0,
-   "rateNote": "Unbranded nil, pre-packed branded 5% (confirm with CA)",
+   "ratePacked": 5,
+   "rateNote": "Cereals: loose nil, pre-packed and labelled 5% (confirm with CA)",
    "base": "high",
    "exclude": [
     "flour",
@@ -2137,8 +2150,8 @@
     "lamp wicks",
     "lamp wick"
    ],
-   "rate": 12,
-   "rateNote": "Rate differs by item (confirm with CA)",
+   "rate": 5,
+   "rateNote": "Cotton wicks 5% (was 12% until 21 Sep 2025); likely rate (confirm with CA)",
    "base": "medium"
   }
  ]

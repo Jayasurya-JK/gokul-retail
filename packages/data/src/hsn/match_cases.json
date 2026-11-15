@@ -578,6 +578,131 @@
   {
    "name": "Gift Hamper",
    "hsn": null
+  },
+  {
+   "name": "Basmati Rice (Loose)",
+   "hsn": "1006",
+   "confidence": "high",
+   "matched": "basmati",
+   "alt": [],
+   "rate": 0
+  },
+  {
+   "name": "Basmati Rice 1 kg",
+   "hsn": "1006",
+   "confidence": "high",
+   "matched": "basmati",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Aashirvaad Atta 5 kg",
+   "hsn": "1101",
+   "confidence": "high",
+   "matched": "atta",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Wheat Atta (Loose)",
+   "hsn": "1101",
+   "confidence": "high",
+   "matched": "atta",
+   "alt": [],
+   "rate": 0
+  },
+  {
+   "name": "Toor Dal (Loose)",
+   "hsn": "0713",
+   "confidence": "high",
+   "matched": "toor dal",
+   "alt": [],
+   "rate": 0
+  },
+  {
+   "name": "Toor Dal 500 g",
+   "hsn": "0713",
+   "confidence": "high",
+   "matched": "toor dal",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Jaggery (Loose)",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "jaggery",
+   "alt": [],
+   "rate": 0
+  },
+  {
+   "name": "Jaggery 1 kg",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "jaggery",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Ragi 1 kg",
+   "hsn": "1008",
+   "confidence": "medium",
+   "matched": "ragi",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Ghee 500 ml",
+   "hsn": "0405",
+   "confidence": "high",
+   "matched": "ghee",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Matches",
+   "hsn": "3605",
+   "confidence": "high",
+   "matched": "matches",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Castor Oil 500 ml",
+   "hsn": "1515",
+   "confidence": "high",
+   "matched": "castor oil",
+   "alt": [
+    "3004"
+   ],
+   "rate": 5
+  },
+  {
+   "name": "Mixture 200 g",
+   "hsn": "2106",
+   "confidence": "medium",
+   "matched": "mixture",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Toothpaste 100 g",
+   "hsn": "3306",
+   "confidence": "medium",
+   "matched": "toothpaste",
+   "alt": [],
+   "rate": 5
+  },
+  {
+   "name": "Mango Pickle 300 g",
+   "hsn": "2001",
+   "confidence": "medium",
+   "matched": "mango pickle",
+   "alt": [
+    "2007",
+    "2103"
+   ],
+   "rate": 5
   }
  ]
 }

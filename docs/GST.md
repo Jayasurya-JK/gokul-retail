@@ -20,9 +20,9 @@ rate or a file layout that is not settled by the software alone.
 
 ## Confirm with CA
 1. **Rate list and slabs** after 22 Sep 2025: 0, 5, 18, 40 main; 0.25 and 3 special; 12 and 28 kept for old bills. Every suggested rate in the HSN helper is a hint only.
-2. **Edible oils, oil cake, pulses, rice, flours, jaggery, salt:** which are 0% (unbranded) and which 5% (pre-packed, branded). The oil items billed at 0% in the old data need review.
+2. **Edible oils, oil cake, pulses, rice, flours, jaggery, salt:** which are 0% (unbranded) and which 5% (pre-packed, branded). The oil items billed at 0% in the old data need review. The HSN helper hints 0% for loose items (flag or "(Loose)" in the name) and 5% for pre-packed ones (pack size like "1 kg" in the name or on the item, or a brand) for rice, flours, pulses, jaggery and cereals.
 3. **HSN digits:** 4 up to Rs 5 crore turnover, 6 above. The dictionary uses 4 digits for most goods.
-4. **Camphor (karpooram)** is suggested as 2914 (tariff heading for camphor); the brief listed 2906 (cyclic alcohols). Kumkum, vibhuti, pooja items, lamp oil, empty bottles/tins: classification varies.
+4. **Camphor (karpooram)** is suggested as 2914 (tariff heading for camphor); the brief listed 2906 (cyclic alcohols). Kumkum, vibhuti, pooja items, lamp oil, empty bottles/tins: classification varies. The helper hints 5% for these (12% until 21 Sep 2025), as it does for ghee, matches, namkeen, pickles, vermicelli, castor, neem and lamp oil, and for hair oil, shampoo, toilet soap and toothpaste (18% until 21 Sep 2025). Biscuits, chocolate and sweets stay at 18% in the helper; they may now be 5%, please confirm.
 5. **Consumer bills of Rs 50,000 or more** print the buyer's name, address and state (full invoice layout).
 6. **B2CL threshold** Rs 1,00,000 inter-state to an unregistered buyer (since 1 Aug 2024).
 7. **Nil/exempt/non-GST:** every 0% line is reported as nil rated (table 8); no split into exempt and non-GST.

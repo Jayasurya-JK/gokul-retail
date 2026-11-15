@@ -28,6 +28,9 @@ struct Entry {
     exclude: Vec<String>,
     #[serde(default)]
     rate: Option<f64>,
+    /// Rate for pre-packed, labelled goods when it differs from the loose `rate` (rice, flours, pulses, jaggery, cereals)
+    #[serde(default, rename = "ratePacked")]
+    rate_packed: Option<f64>,
     #[serde(default, rename = "rateNote")]
     rate_note: String,
     base: String,
@@ -100,8 +103,34 @@ fn down(c: &str) -> &'static str {
     }
 }
 
+const PACK_UNITS: [&str; 14] = ["kg", "g", "gm", "gms", "gram", "grams", "l", "ltr", "litre", "litres", "ml", "pc", "pcs", "pkt"];
+
+/// True when the name carries a pack size such as "1 kg", "500 g" or "5kg".
+fn has_pack_size(nt: &[String]) -> bool {
+    let digits = |t: &str| !t.is_empty() && t.chars().all(|c| c.is_ascii_digit());
+    nt.iter().enumerate().any(|(i, t)| {
+        let glued = PACK_UNITS.iter().any(|u| t.strip_suffix(u).map_or(false, digits));
+        glued || (digits(t) && nt.get(i + 1).map_or(false, |n| PACK_UNITS.contains(&n.as_str())))
+    })
+}
+
+/// What the item itself says about how it is sold (rice, flours, pulses, jaggery and cereals are taxed differently loose and pre-packed).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ItemHint {
+    /// The item is sold loose (the loose flag, or "(Loose)" in the name)
+    pub loose: bool,
+    /// The item has a pack size or a brand (besides what the name itself shows)
+    pub packed: bool,
+}
+
 /// The best HSN for an item name (the category is not used for matching, only the words of the name are).
 pub fn suggest(name: &str) -> Option<Suggestion> {
+    suggest_with(name, ItemHint::default())
+}
+
+/// Like `suggest`, with what the item record says. Loose (flag or "(Loose)" in the name) gets the loose rate; a pack size in the name
+/// or on the item, or a brand, gets the pre-packed rate where the dictionary has one; otherwise the loose rate stays.
+pub fn suggest_with(name: &str, hint: ItemHint) -> Option<Suggestion> {
     let nt = tokens(name);
     if nt.is_empty() {
         return None;
@@ -163,7 +192,10 @@ pub fn suggest(name: &str) -> Option<Suggestion> {
             alternatives.push(a.clone());
         }
     }
-    Some(Suggestion { hsn: e.hsn.clone(), desc: e.desc.clone(), confidence: conf.into(), rate: e.rate, rate_note: e.rate_note.clone(), matched: kw, alternatives })
+    let loose = hint.loose || nt.iter().any(|t| t == "loose");
+    let packed = !loose && (hint.packed || has_pack_size(&nt));
+    let rate = if packed { e.rate_packed.or(e.rate) } else { e.rate };
+    Some(Suggestion { hsn: e.hsn.clone(), desc: e.desc.clone(), confidence: conf.into(), rate, rate_note: e.rate_note.clone(), matched: kw, alternatives })
 }
 
 /// A plain description for an HSN code: the dictionary's wording for the first entry with that code (or its first four digits).
@@ -203,15 +235,15 @@ impl Default for SuggestOptions {
 
 pub fn suggest_hsn(conn: &Connection, o: &SuggestOptions) -> Result<Value> {
     let mut st = conn.prepare(
-        "SELECT i.id,i.code,i.name,COALESCE(c.name,''),i.hsn,i.gst_rate,i.active FROM items i LEFT JOIN categories c ON c.id=i.category_id
+        "SELECT i.id,i.code,i.name,COALESCE(c.name,''),i.hsn,i.gst_rate,i.active,i.loose,(COALESCE(i.pack_size,'')!='' OR i.brand!='') FROM items i LEFT JOIN categories c ON c.id=i.category_id
          WHERE i.kind='item' AND substr(i.id,1,1) != '_' ORDER BY i.name COLLATE NOCASE",
     )?;
     let rows = st
-        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, f64>(5)?, r.get::<_, i64>(6)? != 0)))?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, f64>(5)?, r.get::<_, i64>(6)? != 0, r.get::<_, i64>(7)? != 0, r.get::<_, i64>(8)? != 0)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut out: Vec<Value> = vec![];
     let (mut with, mut without, mut missing_total, mut agree, mut differ) = (0, 0, 0, 0, 0);
-    for (id, code, name, category, hsn, rate, active) in rows {
+    for (id, code, name, category, hsn, rate, active, loose, packed) in rows {
         if !active && !o.include_inactive {
             continue;
         }
@@ -222,7 +254,7 @@ pub fn suggest_hsn(conn: &Connection, o: &SuggestOptions) -> Result<Value> {
         if o.only_missing && !missing {
             continue;
         }
-        let s = suggest(&name);
+        let s = suggest_with(&name, ItemHint { loose, packed });
         match (&s, missing) {
             (Some(_), _) => with += 1,
             (None, _) => without += 1,

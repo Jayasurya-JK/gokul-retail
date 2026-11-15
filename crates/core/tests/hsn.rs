@@ -22,6 +22,9 @@ fn suggestions_match_the_shared_cases_the_typescript_mock_also_passes() {
                 let alt: Vec<String> = g.alternatives.iter().map(|a| a.hsn.clone()).collect();
                 let want: Vec<String> = c["alt"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
                 assert_eq!(alt, want, "{name}: alternatives");
+                if let Some(r) = c.get("rate") {
+                    assert_eq!(g.rate, r.as_f64(), "{name}: rate");
+                }
             }
         }
     }

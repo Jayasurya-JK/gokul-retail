@@ -58,7 +58,7 @@ export interface HsnApi {
 /* ------------------------------------------------------------------ matcher */
 
 interface Entry {
-  id: string; hsn: string; desc: string; keywords: string[]; exclude?: string[]; rate: number | null; rateNote: string;
+  id: string; hsn: string; desc: string; keywords: string[]; exclude?: string[]; rate: number | null; ratePacked?: number; rateNote: string;
   base: 'high' | 'medium' | 'low'; kind?: string; alt?: { hsn: string; desc: string }[];
 }
 const ENTRIES = (dictionary as { entries: Entry[] }).entries;
@@ -83,7 +83,27 @@ export function descForHsn(hsn: string): string {
 
 export const hsnOk = (h: string): boolean => /^(\d{4}|\d{6}|\d{8})$/.test(h.trim());
 
-export function suggestHsnFor(name: string): HsnSuggestion | null {
+const PACK_UNITS = ['kg', 'g', 'gm', 'gms', 'gram', 'grams', 'l', 'ltr', 'litre', 'litres', 'ml', 'pc', 'pcs', 'pkt'];
+const isDigits = (t: string): boolean => /^[0-9]+$/.test(t);
+
+/** True when the name carries a pack size such as "1 kg", "500 g" or "5kg". */
+function hasPackSize(nt: string[]): boolean {
+  return nt.some((t, i) => PACK_UNITS.some((u) => t.endsWith(u) && isDigits(t.slice(0, -u.length))) || (isDigits(t) && PACK_UNITS.includes(nt[i + 1] ?? '')));
+}
+
+/** What the item itself says about how it is sold: rice, flours, pulses, jaggery and cereals are taxed differently loose and pre-packed. */
+export interface ItemHint {
+  /** Sold loose (the loose flag; "(Loose)" in the name counts too) */
+  loose?: boolean;
+  /** Has a pack size or a brand besides what the name shows */
+  packed?: boolean;
+}
+
+/**
+ * Loose (flag or "(Loose)" in the name) gets the loose rate; a pack size in the name or on the item, or a brand, gets the pre-packed
+ * rate where the dictionary has one; otherwise the loose rate stays. Same rule as the Rust core's suggest_with.
+ */
+export function suggestHsnFor(name: string, hint: ItemHint = {}): HsnSuggestion | null {
   const nt = tokens(name);
   if (!nt.length) return null;
   let hits: { score: number; e: Entry; kw: string }[] = [];
@@ -117,7 +137,10 @@ export function suggestHsnFor(name: string): HsnSuggestion | null {
   }
   if (ambiguous) conf = conf === 'high' ? 'medium' : 'low';
   for (const a of e.alt ?? []) if (a.hsn !== e.hsn && !alternatives.some((x) => x.hsn === a.hsn)) alternatives.push(a);
-  return { hsn: e.hsn, desc: e.desc, confidence: conf, rate: e.rate, rateNote: e.rateNote, matched: kw, alternatives };
+  const loose = !!hint.loose || nt.includes('loose');
+  const packed = !loose && (!!hint.packed || hasPackSize(nt));
+  const rate = packed ? e.ratePacked ?? e.rate : e.rate;
+  return { hsn: e.hsn, desc: e.desc, confidence: conf, rate, rateNote: e.rateNote, matched: kw, alternatives };
 }
 
 /* ------------------------------------------------------------------ mock */
@@ -135,7 +158,7 @@ export function createHsnMock(store: MockStore): HsnApi {
         const missing = !hsnOk(i.hsn);
         if (missing) missingTotal += 1;
         if (onlyMissing && !missing) continue;
-        const s = suggestHsnFor(i.name);
+        const s = suggestHsnFor(i.name, { loose: i.loose, packed: !!i.packSize || !!i.brand });
         if (s) withS += 1; else withoutS += 1;
         if (s && !missing) { if (s.hsn.startsWith(i.hsn.trim()) || i.hsn.trim().startsWith(s.hsn)) agree += 1; else differ += 1; }
         rows.push({ itemId: i.id, code: i.code, name: i.name, category: i.category, hsn: i.hsn, gstRate: i.gstRate, missing, suggestion: s });
