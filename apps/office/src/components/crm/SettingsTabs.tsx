@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, DatabaseBackup, Star, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
-import { LABEL_PRESETS, enabledRates, rateOk, rateText, type HardwareSettings, type LabelPresetId } from '@gokul/data';
+import { GST_STATES, LABEL_PRESETS, enabledRates, gstinProblem, rateOk, rateText, stateName, type HardwareSettings, type LabelPresetId } from '@gokul/data';
 import type { Category } from '@gokul/data';
 import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Checkbox, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
@@ -10,7 +10,6 @@ import { BillFormatPreview } from './BillFormatPreview';
 import { useGstRates } from '../../useGstRates';
 import { ago, fmtDateTime, Segmented } from './common';
 
-const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 function Row({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -27,7 +26,8 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
   const toast = useToast();
   const up = <K extends keyof ShopSettings>(k: K, val: ShopSettings[K]) => set({ ...v, [k]: val });
   const gst = v.gstin.trim().toUpperCase();
-  const gstOk = GSTIN_RE.test(gst);
+  const gstProblem = gst ? gstinProblem(gst, v.stateCode) : null;
+  const gstOk = !!gst && !gstProblem;
   const fssaiOk = /^\d{14}$/.test(v.fssai);
   const pickLogo = (f?: File) => {
     if (!f) return;
@@ -49,7 +49,8 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
           <Input label="Address" value={v.address} onChange={(e) => up('address', e.target.value)} />
           <div className="grid grid-cols-[1fr_1fr_110px] gap-3">
             <Input label="City" value={v.city} onChange={(e) => up('city', e.target.value)} />
-            <Input label="State" value={v.state} onChange={(e) => up('state', e.target.value)} />
+            <Select label="State (place of supply for local sales)" value={v.stateCode} onChange={(e) => set({ ...v, stateCode: e.target.value, state: stateName(e.target.value) ?? v.state })}
+              options={GST_STATES.map((s) => ({ value: s.code, label: `${s.name} (${s.code})` }))} />
             <Input label="PIN code" value={v.pincode} onChange={(e) => up('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} className="num" />
           </div>
         </div>
@@ -58,8 +59,8 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
         <div className="flex flex-col gap-3">
           <Input
             label="GSTIN" value={v.gstin} className="num uppercase" onChange={(e) => up('gstin', e.target.value.toUpperCase().slice(0, 15))}
-            error={v.gstin && !gstOk ? 'GSTIN is 15 characters, like 33AAKFG4821M1ZQ' : undefined}
-            hint={gstOk ? `Valid format. State code ${gst.slice(0, 2)} is Tamil Nadu.` : 'Printed on every tax invoice.'}
+            error={gst && gstProblem ? gstProblem : undefined}
+            hint={gstOk ? `Valid. State code ${gst.slice(0, 2)} is ${stateName(gst.slice(0, 2)) ?? ''}.` : 'Printed on every tax invoice. Its first two digits must match the state.'}
           />
           <Input
             label="FSSAI licence number" value={v.fssai} className="num" onChange={(e) => up('fssai', e.target.value.replace(/\D/g, '').slice(0, 14))}
@@ -146,7 +147,7 @@ export function TaxTab({ v, set }: { v: TaxSettings; set: (n: TaxSettings) => vo
           <Select value={String(v.deliveryGstRate ?? 0)} onChange={(e) => up('deliveryGstRate', Number(e.target.value))} options={enabledRates(v.rates).map((r) => ({ value: String(r), label: r === 0 ? 'No GST' : rateText(r) }))} />
         </Row>
         <Row title="Show HSN code on bill" hint="Needed for B2B invoices."><Switch checked={v.showHsn} onCheckedChange={(x) => up('showHsn', x)} /></Row>
-        <Row title="Interstate supply (IGST)" hint="Turn on only if the shop sells to other states."><Switch checked={v.interState} onCheckedChange={(x) => up('interState', x)} /></Row>
+        <Row title="Sales to other states (IGST)" hint="Automatic. A customer in another state, or a state chosen on the bill, gets IGST instead of CGST + SGST (confirm with CA)."><span className="text-xs text-subtle">Always on</span></Row>
       </Card>
     </div>
   );

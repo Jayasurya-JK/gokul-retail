@@ -119,7 +119,7 @@ export function createTauriApi(): Api {
     verifyManagerPin: (pin: string) => call<User | null>('verifyManagerPin', pin),
     closeDay: (input: { userId: string; counts: DenomCounts; managerPin: string }) => call<ZReport | null>('closeDay', input),
     peekNextBillNumber: () => call<string>('peekNextBillNumber'),
-    quickAddCustomer: (input: { name: string; phone: string }) => call<Customer>('quickAddCustomer', input),
+    quickAddCustomer: (input: { name: string; phone: string; gstin?: string; stateCode?: string }) => call<Customer>('quickAddCustomer', input),
 
     // ----- BillOpsApi -----
     listBillsOn: (search: BillSearch) => call<Bill[]>('listBillsOn', search),

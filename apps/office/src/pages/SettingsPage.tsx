@@ -35,7 +35,7 @@ export function SettingsPage() {
   const save = useCallback(async () => {
     if (!draft) return;
     const bad = draft.shop.gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(draft.shop.gstin);
-    if (bad) { setTab('shop'); toast.show({ tone: 'error', title: 'Check the GSTIN', detail: 'It must be 15 characters, like 33AAKFG4821M1ZQ.' }); return; }
+    if (bad) { setTab('shop'); toast.show({ tone: 'error', title: 'Check the GSTIN', detail: 'It must be 15 characters, like 33AAKFG4821M1Z9.' }); return; }
     setBusy(true);
     try {
       const next = await api.saveSettingsBundle(draft);

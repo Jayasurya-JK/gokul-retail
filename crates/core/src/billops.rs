@@ -68,11 +68,17 @@ fn cn_from_row(r: &Row) -> rusqlite::Result<(i64, CreditNote)> {
             totals: serde_json::from_str(&totals_json).unwrap_or_default(),
             lines: vec![],
             balance: r.get(11)?,
+            bill_at: r.get(12)?,
+            place_of_supply: r.get(13)?,
+            supply_type: r.get(14)?,
+            customer_gstin: r.get(15)?,
+            customer_address: r.get(16)?,
         },
     ))
 }
 
-const CN_COLS: &str = "c.id,c.number,c.at,c.bill_id,b.number,c.customer_id,c.customer_name,c.reason,c.refund_mode,c.by_name,c.totals_json,c.grand-c.used";
+const CN_COLS: &str = "c.id,c.number,c.at,c.bill_id,b.number,c.customer_id,c.customer_name,c.reason,c.refund_mode,c.by_name,c.totals_json,c.grand-c.used,
+    b.at,c.place_of_supply,c.supply_type,b.cust_gstin,b.cust_address";
 
 fn load_credit_notes(conn: &Connection, where_sql: &str, params: impl rusqlite::Params, limit: i64) -> Result<Vec<CreditNote>> {
     let mut st = conn.prepare_cached(&format!(
@@ -80,7 +86,7 @@ fn load_credit_notes(conn: &Connection, where_sql: &str, params: impl rusqlite::
     ))?;
     let rows = st.query_map(params, cn_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
     let mut lines = conn.prepare_cached(
-        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate FROM credit_note_lines WHERE cn_id=?1 ORDER BY line_no",
+        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate,hsn,taxable,cgst,sgst,igst,cess FROM credit_note_lines WHERE cn_id=?1 ORDER BY line_no",
     )?;
     let mut out = vec![];
     for (id, mut cn) in rows {
@@ -97,6 +103,8 @@ fn load_credit_notes(conn: &Connection, where_sql: &str, params: impl rusqlite::
                     gst_rate: r.get(7)?,
                     amount: r.get(8)?,
                     cess_rate: r.get(9)?,
+                    hsn: r.get(10)?,
+                    tax: Some(LineTax { taxable: r.get(11)?, cgst: r.get(12)?, sgst: r.get(13)?, igst: r.get(14)?, cess: r.get(15)? }),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -299,7 +307,8 @@ pub fn create_return(conn: &mut Connection, req: &ReturnRequest) -> Result<Credi
     }
     let settings = db::load_settings(&tx)?;
     let picks: Vec<ReturnPick> = valid.iter().map(|p| (*p).clone()).collect();
-    let (lines, totals, _taxes) = quote_return(&bill.lines, bill.totals.discount, &picks, settings.round_to_rupee, false);
+    let inter = bill.extras.supply_type == "inter";
+    let (lines, totals, taxes) = quote_return(&bill.lines, bill.totals.discount, &picks, settings.round_to_rupee, inter);
     for p in &picks {
         done[p.line_index as usize] += p.qty;
     }
@@ -310,26 +319,27 @@ pub fn create_return(conn: &mut Connection, req: &ReturnRequest) -> Result<Credi
     let shift_id: Option<i64> =
         tx.query_row("SELECT id FROM shifts WHERE closed_at IS NULL ORDER BY id DESC LIMIT 1", [], |r| r.get(0)).optional()?;
     tx.execute(
-        "INSERT INTO credit_notes(number,series,fy,seq,at,day,shift_id,bill_id,customer_id,customer_name,reason,refund_mode,by_name,grand,totals_json)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+        "INSERT INTO credit_notes(number,series,fy,seq,at,day,shift_id,bill_id,customer_id,customer_name,reason,refund_mode,by_name,grand,totals_json,place_of_supply,supply_type)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
         params![
             number, CN_SERIES, fy, seq, iso(now), db::day_of(now), shift_id, bid, bill.customer_id, bill.customer_name,
-            req.reason, req.refund_mode, req.by, totals.grand, serde_json::to_string(&totals)?
+            req.reason, req.refund_mode, req.by, totals.grand, serde_json::to_string(&totals)?,
+            bill.extras.place_of_supply, if inter { "inter" } else { "intra" }
         ],
     )?;
     let cn_id = tx.last_insert_rowid();
     {
         let mut ins = tx.prepare_cached(
-            "INSERT INTO credit_note_lines(cn_id,line_no,bill_line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            "INSERT INTO credit_note_lines(cn_id,line_no,bill_line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate,hsn,taxable,cgst,sgst,igst,cess)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
         )?;
         let mut mv = tx.prepare_cached(
             "INSERT INTO stock_movements(at,item_id,kind,qty,ref_type,ref_id,note,by_name) VALUES(?1,?2,'return',?3,'credit_note',?4,?5,?6)",
         )?;
         let mut upd = tx.prepare_cached("UPDATE items SET stock = stock + ?1 WHERE id = ?2")?;
         // quote_return keeps pick order and skips nothing we already validated, so lines[i] belongs to picks[i].
-        for (i, (l, p)) in lines.iter().zip(picks.iter()).enumerate() {
-            ins.execute(params![cn_id, i as i64, p.line_index, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount, l.cess_rate])?;
+        for (i, ((l, p), t)) in lines.iter().zip(picks.iter()).zip(taxes.iter()).enumerate() {
+            ins.execute(params![cn_id, i as i64, p.line_index, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount, l.cess_rate, l.hsn, t.taxable, t.cgst, t.sgst, t.igst, t.cess])?;
             if is_service(&tx, &l.item_id) {
                 continue;
             }

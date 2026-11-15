@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { CustomerInput, CustomerRow, CustomerType } from '@gokul/data';
-import { Button, Drawer, Field, Input, NumberInput, Switch } from '@gokul/ui';
+import { GST_STATES, gstinProblem, stateLabel, type CustomerInput, type CustomerRow, type CustomerType } from '@gokul/data';
+import { Button, Drawer, Field, Input, NumberInput, Select, Switch } from '@gokul/ui';
 import { paiseToRupees, rupeesToPaise, Segmented } from './common';
 
-const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-
 interface Draft {
-  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; email: string; address: string; limit: string; unlimited: boolean; active: boolean;
+  name: string; phone: string; area: string; type: CustomerType; business: string; gstin: string; stateCode: string; email: string; address: string; limit: string; unlimited: boolean; active: boolean;
 }
 
-const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', email: '', address: '', limit: '0', unlimited: false, active: true };
+const blank: Draft = { name: '', phone: '', area: '', type: 'retail', business: '', gstin: '', stateCode: '', email: '', address: '', limit: '0', unlimited: false, active: true };
 
 const fromRow = (c: CustomerRow): Draft => ({
-  name: c.name, phone: c.phone, area: c.area, type: c.type, business: c.business ?? '', gstin: c.gstin ?? '', email: c.email ?? '',
+  name: c.name, phone: c.phone, area: c.area, type: c.type, business: c.business ?? '', gstin: c.gstin ?? '', stateCode: c.stateCode ?? '', email: c.email ?? '',
   address: c.address ?? '', limit: c.creditLimit > 0 ? paiseToRupees(c.creditLimit) : '0', unlimited: c.creditLimit < 0, active: c.active !== false,
 });
 
@@ -32,7 +30,8 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
   if (d.phone.replace(/\D/g, '').length !== 10) errors.phone = 'Phone must be 10 digits';
   if (d.type === 'b2b') {
     if (!d.business.trim()) errors.business = 'Enter the business name for the GST bill';
-    if (!GSTIN_RE.test(d.gstin.trim().toUpperCase())) errors.gstin = 'GSTIN is 15 characters, like 33ABCDE1234F1Z5';
+    const problem = gstinProblem(d.gstin);
+    if (problem) errors.gstin = problem;
   }
   if (d.email && !/^\S+@\S+\.\S+$/.test(d.email)) errors.email = 'Email looks incomplete';
   const valid = Object.keys(errors).length === 0;
@@ -43,7 +42,7 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
     setBusy(true);
     try {
       await onSave({
-        id: customer?.id, name: d.name, phone: d.phone, area: d.area, type: d.type, business: d.business, gstin: d.gstin,
+        id: customer?.id, name: d.name, phone: d.phone, area: d.area, type: d.type, business: d.business, gstin: d.gstin, stateCode: d.type === 'b2b' && d.gstin.trim() ? d.gstin.trim().slice(0, 2) : d.stateCode || undefined,
         email: d.email, address: d.address, creditLimit: d.unlimited ? -1 : rupeesToPaise(d.limit), active: d.active,
       });
     } finally { setBusy(false); }
@@ -75,8 +74,13 @@ export function CustomerSheet({ open, customer, onClose, onSave }: {
         {d.type === 'b2b' && (
           <>
             <Input label="Business name" value={d.business} onChange={(e) => set('business', e.target.value)} error={err('business')} />
-            <Input label="GSTIN" value={d.gstin} onChange={(e) => set('gstin', e.target.value.toUpperCase().slice(0, 15))} error={err('gstin')} placeholder="33ABCDE1234F1Z5" className="num uppercase" hint="Printed on the tax invoice so the buyer can claim input credit." />
+            <Input label="GSTIN" value={d.gstin} onChange={(e) => set('gstin', e.target.value.toUpperCase().slice(0, 15))} error={err('gstin')} placeholder="33ABCDE1234F1Z7" className="num uppercase"
+              hint={!gstinProblem(d.gstin) ? `Valid. Place of supply: ${stateLabel(d.gstin.slice(0, 2))}.` : 'Printed on the tax invoice so the buyer can claim input credit. The last character is a check character.'} />
           </>
+        )}
+        {(d.type !== 'b2b' || !d.gstin.trim()) && (
+          <Select label="State (optional)" value={d.stateCode} onChange={(e) => set('stateCode', e.target.value)}
+            options={[{ value: '', label: 'Not recorded (billed as local)' }, ...GST_STATES.map((s) => ({ value: s.code, label: `${s.name} (${s.code})` }))]} />
         )}
         <div className="grid grid-cols-2 gap-3">
           <Input label="Phone" value={d.phone} onChange={(e) => set('phone', e.target.value.replace(/[^\d ]/g, '').slice(0, 11))} error={err('phone')} placeholder="98421 07731" className="num" />

@@ -182,8 +182,7 @@ pub struct GrnDraft {
 }
 
 fn shop_state(conn: &Connection) -> Result<String> {
-    let g = get_setting(conn, "gstin")?.unwrap_or_default();
-    Ok(if g.len() >= 2 && g[..2].chars().all(|c| c.is_ascii_digit()) { g[..2].to_string() } else { "33".into() })
+    Ok(crate::gst::shop_state_code(conn))
 }
 
 fn parse_day(s: &str) -> Option<NaiveDate> {
@@ -424,7 +423,7 @@ pub fn save_supplier(conn: &mut Connection, d: &SupplierDraft) -> Result<Value> 
         return invalid("Enter the supplier name.");
     }
     if !d.gstin.trim().is_empty() && !is_valid_gstin(&d.gstin) {
-        return invalid("GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1ZQ.");
+        return invalid("GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1Z9.");
     }
     if d.phone.chars().filter(|c| c.is_ascii_digit()).count() < 10 {
         return invalid("Enter a 10 digit phone number.");

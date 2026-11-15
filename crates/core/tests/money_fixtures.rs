@@ -17,6 +17,8 @@ fn mk(l: &Value, i: usize) -> BillLine {
         gst_rate: l["gstRate"].as_f64().unwrap(),
         cess_rate: l["cessRate"].as_f64().unwrap_or(0.0),
         amount: 0,
+        hsn: String::new(),
+        tax: None,
     }
 }
 
@@ -61,7 +63,7 @@ fn rust_matches_typescript_on_all_fixture_cases() {
 fn gst_is_inclusive_and_splits_evenly() {
     // Rs 105 at 5% inclusive: taxable 100, GST 5 (2.50 + 2.50)
     let l = recalc_line(&BillLine {
-        item_id: "i".into(), code: "1".into(), name: "x".into(), unit: "pc".into(), qty: 1000, rate: 10_500, discount: 0, gst_rate: 5.0, cess_rate: 0.0, amount: 0,
+        item_id: "i".into(), code: "1".into(), name: "x".into(), unit: "pc".into(), qty: 1000, rate: 10_500, discount: 0, gst_rate: 5.0, cess_rate: 0.0, amount: 0, hsn: String::new(), tax: None,
     });
     let t = compute_totals(&[l], 0, true);
     assert_eq!((t.taxable, t.gst, t.grand), (10_000, 500, 10_500));

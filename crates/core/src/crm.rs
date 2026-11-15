@@ -5,7 +5,6 @@ use crate::bills::{like_escape, query_bills};
 use crate::catalog::OFFICE;
 use crate::db::{self, audit, doc_number, drawer_entry, fresh_id, fy_of, get_setting, iso, next_seq, parse_iso, round_div, set_setting, when_label};
 use crate::error::{invalid, Result};
-use crate::purchasing::is_valid_gstin;
 use crate::store::hash_pin;
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use chrono::{Duration, Local, NaiveDate};
@@ -109,7 +108,7 @@ pub fn sales_filter_options(conn: &Connection) -> Result<Value> {
 // Customers
 // =====================================================================
 
-const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes,c.father_name,c.dob,c.anniversary,c.pan,c.locality,c.route,c.credit_days,c.opening_balance,c.active";
+const CUST_COLS: &str = "c.id,c.name,c.phone,c.area,c.credit_limit,c.outstanding,c.loyalty_points,c.last_visit_at,c.type,c.business,c.gstin,c.email,c.address,c.created_at,c.notes,c.father_name,c.dob,c.anniversary,c.pan,c.locality,c.route,c.credit_days,c.opening_balance,c.active,c.state_code";
 
 type Spend = (i64, i64, Option<String>);
 
@@ -145,6 +144,10 @@ fn customer_row(r: &rusqlite::Row, now: chrono::DateTime<Local>, spend: &HashMap
     m.insert("creditDays".into(), json!(r.get::<_, i64>(21)?));
     m.insert("openingBalance".into(), json!(r.get::<_, i64>(22)?));
     m.insert("active".into(), json!(r.get::<_, i64>(23)? != 0));
+    let sc: String = r.get(24)?;
+    if !sc.is_empty() {
+        m.insert("stateCode".into(), json!(sc));
+    }
     m.insert("noName".into(), json!(is_no_name(&r.get::<_, String>(1)?)));
     m.insert("totalSpend".into(), json!(total));
     m.insert("visits".into(), json!(visits));
@@ -243,6 +246,9 @@ pub struct CustomerInput {
     pub credit_days: Option<i64>,
     #[serde(default)]
     pub opening_balance: Option<i64>,
+    /// GST state code of the customer ("33"). With a GSTIN it must match the GSTIN's first two digits (and is filled from it when empty).
+    #[serde(default)]
+    pub state_code: Option<String>,
 }
 
 /// The one credit rule: 0 = credit not allowed, positive = credit up to that amount (paise), -1 = no limit (explicit).
@@ -271,9 +277,17 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
     }
     let b2b = i.kind == "b2b";
     let gstin = i.gstin.clone().unwrap_or_default().trim().to_uppercase();
-    if !gstin.is_empty() && !is_valid_gstin(&gstin) {
-        return invalid("GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1ZQ.");
+    let sent_state = i.state_code.clone().unwrap_or_default().trim().to_string();
+    if !sent_state.is_empty() && crate::gst::state_name(&sent_state).is_none() {
+        return invalid("Choose a valid state for the customer.");
     }
+    if !gstin.is_empty() {
+        if let Some(p) = crate::gst::gstin_problem(&gstin, Some(&sent_state)) {
+            return invalid(format!("GSTIN: {p}"));
+        }
+    }
+    // A registered customer's state is the GSTIN's state; otherwise the state chosen (empty = not recorded, billed as local).
+    let state_code = if b2b && !gstin.is_empty() { gstin[..2].to_string() } else { sent_state.clone() };
     let business = if b2b { i.business.clone().unwrap_or_default().trim().to_string() } else { String::new() };
     let email = i.email.clone().unwrap_or_default().trim().to_string();
     let address = i.address.clone().unwrap_or_default().trim().to_string();
@@ -298,9 +312,11 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
         Some(id) => {
             let n = tx.execute(
                 "UPDATE customers SET name=?1,phone=?2,area=?3,credit_limit=?4,type=?5,business=?6,
-                   gstin=COALESCE(?7,gstin),email=COALESCE(?8,email),address=COALESCE(?9,address),notes=COALESCE(?10,notes) WHERE id=?11",
+                   gstin=COALESCE(?7,gstin),email=COALESCE(?8,email),address=COALESCE(?9,address),notes=COALESCE(?10,notes),
+                   state_code=COALESCE(?12,state_code) WHERE id=?11",
                 params![name, i.phone.trim(), i.area.trim(), i.credit_limit, if b2b { "b2b" } else { "retail" }, business,
-                        if b2b { keep(&i.gstin, &gstin) } else { Some(String::new()) }, keep(&i.email, &email), keep(&i.address, &address), keep(&i.notes, &notes), id],
+                        if b2b { keep(&i.gstin, &gstin) } else { Some(String::new()) }, keep(&i.email, &email), keep(&i.address, &address), keep(&i.notes, &notes), id,
+                        if b2b && !gstin.is_empty() { Some(state_code.clone()) } else { i.state_code.as_ref().map(|_| state_code.clone()) }],
             )?;
             if n == 0 {
                 return invalid("Customer not found.");
@@ -321,9 +337,9 @@ pub fn save_customer(conn: &mut Connection, i: &CustomerInput) -> Result<Value> 
         None => {
             let id = fresh_id(&tx, "customers", "c", "CUSTOMER")?;
             tx.execute(
-                "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,created_at,type,business,gstin,email,address,notes)
-                 VALUES(?1,?2,?3,?4,?5,0,0,?6,?7,?8,?9,?10,?11,?12)",
-                params![id, name, i.phone.trim(), i.area.trim(), i.credit_limit, iso(now), if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes],
+                "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,created_at,type,business,gstin,email,address,notes,state_code)
+                 VALUES(?1,?2,?3,?4,?5,0,0,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![id, name, i.phone.trim(), i.area.trim(), i.credit_limit, iso(now), if b2b { "b2b" } else { "retail" }, business, gstin, email, address, notes, state_code],
             )?;
             tx.execute(
                 "UPDATE customers SET father_name=?1,dob=?2,anniversary=?3,pan=?4,locality=?5,route=?6,credit_days=?7,opening_balance=?8 WHERE id=?9",
@@ -837,6 +853,9 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
     }
     fill_printer_defaults(&mut printers);
     let mut shop = shop;
+    let state_code = crate::gst::shop_state_code(conn);
+    shop["stateCode"] = json!(state_code);
+    shop["state"] = json!(crate::gst::state_name(&state_code).unwrap_or(""));
     for (k, v) in [("shortName", ""), ("tagline", ""), ("whatsapp", "")] {
         if shop[k].is_null() {
             shop[k] = json!(v);
@@ -874,8 +893,22 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
         return invalid("Enter the shop name.");
     }
     let gstin = shop["gstin"].as_str().unwrap_or("").trim().to_uppercase();
-    if !gstin.is_empty() && !is_valid_gstin(&gstin) {
-        return invalid("The shop GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1ZQ.");
+    // The shop's state: the one chosen, else the GSTIN's, else the state name, else Tamil Nadu. A GSTIN must agree with it.
+    let chosen = shop["stateCode"].as_str().unwrap_or("").trim().to_string();
+    let shop_state = if !chosen.is_empty() {
+        chosen
+    } else if gstin.len() >= 2 && crate::gst::state_name(&gstin[..2]).is_some() {
+        gstin[..2].to_string()
+    } else {
+        crate::gst::state_code_for_name(shop["state"].as_str().unwrap_or("")).unwrap_or("33").to_string()
+    };
+    if crate::gst::state_name(&shop_state).is_none() {
+        return invalid("Choose the shop's state.");
+    }
+    if !gstin.is_empty() {
+        if let Some(p) = crate::gst::gstin_problem(&gstin, Some(&shop_state)) {
+            return invalid(format!("The shop GSTIN: {p}"));
+        }
     }
     let copies = next["billFormat"]["copies"].as_i64().unwrap_or(1);
     if !(1..=5).contains(&copies) {
@@ -937,6 +970,9 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     }
     let mut shop_v = shop.clone();
     shop_v["gstin"] = json!(gstin);
+    shop_v["stateCode"] = json!(shop_state);
+    shop_v["state"] = json!(crate::gst::state_name(&shop_state).unwrap_or(""));
+    set_setting(&tx, "shopStateCode", &shop_state)?;
     set_setting(&tx, "bundle.shop", &shop_v.to_string())?;
     let mut tax_v = next["tax"].clone();
     if !rate_list.is_empty() {

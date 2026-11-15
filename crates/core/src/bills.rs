@@ -3,7 +3,7 @@
 
 use crate::db::{self, audit, doc_number, fy_of, iso, next_seq, parse_id};
 use crate::error::{invalid, ApiError, Result};
-use crate::money::{cash_discount, compute_totals_with_delivery, recalc_line};
+use crate::money::{cash_discount, compute_bill, compute_totals_with_delivery, recalc_line, Delivery};
 use crate::types::*;
 use chrono::{DateTime, Local};
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
@@ -63,7 +63,12 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     let settings = db::load_settings(tx)?;
     check_line_rates(tx, &lines)?;
     let cash_disc = cash_discount(&lines, ex.cash_disc_bps);
-    let totals = compute_totals_with_delivery(&lines, draft.bill_discount + cash_disc, settings.round_to_rupee, ex.delivery_charge, settings.delivery_gst_rate);
+
+    // Where the supply is made decides CGST + SGST (same state as the shop) or IGST (another state). It is worked out here from the
+    // customer saved in the database, never taken from the screen; the grand total is the same either way (prices include GST).
+    let supply = crate::gst::supply_for(tx, draft.customer_id.as_deref(), &ex.place_of_supply)?;
+    let delivery = Some(Delivery { amount: ex.delivery_charge, gst_rate: settings.delivery_gst_rate, cess_rate: 0.0 });
+    let (totals, taxes) = compute_bill(&lines, draft.bill_discount + cash_disc, settings.round_to_rupee, supply.inter, delivery);
 
     let paid: i64 = draft.payments.iter().map(|p| p.amount).sum();
     if paid != totals.grand {
@@ -114,43 +119,52 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             gst_rate: settings.delivery_gst_rate,
             cess_rate: 0.0,
             amount: ex.delivery_charge,
+            hsn: String::new(),
+            tax: None,
         });
     }
 
     tx.prepare_cached(
         "INSERT INTO bills(number,series,fy,seq,at,day,shift_id,cashier,counter,customer_id,customer_name,status,
             item_count,qty_count,gross,discount,bill_discount,taxable,gst,before_round,round_off,grand,
-            staff,delivery_address,delivery_locality,delivery_charge,wholesale,cash_disc_bps,cash_disc,remarks)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30)",
+            staff,delivery_address,delivery_locality,delivery_charge,wholesale,cash_disc_bps,cash_disc,remarks,
+            place_of_supply,supply_type,cust_gstin,cust_address)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34)",
     )?
     .execute(params![
         number, BILL_SERIES, fy, seq, at, db::day_of(now), shift_id, cashier, settings.counter, draft.customer_id, customer_name,
         status, totals.item_count, totals.qty_count, totals.gross, totals.discount, bill_disc,
         totals.taxable, totals.gst, totals.before_round, totals.round_off, totals.grand,
         ex.staff.trim(), ex.delivery_address.trim(), ex.delivery_locality.trim(), ex.delivery_charge, ex.wholesale as i64,
-        ex.cash_disc_bps, cash_disc, ex.remarks.trim()
+        ex.cash_disc_bps, cash_disc, ex.remarks.trim(),
+        supply.place, if supply.inter { "inter" } else { "intra" }, supply.gstin, supply.address.trim()
     ])?;
     let bill_id = tx.last_insert_rowid();
     hit(fault, Fault::AfterBillRow)?;
 
     {
         let mut ins = tx.prepare_cached(
-            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cost,cess_rate)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,(SELECT cost FROM items WHERE id=?3),?12)",
+            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cost,cess_rate,hsn,taxable,cgst,sgst,igst,cess)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,(SELECT cost FROM items WHERE id=?3),?12,COALESCE((SELECT hsn FROM items WHERE id=?3),''),?13,?14,?15,?16,?17)",
         )?;
         for (i, l) in lines.iter().enumerate() {
-            ins.execute(params![bill_id, i as i64, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount, l.cess_rate])
+            let t = &taxes[i];
+            ins.execute(params![bill_id, i as i64, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount, l.cess_rate, t.taxable, t.cgst, t.sgst, t.igst, t.cess])
                 .map_err(|e| match e {
                     rusqlite::Error::SqliteFailure(_, _) => ApiError::Invalid(format!("Item '{}' is not in the item list", l.name)),
                     other => other.into(),
                 })?;
         }
-        let mut slab = tx.prepare_cached("INSERT INTO bill_slabs(bill_id,rate,taxable,cgst,sgst,cess) VALUES(?1,?2,?3,?4,?5,?6)")?;
+        let mut slab = tx.prepare_cached("INSERT INTO bill_slabs(bill_id,rate,taxable,cgst,sgst,igst,cess) VALUES(?1,?2,?3,?4,?5,?6,?7)")?;
         for s in &totals.slabs {
-            slab.execute(params![bill_id, s.rate, s.taxable, s.cgst, s.sgst, s.cess])?;
+            slab.execute(params![bill_id, s.rate, s.taxable, s.cgst, s.sgst, s.igst, s.cess])?;
         }
     }
     hit(fault, Fault::AfterLines)?;
+    for (l, t) in lines.iter_mut().zip(taxes.iter()) {
+        l.hsn = tx.query_row("SELECT hsn FROM items WHERE id=?1", [&l.item_id], |r| r.get(0)).unwrap_or_default();
+        l.tax = Some(t.clone());
+    }
 
     // Points are redeemed first (checks the balance, minimum and maximum share of the bill), inside this same transaction.
     crate::loyalty::redeem_for_bill(tx, draft.customer_id.as_deref(), &draft.payments, totals.grand, bill_id, &number, &cashier)?;
@@ -230,6 +244,10 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             cash_disc,
             remarks: ex.remarks.trim().into(),
             exchange_refund: ex.exchange_refund.clone().filter(|r| r.amount > 0),
+            place_of_supply: supply.place.clone(),
+            supply_type: if supply.inter { "inter" } else { "intra" }.into(),
+            customer_gstin: supply.gstin.clone(),
+            customer_address: supply.address.trim().into(),
         },
     })
 }
@@ -310,7 +328,8 @@ fn ensure_delivery_item(tx: &Connection, now: DateTime<Local>) -> Result<()> {
 
 const BILL_COLS: &str = "b.id,b.number,b.at,b.cashier,b.counter,b.customer_id,b.customer_name,b.status,
     b.item_count,b.qty_count,b.gross,b.discount,b.taxable,b.gst,b.before_round,b.round_off,b.grand,
-    b.staff,b.delivery_address,b.delivery_locality,b.delivery_charge,b.wholesale,b.cash_disc_bps,b.cash_disc,b.remarks";
+    b.staff,b.delivery_address,b.delivery_locality,b.delivery_charge,b.wholesale,b.cash_disc_bps,b.cash_disc,b.remarks,
+    b.place_of_supply,b.supply_type,b.cust_gstin,b.cust_address";
 
 fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
     Ok(Bill {
@@ -348,16 +367,20 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             cash_disc: r.get(23)?,
             remarks: r.get(24)?,
             exchange_refund: None,
+            place_of_supply: r.get(25)?,
+            supply_type: r.get(26)?,
+            customer_gstin: r.get(27)?,
+            customer_address: r.get(28)?,
         },
     })
 }
 
 fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
     let mut lines = conn.prepare_cached(
-        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate FROM bill_lines WHERE bill_id=?1 ORDER BY line_no",
+        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate,hsn,taxable,cgst,sgst,igst,cess FROM bill_lines WHERE bill_id=?1 ORDER BY line_no",
     )?;
     let mut pays = conn.prepare_cached("SELECT mode,amount,ref FROM bill_payments WHERE bill_id=?1 ORDER BY id")?;
-    let mut slabs = conn.prepare_cached("SELECT rate,taxable,cgst,sgst,cess FROM bill_slabs WHERE bill_id=?1 ORDER BY rate")?;
+    let mut slabs = conn.prepare_cached("SELECT rate,taxable,cgst,sgst,cess,igst FROM bill_slabs WHERE bill_id=?1 ORDER BY rate")?;
     let mut xr = conn.prepare_cached("SELECT credit_note,mode,amount FROM exchange_refunds WHERE bill_id=?1 LIMIT 1")?;
     for b in bills.iter_mut() {
         let id = parse_id("b", &b.id).unwrap_or(0);
@@ -374,6 +397,8 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
                     gst_rate: r.get(7)?,
                     amount: r.get(8)?,
                     cess_rate: r.get(9)?,
+                    hsn: r.get(10)?,
+                    tax: Some(LineTax { taxable: r.get(11)?, cgst: r.get(12)?, sgst: r.get(13)?, igst: r.get(14)?, cess: r.get(15)? }),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -392,7 +417,7 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
             .query_row([id], |r| Ok(ExchangeRefund { credit_note: r.get(0)?, mode: r.get(1)?, amount: r.get(2)? }))
             .optional()?;
         b.totals.slabs = slabs
-            .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)?, igst: 0, cess: r.get(4)? }))?
+            .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)?, igst: r.get(5)?, cess: r.get(4)? }))?
             .collect::<rusqlite::Result<_>>()?;
         b.totals.cess = b.totals.slabs.iter().map(|s| s.cess).sum();
     }

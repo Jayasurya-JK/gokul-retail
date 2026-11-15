@@ -179,6 +179,8 @@ pub fn seed_demo(conn: &mut Connection) -> Result<()> {
                         discount: 0,
                         gst_rate: it.gst_rate,
                         cess_rate: 0.0,
+                        hsn: String::new(),
+                        tax: None,
                         amount: 0,
                     })
                 })
@@ -241,14 +243,14 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
         }
         // suppliers
         for (id, name, phone, city, gstin, address, contact, days) in [
-            ("s1", "Sri Murugan Oil Seeds", "94430 12871", "Erode", "33AADFS2901K1ZP", "14, Perundurai Road, Erode 638011", "Murugan", 15),
-            ("s2", "Kongu Groundnut Traders", "98427 66012", "Tiruppur", "33AAGFK5521Q1Z3", "7, Kangeyam Road, Tiruppur 641604", "Kongu Palanisamy", 7),
-            ("s3", "Annai Gingelly Merchants", "97890 45521", "Salem", "33AAEPA7712B1ZK", "22, Fairlands Main Road, Salem 636016", "Annamalai", 21),
-            ("s4", "Thanjai Coconut Copra Mart", "90030 18842", "Pollachi", "33AAHFT3345C1ZA", "5, Market Yard, Pollachi 642001", "Thanjai Selvam", 30),
-            ("s5", "Pandian Jaggery Works", "99940 27365", "Mettur", "33AAJPP9981R1Z8", "31, Jaggery Market Street, Mettur 636401", "Pandian", 10),
-            ("s6", "Aachi Distributors Coimbatore", "98946 31107", "Coimbatore", "33AACCA1182M1ZL", "88, Oppanakara Street, Coimbatore 641001", "Ravi (Salesman)", 15),
-            ("s7", "Lakshmi Pulses & Grains", "93640 90218", "Coimbatore", "33AAHPL4410D1ZQ", "12, Big Bazaar Street, Coimbatore 641001", "Lakshmi Narayanan", 15),
-            ("s8", "Vinayaga Packaging", "99425 51480", "Coimbatore", "33AAKFV6672G1ZN", "3, SIDCO Industrial Estate, Kurichi, Coimbatore 641021", "Vinayagam", 30),
+            ("s1", "Sri Murugan Oil Seeds", "94430 12871", "Erode", "33AADFS2901K1ZF", "14, Perundurai Road, Erode 638011", "Murugan", 15),
+            ("s2", "Kongu Groundnut Traders", "98427 66012", "Tiruppur", "33AAGFK5521Q1Z2", "7, Kangeyam Road, Tiruppur 641604", "Kongu Palanisamy", 7),
+            ("s3", "Annai Gingelly Merchants", "97890 45521", "Salem", "33AAEPA7712B1ZJ", "22, Fairlands Main Road, Salem 636016", "Annamalai", 21),
+            ("s4", "Thanjai Coconut Copra Mart", "90030 18842", "Pollachi", "33AAHFT3345C1ZJ", "5, Market Yard, Pollachi 642001", "Thanjai Selvam", 30),
+            ("s5", "Pandian Jaggery Works", "99940 27365", "Mettur", "33AAJPP9981R1ZJ", "31, Jaggery Market Street, Mettur 636401", "Pandian", 10),
+            ("s6", "Aachi Distributors Coimbatore", "98946 31107", "Coimbatore", "33AACCA1182M1ZT", "88, Oppanakara Street, Coimbatore 641001", "Ravi (Salesman)", 15),
+            ("s7", "Lakshmi Pulses & Grains", "93640 90218", "Coimbatore", "33AAHPL4410D1ZC", "12, Big Bazaar Street, Coimbatore 641001", "Lakshmi Narayanan", 15),
+            ("s8", "Vinayaga Packaging", "99425 51480", "Coimbatore", "33AAKFV6672G1ZU", "3, SIDCO Industrial Estate, Kurichi, Coimbatore 641021", "Vinayagam", 30),
         ] {
             tx.execute(
                 "INSERT INTO suppliers(id,name,phone,city,gstin,address,contact,credit_days,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
@@ -261,12 +263,23 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
         for (i, c) in data.customers.iter().enumerate() {
             let b2b = i % 7 == 3;
             let email = if i % 4 == 0 { format!("{}{}@gmail.com", c.name.split(' ').next().unwrap_or("customer").to_lowercase(), 10 + i) } else { String::new() };
-            let gstin = if b2b { format!("33AABCP{:04}K1Z{}", 1000 + i * 37, (b'A' + (i % 9) as u8) as char) } else { String::new() };
+            let gstin = if b2b {
+                let g14 = format!("33AABCP{:04}K1Z", 1000 + i * 37);
+                format!("{g14}{}", crate::gst::gstin_check_char(&g14).unwrap_or('0')) // a real check character, so the demo passes the same GSTIN check as real data
+            } else {
+                String::new()
+            };
             tx.execute(
                 "UPDATE customers SET type=?1, business=?2, gstin=?3, email=?4, address=?5 WHERE id=?6",
                 params![if b2b { "b2b" } else { "retail" }, if b2b { businesses[(i >> 1) % businesses.len()] } else { "" }, gstin, email, format!("{}, {}, Coimbatore", 12 + i, c.area), c.id],
             )?;
         }
+        // the demo bills were written before the customers got their GSTIN: put it on the invoices, as if it had been there all along
+        tx.execute(
+            "UPDATE bills SET cust_gstin=(SELECT c.gstin FROM customers c WHERE c.id=bills.customer_id), cust_address=(SELECT c.address FROM customers c WHERE c.id=bills.customer_id)
+             WHERE customer_id IN (SELECT id FROM customers WHERE gstin != '')",
+            [],
+        )?;
         tx.commit()?;
     }
 

@@ -242,13 +242,13 @@ fn staff_list_and_customer_profile_fields() {
         &s,
         "saveCustomer",
         json!([{ "name": "Anbu", "phone": "99999 00000", "area": "Karur", "type": "retail", "creditLimit": 100000,
-                 "fatherName": "Raman", "dob": "1990-05-21", "anniversary": "2015-02-14", "gstin": "33AAKFG4821M1ZQ", "pan": "abcde1234f",
+                 "fatherName": "Raman", "dob": "1990-05-21", "anniversary": "2015-02-14", "gstin": "33AAKFG4821M1Z9", "pan": "abcde1234f",
                  "locality": "Thanthonimalai", "route": "R2", "creditDays": 15, "openingBalance": 25000 }]),
     )
     .unwrap();
     assert_eq!((c["fatherName"].as_str(), c["pan"].as_str(), c["route"].as_str()), (Some("Raman"), Some("ABCDE1234F"), Some("R2")));
     assert_eq!((c["creditDays"].as_i64(), c["openingBalance"].as_i64()), (Some(15), Some(25000)));
-    assert_eq!(c["gstin"], "33AAKFG4821M1ZQ");
+    assert_eq!(c["gstin"], "33AAKFG4821M1Z9");
     let bad = call(&db, &s, "saveCustomer", json!([{ "name": "Bad", "type": "retail", "dob": "21/05/1990" }]));
     assert!(bad.is_err());
     let rows = call(&db, &s, "listCustomerRows", json!([])).unwrap();

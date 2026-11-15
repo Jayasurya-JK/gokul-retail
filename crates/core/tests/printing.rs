@@ -19,7 +19,7 @@ fn setup(db: &gokul_core::Db, target: &str, paper: &str) {
     db.with(|c| {
         set_setting(c, "printer", target)?;
         set_setting(c, "shopName", "Gokul Oils")?;
-        set_setting(c, "gstin", "33AAKFG4821M1ZQ")?;
+        set_setting(c, "gstin", "33AAKFG4821M1Z9")?;
         set_setting(c, "address", "12 Mill Road, Coimbatore 641001")?;
         set_setting(c, "phone", "98420 12345")?;
         set_setting(c, "receiptFooter", "Thank you. Visit again!")?;
@@ -74,7 +74,7 @@ fn printed_bill_matches_saved_bill_at_80_and_58_mm() {
         // the long name wrapped instead of being cut
         assert!(text.contains("Premium") && text.contains("Quality"), "{text}");
         assert!((text.contains("PRODUCT") || text.contains("ITEM")) && text.contains("MRP") && text.contains("RATE") && text.contains("QTY") && text.contains("AMT"), "{text}");
-        assert!(text.contains("GSTIN: 33AAKFG4821M1ZQ.") && text.contains("TAX INVOICE") && text.contains("Cash Bill"), "{text}");
+        assert!(text.contains("GSTIN: 33AAKFG4821M1Z9.") && text.contains("TAX INVOICE") && text.contains("Cash Bill"), "{text}");
         assert!(text.contains("BILL NO : 26/0"), "printed bill number is YY/NNNNN: {text}");
         assert!((text.contains("Tax %") || text.contains("Tax%")) && text.contains("Taxable") && text.contains("SGST") && text.contains("CGST") && text.contains("Total Amt"), "{text}");
         assert!(text.contains("Payment Details:") && text.contains("Amount Received") && text.contains("Balance Amount") && text.contains("20.00"), "{text}");

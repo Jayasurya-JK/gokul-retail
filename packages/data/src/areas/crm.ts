@@ -1,7 +1,11 @@
 import type { MockStore } from './store';
 import type { Bill, Customer, Paise, PayMode, Role, UnitCode } from '../types';
 import { rng } from '../seed';
-import { defaultRateEntries, enabledRates, mergeRateEntries, rateOk } from '../gst';
+import { defaultRateEntries, enabledRates, gstinCheckChar, gstinProblem, mergeRateEntries, rateOk, stateCodeForName, stateName } from '../gst';
+import { finalizeSeedBills } from './taxlines';
+
+/** A 14-character GSTIN stem plus its real check character */
+const withCheckChar = (g14: string): string => g14 + (gstinCheckChar(g14) ?? '0');
 
 // Area: Office sales bills, customers, credit and collections, users and roles, settings.
 
@@ -90,6 +94,8 @@ export interface CustomerInput {
   route?: string;
   creditDays?: number;
   openingBalance?: Paise;
+  /** GST state code of the customer ("33"). With a GSTIN it must match the GSTIN's first two digits and is filled from it. */
+  stateCode?: string;
 }
 
 /* =====================================================================
@@ -219,6 +225,8 @@ export interface ShopSettings {
   address: string;
   city: string;
   state: string;
+  /** GST state code of the shop ("33"): sales to the same state are CGST + SGST, to other states IGST */
+  stateCode: string;
   pincode: string;
   phone: string;
   email: string;
@@ -659,7 +667,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     loyalty: { enabled: true, rupeesPerPoint: 100, pointValue: 100, minRedeem: 100, maxPct: 100, expiryMonths: 12, printExpiry: true, goLiveDate: '2026-11-07', excludeCategories: [] },
     shop: {
       name: s.shopName, legalName: 'Gokul Oils (Proprietor: Suresh Kumar)', address: '48, Mettupalayam Road, Gandhipuram',
-      city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
+      city: 'Coimbatore', state: 'Tamil Nadu', stateCode: '33', pincode: '641012', phone: s.phone, email: 'gokuloils.cbe@gmail.com',
       gstin: s.gstin, fssai: '12418009000417', shortName: 'GOKUL', tagline: '', whatsapp: '',
     },
     tax: {
@@ -718,12 +726,19 @@ export function createCrmMock(store: MockStore): CrmApi {
     extras.set(c.id, {
       type: b2b ? 'b2b' : 'retail',
       business: b2b ? BUSINESSES[(i >> 1) % BUSINESSES.length] : undefined,
-      gstin: b2b ? `33${String.fromCharCode(65 + (i % 20))}${String.fromCharCode(66 + (i % 18))}${String.fromCharCode(67 + (i % 15))}PM${1000 + i * 37}K1Z${String.fromCharCode(65 + (i % 9))}` : undefined,
+      gstin: b2b ? withCheckChar(`33${String.fromCharCode(65 + (i % 20))}${String.fromCharCode(66 + (i % 18))}${String.fromCharCode(67 + (i % 15))}PM${String(1000 + i * 37).slice(-4)}K1Z`) : undefined,
       email: i % 4 === 0 ? `${c.name.split(' ')[0].toLowerCase()}${10 + i}@gmail.com` : undefined,
       address: `${12 + i}, ${c.area}, Coimbatore`,
       since: daysAgo(40 + Math.floor(rr() * 600)),
     });
   });
+
+  // The B2B customers' GSTIN and state also live on the customer the counter sees; old bills get their places of supply and line taxes.
+  store.customers.forEach((c) => {
+    const g = extras.get(c.id)?.gstin;
+    if (g) { c.gstin = g; c.stateCode = g.slice(0, 2); }
+  });
+  finalizeSeedBills(store);
 
   const nonCancelled = (b: Bill) => b.status !== 'cancelled';
 
@@ -968,6 +983,13 @@ export function createCrmMock(store: MockStore): CrmApi {
       return delay(rowFor(c));
     },
     saveCustomer: (input) => {
+      const sentState = (input.stateCode ?? '').trim();
+      if (sentState && !stateName(sentState)) return Promise.reject(new Error('Choose a valid state for the customer.'));
+      const gstinIn = (input.gstin ?? '').trim().toUpperCase();
+      if (gstinIn) {
+        const problem = gstinProblem(gstinIn, sentState);
+        if (problem) return Promise.reject(new Error(`GSTIN: ${problem}`));
+      }
       const clean = { name: input.name.trim(), phone: input.phone.trim(), area: input.area.trim() };
       let c = input.id ? store.customers.find((x) => x.id === input.id) : undefined;
       if (c) {
@@ -978,6 +1000,8 @@ export function createCrmMock(store: MockStore): CrmApi {
         c = { id: `c${seq}`, ...clean, creditLimit: input.creditLimit, outstanding: 0, loyaltyPoints: 0, lastVisit: 'Today' };
         store.customers.unshift(c);
       }
+      c.gstin = input.type === 'b2b' && gstinIn ? gstinIn : undefined;
+      c.stateCode = input.type === 'b2b' && gstinIn ? gstinIn.slice(0, 2) : sentState || undefined;
       extras.set(c.id, {
         type: input.type, business: input.type === 'b2b' ? input.business?.trim() : undefined,
         gstin: input.gstin?.trim().toUpperCase() || undefined,
@@ -1085,6 +1109,15 @@ export function createCrmMock(store: MockStore): CrmApi {
       bundle.tax.rates = mergeRateEntries(bundle.tax.rates);
       store.taxRates = enabledRates(bundle.tax.rates);
       store.settings.shopName = bundle.shop.name;
+      const stateCode = bundle.shop.stateCode || stateCodeForName(bundle.shop.state) || '33';
+      if (!stateName(stateCode)) return Promise.reject(new Error("Choose the shop's state."));
+      const shopGstin = bundle.shop.gstin.trim().toUpperCase();
+      if (shopGstin) {
+        const problem = gstinProblem(shopGstin, stateCode);
+        if (problem) return Promise.reject(new Error(`The shop GSTIN: ${problem}`));
+      }
+      bundle.shop.gstin = shopGstin; bundle.shop.stateCode = stateCode; bundle.shop.state = stateName(stateCode) ?? '';
+      store.settings.stateCode = stateCode;
       store.settings.gstin = bundle.shop.gstin;
       store.settings.phone = bundle.shop.phone;
       store.settings.receiptFooter = bundle.billFormat.footer;

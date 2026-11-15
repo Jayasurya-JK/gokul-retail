@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Printer, Truck, UserPlus } from 'lucide-react';
-import { DEFAULT_GST_RATES, enabledRates, rateText, formatRupees, parsePaise, parseQty, type Bill, type BillLine, type Staff } from '@gokul/data';
+import { DEFAULT_GST_RATES, GST_STATES, enabledRates, rateText, stateLabel, formatRupees, parsePaise, parseQty, type Bill, type BillLine, type Staff } from '@gokul/data';
 import { Button, Dialog, Field, Input, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 import type { Delivery } from '../store';
@@ -209,3 +209,36 @@ export function ManualItemDialog({ open, onClose, onAdd }: { open: boolean; onCl
   );
 }
 
+
+/* ---------- Place of supply ---------- */
+/**
+ * Where the goods are sold to. Normally this follows the customer (their GSTIN's state); pick another state here for a courier order
+ * to a walk-in. The shop's own state means CGST + SGST, any other state means IGST (confirm with CA).
+ */
+export function PlaceOfSupplyDialog({ open, shopState, chosen, customerState, onClose, onPick }: {
+  open: boolean; shopState: string; chosen: string; customerState: string; onClose: () => void; onPick: (state: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  useEffect(() => { if (open) setValue(chosen); }, [open, chosen]);
+  const effective = value || customerState || shopState;
+  return (
+    <Dialog
+      open={open} onOpenChange={(o) => !o && onClose()} size="sm" title="Place of supply"
+      description="Sales inside the shop's own state have CGST + SGST. Sales to another state have IGST. The bill total does not change."
+      footer={<><Button onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" onClick={() => onPick(value)} kbd="Enter">Use this</Button></>}
+    >
+      <form className="space-y-3.5" onSubmit={(e) => { e.preventDefault(); onPick(value); }}>
+        <Field label="State">
+          <select data-autofocus autoFocus value={value} onChange={(e) => setValue(e.target.value)} className="h-9 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink">
+            <option value="">{customerState ? `Customer's state: ${stateLabel(customerState)}` : `Same as the shop: ${stateLabel(shopState)}`}</option>
+            {GST_STATES.map((s) => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+          </select>
+        </Field>
+        <div className={cn('rounded-lg px-3 py-2 text-sm', effective === shopState ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning')}>
+          {effective === shopState ? <>Local sale: <b>CGST + SGST</b></> : <>Inter-state sale to <b>{stateLabel(effective)}</b>: <b>IGST</b></>}
+        </div>
+        <button type="submit" hidden aria-hidden tabIndex={-1} />
+      </form>
+    </Dialog>
+  );
+}

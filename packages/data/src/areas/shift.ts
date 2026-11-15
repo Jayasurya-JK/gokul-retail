@@ -1,5 +1,6 @@
 import type { MockStore } from './store';
-import type { Paise, Shift, User } from '../types';
+import type { Customer, Paise, Shift, User } from '../types';
+import { gstinProblem, stateName } from '../gst';
 
 // Area: POS day open, cash in/out, day close (X/Z), lock, plus two small billing-screen helpers.
 
@@ -118,7 +119,8 @@ export interface ShiftApi {
 
   /** Billing helpers: the number the next saved bill will get, and inline "add customer" from F3. */
   peekNextBillNumber(): Promise<string>;
-  quickAddCustomer(input: { name: string; phone: string }): Promise<import('../types').Customer>;
+  /** A GSTIN makes it a registered (B2B) customer and sets its state from the GSTIN; without one an optional state may be given */
+  quickAddCustomer(input: { name: string; phone: string; gstin?: string; stateCode?: string }): Promise<import('../types').Customer>;
 }
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -244,10 +246,18 @@ export function createShiftMock(store: MockStore): ShiftApi {
     },
 
     peekNextBillNumber: async () => `${store.settings.billPrefix}-${pad6(48200 + store.bills.length + 1)}`,
-    quickAddCustomer: async ({ name, phone }) => {
-      const c = {
+    quickAddCustomer: async ({ name, phone, gstin, stateCode }) => {
+      const g = (gstin ?? '').trim().toUpperCase();
+      const st = (stateCode ?? '').trim();
+      if (st && !stateName(st)) throw new Error('Choose a valid state');
+      if (g) {
+        const p = gstinProblem(g, st);
+        if (p) throw new Error(`GSTIN: ${p}`);
+      }
+      const c: Customer = {
         id: `c-new-${store.customers.length + 1}`, name: name.trim(), phone: phone.trim(), area: 'Coimbatore',
         creditLimit: 0, outstanding: 0, loyaltyPoints: 0, lastVisit: 'Today',
+        ...(g ? { gstin: g, stateCode: g.slice(0, 2) } : st ? { stateCode: st } : {}),
       };
       store.customers.unshift(c);
       return c;

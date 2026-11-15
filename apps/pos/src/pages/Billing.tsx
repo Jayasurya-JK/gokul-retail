@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScanBarcode, XCircle } from 'lucide-react';
 import {
-  cashDiscount, computeTotalsWithDelivery, formatQty, formatRupees, lineGross, parsePaise, parseQty,
+  cashDiscount, computeTotalsWithDelivery, supplyFor, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
 import { Kbd, ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
@@ -11,7 +11,7 @@ import { api, billingStores, refreshTodaySales, SLOT_LABEL, useSession, type Bil
 import { plural } from '../plural';
 import { TopBar } from '../components/TopBar';
 import { BillToolbar } from '../components/BillToolbar';
-import { DeliveryDialog, ManualItemDialog, RecentBillsDialog, StaffDialog } from '../components/BillDialogs';
+import { DeliveryDialog, ManualItemDialog, PlaceOfSupplyDialog, RecentBillsDialog, StaffDialog } from '../components/BillDialogs';
 import { BillGrid, type EditField, type EditState } from '../components/BillGrid';
 import { SummaryPanel } from '../components/SummaryPanel';
 import { ConfirmDialog, CustomerDialog, HeldDialog, ItemSearchDialog, PromptDialog } from '../components/Dialogs';
@@ -20,7 +20,7 @@ import { printBillAfterSave, printWithToast } from '../printing';
 import { ScanSuggest, SUGGEST_MAX } from '../components/ScanSuggest';
 import { beepError, useScanHandler } from '../scanner';
 
-type DialogName = null | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx' | 'delivery' | 'staff' | 'recent' | 'manual';
+type DialogName = null | 'place' | 'search' | 'customer' | 'pay' | 'held' | 'cancel' | 'billDisc' | 'dropEx' | 'delivery' | 'staff' | 'recent' | 'manual';
 const FIELD_ORDER: EditField[] = ['qty', 'rate', 'disc'];
 
 export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
@@ -30,7 +30,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /* Point of Sale and POS 1 are two separate bills: this screen shows the one for its tab, the other keeps its state. */
   const useBilling = billingStores[slot];
   const B = useBilling();
-  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps } = B;
+  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps, placeOfSupply } = B;
 
   const [items, setItems] = useState<Item[]>([]);
   const [scan, setScan] = useState('');
@@ -68,14 +68,19 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
 
   const deliveryGst = settings?.deliveryGstRate ?? 0;
   const cashDisc = useMemo(() => cashDiscount(lines, cashDiscBps), [lines, cashDiscBps]);
+  /* Where the supply is made: the state picked on the bill, else the customer's (their GSTIN's), else the shop's own. Local = CGST + SGST,
+     another state = IGST. The total is the same either way (prices include GST); the server works it out again when it saves. */
+  const shopState = settings?.stateCode ?? '33';
+  const supply = useMemo(() => supplyFor(shopState, customer ?? undefined, placeOfSupply), [shopState, customer, placeOfSupply]);
   const totals = useMemo(
-    () => computeTotalsWithDelivery(lines, billDiscount + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst),
-    [lines, billDiscount, cashDisc, settings, delivery.charge, deliveryGst],
+    () => computeTotalsWithDelivery(lines, billDiscount + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst, supply.inter),
+    [lines, billDiscount, cashDisc, settings, delivery.charge, deliveryGst, supply.inter],
   );
   /** What goes to the backend next to the lines */
   const extras = () => ({
     staff: staff || undefined, deliveryAddress: delivery.address || undefined, deliveryLocality: delivery.locality || undefined,
     deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDiscBps: cashDiscBps || undefined,
+    placeOfSupply: placeOfSupply || undefined,
   });
   /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). A bigger credit than the bill is allowed:
      the difference goes back to the customer (cash or UPI, manager PIN, audited), chosen in the payment window. */
@@ -531,6 +536,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay}
           onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} exchangeCredit={exchangeCredit} due={due} refundDue={refundDue} onDropExchange={() => setDialog('dropEx')} onApplyDiscount={applyBillDiscount} billNo={billNo}
           slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
+          supply={supply} shopState={shopState} onPlace={() => setDialog('place')}
           focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
           storeCredit={storeCreditAvail} storeCreditUsed={storeCreditUsed} focusStoreCredit={storeFocus}
           onApplyStoreCredit={applyStoreCredit} onClearStoreCredit={() => setStoreCredit(0)}
@@ -601,6 +607,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <RecentBillsDialog open={dialog === 'recent'} onClose={() => setDialog(null)} onReprint={reprintBill} onOpenSales={() => { setDialog(null); nav('/sales'); }} />
       <ManualItemDialog open={dialog === 'manual'} onClose={() => setDialog(null)} onAdd={(l) => { B.addLine(l); setDialog(null); }} />
       <ItemSearchDialog open={dialog === 'search'} seed={searchSeed} onClose={() => setDialog(null)} onPick={(it) => { setDialog(null); addItem(it); }} />
+      <PlaceOfSupplyDialog open={dialog === 'place'} shopState={shopState} chosen={placeOfSupply} customerState={supply.gstin ? supply.gstin.slice(0, 2) : customer?.stateCode ?? ''} onClose={() => setDialog(null)} onPick={(s) => { B.setPlaceOfSupply(s); setDialog(null); }} />
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
       <PaymentDialog
@@ -646,7 +653,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           const net = lines.reduce((x, l) => x + l.amount, 0);
           const t = typed.trim();
           const d = t === '' ? 0 : t.endsWith('%') ? Math.round((net * Number(t.slice(0, -1) || 0)) / 100) : parsePaise(t) ?? 0;
-          const after = computeTotalsWithDelivery(lines, Math.min(d, net) + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst);
+          const after = computeTotalsWithDelivery(lines, Math.min(d, net) + cashDisc, settings?.roundToRupee ?? true, delivery.charge, deliveryGst, supply.inter);
           return <span className="flex items-center justify-between"><span>Discount <b className="num">{formatRupees(Math.min(d, net))}</b></span><span>New total <b className="num text-md">{formatRupees(after.grand)}</b></span></span>;
         }}
         onClose={() => setDialog(null)}

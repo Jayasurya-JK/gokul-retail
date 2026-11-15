@@ -143,9 +143,9 @@ fn bills_where(p: &ReportParams, lines: bool) -> (String, Vec<Sql>) {
 }
 
 /// Taxable part of a GST-inclusive line amount, rounded half-up (same as taxableOf in the TypeScript mock).
-const L_TAXABLE: &str = "((200*l.amount + (100+l.gst_rate)) / (2*(100+l.gst_rate)))";
+const L_TAXABLE: &str = "((20000*l.amount + (10000+CAST(ROUND(l.gst_rate*100) AS INTEGER))) / (2*(10000+CAST(ROUND(l.gst_rate*100) AS INTEGER))))";
 /// Cost of the sold quantity, ex-GST.
-const L_COST: &str = "(((((200*i.cost + (100+l.gst_rate)) / (2*(100+l.gst_rate))) * l.qty) + 500) / 1000)";
+const L_COST: &str = "(((((20000*i.cost + (10000+CAST(ROUND(l.gst_rate*100) AS INTEGER))) / (2*(10000+CAST(ROUND(l.gst_rate*100) AS INTEGER)))) * l.qty) + 500) / 1000)";
 
 fn run(conn: &Connection, sql: &str, args: Vec<Sql>) -> Result<Vec<Vec<Sql>>> {
     let mut st = conn.prepare_cached(sql)?;
@@ -162,6 +162,17 @@ fn si(v: &Sql) -> i64 {
         Sql::Text(t) => t.parse().unwrap_or(0),
         _ => 0,
     }
+}
+fn sf(v: &Sql) -> f64 {
+    match v {
+        Sql::Integer(i) => *i as f64,
+        Sql::Real(f) => *f,
+        Sql::Text(t) => t.parse().unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+fn rate_txt(r: f64) -> String {
+    crate::gst::rates_text(&[r])
 }
 fn ss(v: &Sql) -> String {
     match v {
@@ -462,44 +473,57 @@ fn hourly(conn: &Connection, p: &ReportParams) -> Result<Value> {
 
 // ---------- GST ----------
 
-fn cn_sums(conn: &Connection, p: &ReportParams) -> Result<(i64, i64, i64, i64)> {
-    // (count, taxable, cgst, sgst) of credit notes in the period
+/// Credit notes issued in the period, added up from their tax slabs.
+#[derive(Debug, Default, Clone, Copy)]
+struct CnSums {
+    count: i64,
+    taxable: i64,
+    cgst: i64,
+    sgst: i64,
+    igst: i64,
+    cess: i64,
+}
+
+fn cn_sums(conn: &Connection, p: &ReportParams) -> Result<CnSums> {
     let mut st = conn.prepare_cached("SELECT totals_json FROM credit_notes WHERE day >= ?1 AND day <= ?2")?;
     let rows = st.query_map([&p.from, &p.to], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
-    let (mut n, mut t, mut c, mut s) = (0, 0, 0, 0);
+    let mut t = CnSums::default();
     for j in rows {
-        n += 1;
+        t.count += 1;
         let v: Value = serde_json::from_str(&j).unwrap_or(Value::Null);
         for sl in v["slabs"].as_array().cloned().unwrap_or_default() {
-            t += sl["taxable"].as_i64().unwrap_or(0);
-            c += sl["cgst"].as_i64().unwrap_or(0);
-            s += sl["sgst"].as_i64().unwrap_or(0);
+            t.taxable += sl["taxable"].as_i64().unwrap_or(0);
+            t.cgst += sl["cgst"].as_i64().unwrap_or(0);
+            t.sgst += sl["sgst"].as_i64().unwrap_or(0);
+            t.igst += sl["igst"].as_i64().unwrap_or(0);
+            t.cess += sl["cess"].as_i64().unwrap_or(0);
         }
     }
-    Ok((n, t, c, s))
+    Ok(t)
 }
 
 fn gstr1(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let (w, a) = bills_where(p, false);
+    // "Registered" = the bill carries a valid GSTIN (the one the customer had when the bill was written)
     let slabs = run(
         conn,
         &format!(
-            "SELECT CASE WHEN COALESCE(c.gstin,'') != '' THEN 1 ELSE 0 END,s.rate,COUNT(DISTINCT s.bill_id),SUM(s.taxable),SUM(s.cgst),SUM(s.sgst)
-             FROM bills b JOIN bill_slabs s ON s.bill_id=b.id LEFT JOIN customers c ON c.id=b.customer_id WHERE {w} GROUP BY 1,2 ORDER BY 1,2"
+            "SELECT CASE WHEN b.cust_gstin != '' THEN 1 ELSE 0 END,s.rate,COUNT(DISTINCT s.bill_id),SUM(s.taxable),SUM(s.cgst),SUM(s.sgst),SUM(s.igst),SUM(s.cess)
+             FROM bills b JOIN bill_slabs s ON s.bill_id=b.id WHERE {w} GROUP BY 1,2 ORDER BY 1,2"
         ),
         a.clone(),
     )?;
-    let counts = run(conn, &format!("SELECT CASE WHEN COALESCE(c.gstin,'') != '' THEN 1 ELSE 0 END,COUNT(*) FROM bills b LEFT JOIN customers c ON c.id=b.customer_id WHERE {w} GROUP BY 1"), a)?;
+    let counts = run(conn, &format!("SELECT CASE WHEN b.cust_gstin != '' THEN 1 ELSE 0 END,COUNT(*) FROM bills b WHERE {w} GROUP BY 1"), a)?;
     let n_of = |flag: i64| counts.iter().find(|r| si(&r[0]) == flag).map(|r| si(&r[1])).unwrap_or(0);
     let (n_b2b, n_b2c) = (n_of(1), n_of(0));
     let mut rows: Vec<Value> = vec![];
-    let (mut ti, mut tt, mut tc, mut ts) = (0i64, 0i64, 0i64, 0i64);
+    let (mut ti, mut tt, mut tc, mut ts, mut tg, mut tx) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
     let mut b2b_taxable = 0;
     let mut b2c_taxable = 0;
     for (flag, ref_, title, n) in [(1, "4A", "B2B - registered customers", n_b2b), (0, "7", "B2C - unregistered customers", n_b2c)] {
         if flag == 0 {
-            rows.push(json!({ "_style": "head", "ref": "5", "desc": "B2C Large - inter-state above Rs 2.5 lakh" }));
-            rows.push(json!({ "ref": "", "desc": "None in this period", "_style": "muted" }));
+            rows.push(json!({ "_style": "head", "ref": "5", "desc": "B2C Large - inter-state above Rs 2.5 lakh (see the GSTR-1 export)" }));
+            rows.push(json!({ "ref": "", "desc": "Listed invoice by invoice in the GSTR-1 export", "_style": "muted" }));
         }
         rows.push(json!({ "_style": "head", "ref": ref_, "desc": title }));
         let mine: Vec<&Vec<Sql>> = slabs.iter().filter(|r| si(&r[0]) == flag).collect();
@@ -507,77 +531,80 @@ fn gstr1(conn: &Connection, p: &ReportParams) -> Result<Value> {
             rows.push(json!({ "ref": "", "desc": "No supplies in this period", "_style": "muted" }));
         }
         for r in mine {
-            let (rate, inv, taxable, cgst, sgst) = (si(&r[1]), si(&r[2]), si(&r[3]), si(&r[4]), si(&r[5]));
-            rows.push(json!({ "ref": "", "desc": if rate == 0 { "Nil rated / exempt (0%)".to_string() } else { format!("Taxable supplies @ {rate}%") }, "invoices": inv,
-                              "taxable": taxable, "cgst": cgst, "sgst": sgst, "igst": 0, "tax": cgst + sgst, "value": taxable + cgst + sgst }));
+            let (rate, inv, taxable, cgst, sgst, igst, cess) = (sf(&r[1]), si(&r[2]), si(&r[3]), si(&r[4]), si(&r[5]), si(&r[6]), si(&r[7]));
+            rows.push(json!({ "ref": "", "desc": if rate == 0.0 { "Nil rated / exempt (0%)".to_string() } else { format!("Taxable supplies @ {}", rate_txt(rate)) }, "invoices": inv,
+                              "taxable": taxable, "cgst": cgst, "sgst": sgst, "igst": igst, "cess": cess, "tax": cgst + sgst + igst, "value": taxable + cgst + sgst + igst + cess }));
             tt += taxable;
             tc += cgst;
             ts += sgst;
+            tg += igst;
+            tx += cess;
             if flag == 1 { b2b_taxable += taxable } else { b2c_taxable += taxable }
         }
         ti += n;
     }
-    let (cn, cn_t, cn_c, cn_s) = cn_sums(conn, p)?;
+    let cn = cn_sums(conn, p)?;
     rows.push(json!({ "_style": "head", "ref": "9B", "desc": "Credit / debit notes" }));
-    rows.push(if cn > 0 {
-        json!({ "ref": "", "desc": "Sales returns (credit notes)", "invoices": cn, "taxable": cn_t, "cgst": cn_c, "sgst": cn_s, "igst": 0, "tax": cn_c + cn_s, "value": cn_t + cn_c + cn_s })
+    rows.push(if cn.count > 0 {
+        json!({ "ref": "", "desc": "Sales returns (credit notes)", "invoices": cn.count, "taxable": cn.taxable, "cgst": cn.cgst, "sgst": cn.sgst, "igst": cn.igst, "cess": cn.cess,
+                "tax": cn.cgst + cn.sgst + cn.igst, "value": cn.taxable + cn.cgst + cn.sgst + cn.igst + cn.cess })
     } else {
-        json!({ "ref": "", "desc": "No credit notes in this period", "invoices": 0, "taxable": 0, "cgst": 0, "sgst": 0, "igst": 0, "tax": 0, "value": 0, "_style": "muted" })
+        json!({ "ref": "", "desc": "No credit notes in this period", "invoices": 0, "taxable": 0, "cgst": 0, "sgst": 0, "igst": 0, "cess": 0, "tax": 0, "value": 0, "_style": "muted" })
     });
     Ok(json!({
-        "id": "gstr1", "title": "GSTR-1 summary", "note": "Outward supplies, intra-state only (IGST nil). Totals are sales; credit notes are shown in 9B.",
-        "kpis": [kpi("Taxable value", "money", tt, None, Some("primary")), kpi("Total GST", "money", tc + ts, Some("CGST + SGST".into()), None),
+        "id": "gstr1", "title": "GSTR-1 summary", "note": "Outward supplies: CGST + SGST within the shop's state, IGST to other states. Totals are sales; credit notes are shown in 9B.",
+        "kpis": [kpi("Taxable value", "money", tt, None, Some("primary")), kpi("Total GST", "money", tc + ts + tg, Some("CGST + SGST + IGST".into()), None),
                  kpi("B2B invoices", "int", n_b2b, Some(if n_b2b > 0 { "with GSTIN".into() } else { "none in period".into() }), None),
                  kpi("B2C invoices", "int", n_b2c, Some("unregistered customers".into()), None)],
         "chart": { "kind": "split", "title": "Taxable value: B2B vs B2C", "parts": [{ "label": "B2B", "value": b2b_taxable }, { "label": "B2C", "value": b2c_taxable }] },
         "columns": [col("ref","Ref","text",Some("0.5fr")), col("desc","Description","text",Some("3fr")), col("invoices","Invoices","int",Some("0.9fr")), col("taxable","Taxable value","money",Some("1.5fr")),
-            col("cgst","CGST","money",None), col("sgst","SGST","money",None), col("igst","IGST","money",Some("0.8fr")), col("tax","Total tax","money",None), col("value","Total value","money",Some("1.5fr"))],
+            col("cgst","CGST","money",None), col("sgst","SGST","money",None), col("igst","IGST","money",Some("0.8fr")), col("cess","Cess","money",Some("0.7fr")), col("tax","Total tax","money",None), col("value","Total value","money",Some("1.5fr"))],
         "rows": rows,
-        "totals": { "desc": "Total outward supplies", "invoices": ti, "taxable": tt, "cgst": tc, "sgst": ts, "igst": 0, "tax": tc + ts, "value": tt + tc + ts },
+        "totals": { "desc": "Total outward supplies", "invoices": ti, "taxable": tt, "cgst": tc, "sgst": ts, "igst": tg, "cess": tx, "tax": tc + ts + tg, "value": tt + tc + ts + tg + tx },
     }))
 }
 
 fn gstr3b(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let (w, a) = bills_where(p, false);
-    let slabs = run(conn, &format!("SELECT s.rate,SUM(s.taxable),SUM(s.cgst),SUM(s.sgst) FROM bills b JOIN bill_slabs s ON s.bill_id=b.id WHERE {w} GROUP BY s.rate"), a)?;
-    let (mut taxable, mut cgst, mut sgst, mut nil) = (0, 0, 0, 0);
+    let slabs = run(conn, &format!("SELECT s.rate,SUM(s.taxable),SUM(s.cgst),SUM(s.sgst),SUM(s.igst),SUM(s.cess) FROM bills b JOIN bill_slabs s ON s.bill_id=b.id WHERE {w} GROUP BY s.rate"), a)?;
+    let (mut taxable, mut cgst, mut sgst, mut igst, mut nil) = (0, 0, 0, 0, 0);
     for r in &slabs {
-        if si(&r[0]) > 0 {
+        if sf(&r[0]) > 0.0 {
             taxable += si(&r[1]);
             cgst += si(&r[2]);
             sgst += si(&r[3]);
+            igst += si(&r[4]);
         } else {
             nil += si(&r[1]);
         }
     }
-    let (cn_n, cn_t, cn_c, cn_s) = cn_sums(conn, p)?;
+    let cn = cn_sums(conn, p)?;
     let itc = run(conn, "SELECT COALESCE(SUM(taxable),0),COALESCE(SUM(cgst),0),COALESCE(SUM(sgst),0),COALESCE(SUM(igst),0) FROM purchases WHERE day >= ?1 AND day <= ?2", vec![p.from.clone().into(), p.to.clone().into()])?;
     let (itc_t, itc_c, itc_s, itc_i) = (si(&itc[0][0]), si(&itc[0][1]), si(&itc[0][2]), si(&itc[0][3]));
-    let out_c = cgst - cn_c;
-    let out_s = sgst - cn_s;
-    let net_c = (out_c - itc_c).max(0);
-    let net_s = (out_s - itc_s).max(0);
+    let (out_i, out_c, out_s) = (igst - cn.igst, cgst - cn.cgst, sgst - cn.sgst);
+    let net = crate::gst::set_off((out_i, out_c, out_s), (itc_i, itc_c, itc_s));
     let itc_total = itc_c + itc_s + itc_i;
     let rows = vec![
         json!({ "_style": "head", "ref": "3.1", "desc": "Outward supplies and reverse-charge inward" }),
-        json!({ "ref": "(a)", "desc": "Outward taxable supplies (other than zero/nil/exempt)", "taxable": taxable, "igst": 0, "cgst": cgst, "sgst": sgst }),
+        json!({ "ref": "(a)", "desc": "Outward taxable supplies (other than zero/nil/exempt)", "taxable": taxable, "igst": igst, "cgst": cgst, "sgst": sgst }),
         json!({ "ref": "(b)", "desc": "Outward taxable supplies (zero rated)", "taxable": 0, "igst": 0, "cgst": 0, "sgst": 0, "_style": "muted" }),
         json!({ "ref": "(c)", "desc": "Other outward supplies (nil rated, exempted)", "taxable": nil, "igst": 0, "cgst": 0, "sgst": 0 }),
         json!({ "ref": "(d)", "desc": "Inward supplies (liable to reverse charge)", "taxable": 0, "igst": 0, "cgst": 0, "sgst": 0, "_style": "muted" }),
         json!({ "ref": "(e)", "desc": "Non-GST outward supplies", "taxable": 0, "igst": 0, "cgst": 0, "sgst": 0, "_style": "muted" }),
-        json!({ "ref": "", "desc": format!("Less: credit notes for sales returns ({cn_n})"), "taxable": -cn_t, "igst": 0, "cgst": -cn_c, "sgst": -cn_s, "_style": if cn_n > 0 { Value::Null } else { json!("muted") } }),
+        json!({ "ref": "", "desc": format!("Less: credit notes for sales returns ({})", cn.count), "taxable": -cn.taxable, "igst": -cn.igst, "cgst": -cn.cgst, "sgst": -cn.sgst, "_style": if cn.count > 0 { Value::Null } else { json!("muted") } }),
         json!({ "_style": "head", "ref": "4", "desc": "Eligible input tax credit" }),
         json!({ "ref": "(A)(5)", "desc": "All other ITC (from purchase bills in this period)", "taxable": itc_t, "igst": itc_i, "cgst": itc_c, "sgst": itc_s }),
         json!({ "_style": "head", "ref": "6.1", "desc": "Payment of tax" }),
-        json!({ "_style": "strong", "ref": "", "desc": "Net tax payable in cash (output tax minus ITC)", "igst": 0, "cgst": net_c, "sgst": net_s }),
+        json!({ "_style": "strong", "ref": "", "desc": "Net tax payable in cash (output tax minus ITC)", "igst": net.0, "cgst": net.1, "sgst": net.2 }),
     ];
-    let out = out_c + out_s;
+    let out = out_i + out_c + out_s;
+    let payable = net.0 + net.1 + net.2;
     Ok(json!({
-        "id": "gstr3b", "title": "GSTR-3B summary", "note": "ITC is taken from purchase bills dated in this period; sales returns reduce the output tax",
+        "id": "gstr3b", "title": "GSTR-3B summary", "note": "ITC is taken from purchase bills dated in this period; sales returns reduce the output tax. IGST credit is set off against IGST, then CGST, then SGST (confirm with CA)",
         "kpis": [kpi("Output GST", "money", out, Some("on sales, after returns".into()), Some("primary")), kpi("Input tax credit", "money", itc_total, Some("on purchases".into()), Some("success")),
-                 kpi("Net GST payable", "money", net_c + net_s, None, Some("warning")), kpi("Taxable turnover", "money", taxable + nil - cn_t, None, None)],
+                 kpi("Net GST payable", "money", payable, None, Some("warning")), kpi("Taxable turnover", "money", taxable + nil - cn.taxable, None, None)],
         "chart": { "kind": "bars", "title": "Output tax vs input credit vs payable", "money": true,
-                   "points": [{ "label": "Output GST", "value": out }, { "label": "Input credit", "value": itc_total }, { "label": "Net payable", "value": net_c + net_s }] },
+                   "points": [{ "label": "Output GST", "value": out }, { "label": "Input credit", "value": itc_total }, { "label": "Net payable", "value": payable }] },
         "columns": [col("ref","Ref","text",Some("0.6fr")), col("desc","Nature of supply","text",Some("4fr")), col("taxable","Taxable value","money",Some("1.2fr")), col("igst","IGST","money",Some("0.8fr")),
             col("cgst","CGST","money",None), col("sgst","SGST / UTGST","money",None)],
         "rows": rows,
@@ -586,10 +613,11 @@ fn gstr3b(conn: &Connection, p: &ReportParams) -> Result<Value> {
 
 fn hsn_wise(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let (w, a) = bills_where(p, true);
+    // Added up from the tax split saved on every bill line, so the rows tie to the bills to the paisa.
     let data = run(
         conn,
         &format!(
-            "SELECT COALESCE(NULLIF(i.hsn,''),'0000'),l.gst_rate,l.unit,MAX(COALESCE(c.name,'Goods')),SUM(l.qty),SUM({L_TAXABLE}),SUM(l.amount)
+            "SELECT COALESCE(NULLIF(l.hsn,''),'0000'),l.gst_rate,l.unit,MAX(COALESCE(c.name,'Goods')),SUM(l.qty),SUM(l.taxable),SUM(l.cgst),SUM(l.sgst),SUM(l.igst),SUM(l.cess),SUM(l.amount)
              FROM bills b CROSS JOIN bill_lines l ON l.bill_id=b.id LEFT JOIN items i ON i.id=l.item_id LEFT JOIN categories c ON c.id=i.category_id
              WHERE {w} GROUP BY 1,2,3 ORDER BY 1,3"
         ),
@@ -598,10 +626,10 @@ fn hsn_wise(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let rows: Vec<Value> = data
         .iter()
         .map(|r| {
-            let (taxable, amount) = (si(&r[5]), si(&r[6]));
-            let tax = amount - taxable;
-            json!({ "hsn": ss(&r[0]), "desc": ss(&r[3]), "uqc": lookup(UQC, &ss(&r[2])), "qty": si(&r[4]), "rate": si(&r[1]), "taxable": taxable,
-                    "cgst": tax.div_euclid(2), "sgst": tax - tax.div_euclid(2), "tax": tax, "value": taxable + tax })
+            let (taxable, cgst, sgst, igst, cess) = (si(&r[5]), si(&r[6]), si(&r[7]), si(&r[8]), si(&r[9]));
+            let tax = cgst + sgst + igst;
+            json!({ "hsn": ss(&r[0]), "desc": ss(&r[3]), "uqc": lookup(UQC, &ss(&r[2])), "qty": si(&r[4]), "rate": crate::gst::rate_json(sf(&r[1])), "taxable": taxable,
+                    "cgst": cgst, "sgst": sgst, "igst": igst, "cess": cess, "tax": tax, "value": taxable + tax + cess })
         })
         .collect();
     let t = |k: &str| sum_i(&rows, k);
@@ -609,34 +637,39 @@ fn hsn_wise(conn: &Connection, p: &ReportParams) -> Result<Value> {
     by_taxable.sort_by(|a, b| b["taxable"].as_i64().cmp(&a["taxable"].as_i64()));
     let distinct: std::collections::BTreeSet<String> = rows.iter().map(|r| r["hsn"].as_str().unwrap_or("").to_string()).collect();
     Ok(json!({
-        "id": "hsn-wise", "title": "HSN-wise summary", "note": "GSTR-1 table 12. Quantities are per unit of measure (UQC).",
+        "id": "hsn-wise", "title": "HSN-wise summary", "note": "GSTR-1 table 12. Quantities are per unit of measure (UQC). Items with no HSN show as 0000.",
         "kpis": [kpi("Taxable value", "money", t("taxable"), None, Some("primary")), kpi("Total GST", "money", t("tax"), None, None),
                  kpi("HSN codes", "int", distinct.len(), Some("in this period".into()), None), kpi("Invoice value", "money", t("value"), None, None)],
         "chart": { "kind": "bars", "title": "Taxable value by HSN", "money": true,
                    "points": by_taxable.iter().take(8).map(|r| json!({ "label": format!("{} @ {}% ({})", r["hsn"].as_str().unwrap_or(""), r["rate"], r["uqc"].as_str().unwrap_or("")), "value": r["taxable"] })).collect::<Vec<_>>() },
         "columns": [col("hsn","HSN","text",Some("0.9fr")), col("desc","Description","text",Some("2fr")), col("uqc","UQC","text",Some("0.6fr")), col("qty","Total qty","qty",Some("1fr")),
-            col("rate","Rate","pct",Some("0.6fr")), col("taxable","Taxable value","money",Some("1.2fr")), col("cgst","CGST","money",Some("0.9fr")), col("sgst","SGST","money",Some("0.9fr")), col("value","Total value","money",Some("1.2fr"))],
+            col("rate","Rate","pct",Some("0.6fr")), col("taxable","Taxable value","money",Some("1.2fr")), col("igst","IGST","money",Some("0.8fr")), col("cgst","CGST","money",Some("0.9fr")), col("sgst","SGST","money",Some("0.9fr")),
+            col("cess","Cess","money",Some("0.7fr")), col("value","Total value","money",Some("1.2fr"))],
         "rows": rows,
-        "totals": { "hsn": "Total", "taxable": t("taxable"), "cgst": t("cgst"), "sgst": t("sgst"), "value": t("value") },
+        "totals": { "hsn": "Total", "taxable": t("taxable"), "igst": t("igst"), "cgst": t("cgst"), "sgst": t("sgst"), "cess": t("cess"), "value": t("value") },
     }))
 }
 
 fn tax_rate(conn: &Connection, p: &ReportParams) -> Result<Value> {
     let (w, a) = bills_where(p, false);
-    let data = run(conn, &format!("SELECT s.rate,COUNT(DISTINCT s.bill_id),SUM(s.taxable),SUM(s.cgst),SUM(s.sgst) FROM bills b JOIN bill_slabs s ON s.bill_id=b.id WHERE {w} GROUP BY s.rate ORDER BY s.rate"), a)?;
+    let data = run(conn, &format!("SELECT s.rate,COUNT(DISTINCT s.bill_id),SUM(s.taxable),SUM(s.cgst),SUM(s.sgst),SUM(s.igst),SUM(s.cess) FROM bills b JOIN bill_slabs s ON s.bill_id=b.id WHERE {w} GROUP BY s.rate ORDER BY s.rate"), a)?;
     let rows: Vec<Value> = data
         .iter()
-        .map(|r| json!({ "rate": si(&r[0]), "bills": si(&r[1]), "taxable": si(&r[2]), "cgst": si(&r[3]), "sgst": si(&r[4]), "tax": si(&r[3]) + si(&r[4]), "value": si(&r[2]) + si(&r[3]) + si(&r[4]) }))
+        .map(|r| {
+            let (taxable, cgst, sgst, igst, cess) = (si(&r[2]), si(&r[3]), si(&r[4]), si(&r[5]), si(&r[6]));
+            json!({ "rate": crate::gst::rate_json(sf(&r[0])), "bills": si(&r[1]), "taxable": taxable, "cgst": cgst, "sgst": sgst, "igst": igst, "cess": cess,
+                    "tax": cgst + sgst + igst, "value": taxable + cgst + sgst + igst + cess })
+        })
         .collect();
     let t = |k: &str| sum_i(&rows, k);
     Ok(json!({
         "id": "tax-rate", "title": "Tax-rate-wise summary",
-        "kpis": [kpi("Taxable value", "money", t("taxable"), None, Some("primary")), kpi("CGST", "money", t("cgst"), None, None), kpi("SGST", "money", t("sgst"), None, None), kpi("Slabs used", "int", rows.len(), None, None)],
+        "kpis": [kpi("Taxable value", "money", t("taxable"), None, Some("primary")), kpi("CGST + SGST", "money", t("cgst") + t("sgst"), None, None), kpi("IGST", "money", t("igst"), None, None), kpi("Slabs used", "int", rows.len(), None, None)],
         "chart": { "kind": "split", "title": "GST collected by slab", "parts": rows.iter().map(|r| json!({ "label": format!("{}%", r["rate"]), "value": r["tax"] })).collect::<Vec<_>>() },
-        "columns": [col("rate","GST rate","pct",Some("1fr")), col("bills","Bills","int",Some("0.7fr")), col("taxable","Taxable value","money",None), col("cgst","CGST","money",None), col("sgst","SGST","money",None),
-            col("tax","Total tax","money",None), col("value","Total value","money",None)],
+        "columns": [col("rate","GST rate","pct",Some("1fr")), col("bills","Bills","int",Some("0.7fr")), col("taxable","Taxable value","money",None), col("cgst","CGST","money",None), col("sgst","SGST","money",None), col("igst","IGST","money",None),
+            col("cess","Cess","money",Some("0.7fr")), col("tax","Total tax","money",None), col("value","Total value","money",None)],
         "rows": rows,
-        "totals": { "rate": "Total", "taxable": t("taxable"), "cgst": t("cgst"), "sgst": t("sgst"), "tax": t("tax"), "value": t("value") },
+        "totals": { "rate": "Total", "taxable": t("taxable"), "cgst": t("cgst"), "sgst": t("sgst"), "igst": t("igst"), "cess": t("cess"), "tax": t("tax"), "value": t("value") },
     }))
 }
 

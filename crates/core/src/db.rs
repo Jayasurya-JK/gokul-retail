@@ -27,6 +27,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (16, include_str!("../migrations/016_roles_admin_staff.sql")),
     (17, include_str!("../migrations/017_record_corrections.sql")),
     (18, include_str!("../migrations/018_gst_rates_cess.sql")),
+    (19, include_str!("../migrations/019_place_of_supply_igst.sql")),
 ];
 
 /// The schema version this build brings every database up to.
@@ -92,7 +93,12 @@ pub fn open_connection(path: &Path) -> Result<Connection> {
 }
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
-    for (version, sql) in MIGRATIONS {
+    migrate_up_to(conn, i64::MAX)
+}
+
+/// Applies migrations up to and including `limit` (tests use it to build an older database and then upgrade it).
+pub fn migrate_up_to(conn: &mut Connection, limit: i64) -> Result<()> {
+    for (version, sql) in MIGRATIONS.iter().filter(|(v, _)| *v <= limit) {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if current >= *version {
@@ -107,6 +113,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         tx.execute_batch(sql)?;
         if *version == 10 {
             crate::lots::backfill(&tx)?; // lots from the existing ledger, in the same transaction
+        }
+        if *version == 19 {
+            crate::gst::backfill_line_taxes(&tx)?; // HSN and tax split of every old line, in the same transaction
         }
         tx.execute_batch(&format!("PRAGMA user_version = {version}"))?;
         tx.commit()?;
@@ -289,6 +298,7 @@ pub fn load_settings(conn: &Connection) -> Result<Settings> {
         receipt_footer: g("receiptFooter")?,
         printer: g("printer")?,
         round_to_rupee: g("roundToRupee")? != "0",
+        state_code: crate::gst::shop_state_code(conn),
         delivery_gst_rate: g("deliveryGstRate")?.parse::<f64>().ok().filter(|r| crate::gst::rate_ok(*r)).unwrap_or(0.0),
     })
 }

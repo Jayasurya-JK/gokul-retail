@@ -26,13 +26,14 @@ function ean13(body12: string): string {
 export const settings: Settings = {
   shopName: 'Gokul Oils',
   address: '48, Mettupalayam Road, Gandhipuram, Coimbatore 641012',
-  gstin: '33AAKFG4821M1ZQ',
+  gstin: '33AAKFG4821M1Z9',
   phone: '98421 07731',
   counter: 'Counter 1',
   billPrefix: 'GK',
   receiptFooter: 'Thank you. Please visit again.',
   printer: 'TVS RP 3160 Gold',
   roundToRupee: true,
+  stateCode: '33',
 };
 
 export const categories: Category[] = [
@@ -247,14 +248,14 @@ export function buildCustomers(): Customer[] {
 
 export function buildSuppliers(): Supplier[] {
   return [
-    { id: 's1', name: 'Sri Murugan Oil Seeds', phone: '94430 12871', city: 'Erode', gstin: '33AADFS2901K1ZP', outstanding: R(84500) },
-    { id: 's2', name: 'Kongu Groundnut Traders', phone: '98427 66012', city: 'Tiruppur', gstin: '33AAGFK5521Q1Z3', outstanding: R(0) },
-    { id: 's3', name: 'Annai Gingelly Merchants', phone: '97890 45521', city: 'Salem', gstin: '33AAEPA7712B1ZK', outstanding: R(126000) },
-    { id: 's4', name: 'Thanjai Coconut Copra Mart', phone: '90030 18842', city: 'Pollachi', gstin: '33AAHFT3345C1ZA', outstanding: R(41200) },
-    { id: 's5', name: 'Pandian Jaggery Works', phone: '99940 27365', city: 'Mettur', gstin: '33AAJPP9981R1Z8', outstanding: R(0) },
-    { id: 's6', name: 'Aachi Distributors Coimbatore', phone: '98946 31107', city: 'Coimbatore', gstin: '33AACCA1182M1ZL', outstanding: R(18650) },
-    { id: 's7', name: 'Lakshmi Pulses & Grains', phone: '93640 90218', city: 'Coimbatore', gstin: '33AAHPL4410D1ZQ', outstanding: R(57300) },
-    { id: 's8', name: 'Vinayaga Packaging', phone: '99425 51480', city: 'Coimbatore', gstin: '33AAKFV6672G1ZN', outstanding: R(9800) },
+    { id: 's1', name: 'Sri Murugan Oil Seeds', phone: '94430 12871', city: 'Erode', gstin: '33AADFS2901K1ZF', outstanding: R(84500) },
+    { id: 's2', name: 'Kongu Groundnut Traders', phone: '98427 66012', city: 'Tiruppur', gstin: '33AAGFK5521Q1Z2', outstanding: R(0) },
+    { id: 's3', name: 'Annai Gingelly Merchants', phone: '97890 45521', city: 'Salem', gstin: '33AAEPA7712B1ZJ', outstanding: R(126000) },
+    { id: 's4', name: 'Thanjai Coconut Copra Mart', phone: '90030 18842', city: 'Pollachi', gstin: '33AAHFT3345C1ZJ', outstanding: R(41200) },
+    { id: 's5', name: 'Pandian Jaggery Works', phone: '99940 27365', city: 'Mettur', gstin: '33AAJPP9981R1ZJ', outstanding: R(0) },
+    { id: 's6', name: 'Aachi Distributors Coimbatore', phone: '98946 31107', city: 'Coimbatore', gstin: '33AACCA1182M1ZT', outstanding: R(18650) },
+    { id: 's7', name: 'Lakshmi Pulses & Grains', phone: '93640 90218', city: 'Coimbatore', gstin: '33AAHPL4410D1ZC', outstanding: R(57300) },
+    { id: 's8', name: 'Vinayaga Packaging', phone: '99425 51480', city: 'Coimbatore', gstin: '33AAKFV6672G1ZU', outstanding: R(9800) },
   ];
 }
 

@@ -183,7 +183,7 @@ fn adjustments_and_stock_take_post_ledger_rows() {
 fn purchase_is_one_transaction_with_gst_stock_supplier_balance_and_audit() {
     let (_d, db) = mini_db();
     db.with(|c| {
-        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z5");
+        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z9");
         let g = grn(
             c,
             &sid,
@@ -230,7 +230,7 @@ fn purchase_is_one_transaction_with_gst_stock_supplier_balance_and_audit() {
 fn interstate_purchase_uses_igst() {
     let (_d, db) = mini_db();
     db.with(|c| {
-        let sid = supplier(c, "Mumbai Packaging", "27AAAAA0000A1Z5");
+        let sid = supplier(c, "Mumbai Packaging", "27AAAAA0000A1Z2");
         let g = grn(c, &sid, json!([{ "itemId": "rm-btl1l", "qty": 1000000, "rate": 1000, "discountPct": 0, "gstRate": 18 }]), 0, false);
         assert_eq!((g["totals"]["igst"].as_i64(), g["totals"]["cgst"].as_i64()), (Some(180_000), Some(0)));
         assert_eq!(g["interstate"], true);
@@ -243,7 +243,7 @@ fn interstate_purchase_uses_igst() {
 fn failed_purchase_leaves_nothing_and_burns_no_number() {
     let (_d, db) = mini_db();
     db.with(|c| {
-        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z5");
+        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z9");
         let before = (count(c, "purchases"), count(c, "purchase_lines"), count(c, "stock_movements"), count(c, "audit_log"));
         let bad = json!({ "supplierId": sid, "invoiceNo": "X", "invoiceDate": today(), "freight": 0, "otherCharges": 0, "paidNow": 0, "payMode": "cash", "updateCost": false,
             "lines": [{ "itemId": "i1", "qty": 1000, "rate": 100, "discountPct": 0, "gstRate": 5 }, { "itemId": "ghost", "qty": 1000, "rate": 100, "discountPct": 0, "gstRate": 5 }] });
@@ -264,7 +264,7 @@ fn failed_purchase_leaves_nothing_and_burns_no_number() {
 fn supplier_payment_clears_the_oldest_purchase_first() {
     let (_d, db) = mini_db();
     db.with(|c| {
-        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z5");
+        let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z9");
         let line = |rate: i64| json!([{ "itemId": "rm-gn", "qty": 10000, "rate": rate, "discountPct": 0, "gstRate": 0 }]);
         let g1 = purchasing::create_grn_at(c, &de(json!({ "supplierId": sid, "invoiceDate": today(), "lines": line(10_000), "paidNow": 0, "payMode": "cash" })), Local::now() - Duration::days(30))?;
         let g2 = grn(c, &sid, line(20_000), 0, false);
@@ -306,7 +306,7 @@ fn production_setup(c: &mut Connection) {
         [],
     )
     .unwrap();
-    let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z5");
+    let sid = supplier(c, "Kongu Traders", "33AAAAA0000A1Z9");
     grn(c, &sid, json!([{ "itemId": "rm-gn", "qty": 500000, "rate": 9800, "discountPct": 0, "gstRate": 0 }]), 0, false);
 }
 
@@ -463,8 +463,8 @@ fn customer_rows_profile_and_save() {
     db.with(|c| {
         credit_bill(c, 3, 2000);
         bills_save(c, vec![line("i1", "101", "Groundnut Oil 1 L", 1000, 36_000, 5)]);
-        let row = crm::save_customer(c, &de(json!({ "name": "Annapoorna Mess", "phone": "98400 22222", "area": "RS Puram", "type": "b2b", "business": "Annapoorna Mess", "gstin": "33aaaaa1111a1z5", "email": "a@b.in", "address": "5 Cross", "creditLimit": 800000 })))?;
-        assert_eq!((row["type"].as_str(), row["gstin"].as_str(), row["business"].as_str()), (Some("b2b"), Some("33AAAAA1111A1Z5"), Some("Annapoorna Mess")));
+        let row = crm::save_customer(c, &de(json!({ "name": "Annapoorna Mess", "phone": "98400 22222", "area": "RS Puram", "type": "b2b", "business": "Annapoorna Mess", "gstin": "33aaaaa1111a1z3", "email": "a@b.in", "address": "5 Cross", "creditLimit": 800000 })))?;
+        assert_eq!((row["type"].as_str(), row["gstin"].as_str(), row["business"].as_str()), (Some("b2b"), Some("33AAAAA1111A1Z3"), Some("Annapoorna Mess")));
         let id = row["id"].as_str().unwrap().to_string();
         assert!(crm::save_customer(c, &de(json!({ "name": "X", "type": "b2b", "gstin": "BAD", "creditLimit": 0 }))).is_err());
         let upd = crm::save_customer(c, &de(json!({ "id": id, "name": "Annapoorna Mess 2", "phone": "98400 22222", "area": "Gandhipuram", "type": "retail", "creditLimit": 100 })))?;
@@ -582,7 +582,7 @@ fn settings_bundle_persists_and_feeds_the_counter() {
     db.with(|c| {
         let mut b = crm::get_settings_bundle(c)?;
         b["shop"]["name"] = json!("Gokul Oils Gandhipuram");
-        b["shop"]["gstin"] = json!("33aakfg4821m1zq");
+        b["shop"]["gstin"] = json!("33aakfg4821m1z9");
         b["shop"]["address"] = json!("48, Mettupalayam Road");
         b["shop"]["city"] = json!("Coimbatore");
         b["shop"]["pincode"] = json!("641012");
@@ -592,14 +592,14 @@ fn settings_bundle_persists_and_feeds_the_counter() {
         b["tax"]["roundToRupee"] = json!(false);
         b["billFormat"]["paper"] = json!("58mm");
         let saved = crm::save_settings_bundle(c, &b)?;
-        assert_eq!(saved["shop"]["gstin"], "33AAKFG4821M1ZQ");
+        assert_eq!(saved["shop"]["gstin"], "33AAKFG4821M1Z9");
         // every tab persists
         let again = crm::get_settings_bundle(c)?;
         assert_eq!(again["billFormat"]["paper"], "58mm");
         assert_eq!(again["tax"]["roundToRupee"], false);
         // the values receipts and the counter read
         let s = store::get_settings(c)?;
-        assert_eq!((s.shop_name.as_str(), s.gstin.as_str(), s.phone.as_str(), s.printer.as_str()), ("Gokul Oils Gandhipuram", "33AAKFG4821M1ZQ", "98421 07731", "TVS RP 3160"));
+        assert_eq!((s.shop_name.as_str(), s.gstin.as_str(), s.phone.as_str(), s.printer.as_str()), ("Gokul Oils Gandhipuram", "33AAKFG4821M1Z9", "98421 07731", "TVS RP 3160"));
         assert_eq!(s.address, "48, Mettupalayam Road, Coimbatore 641012");
         assert_eq!((s.receipt_footer.as_str(), s.round_to_rupee), ("Thanks, visit again", false));
         // checks

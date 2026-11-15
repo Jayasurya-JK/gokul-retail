@@ -274,10 +274,12 @@ fn customer_from_row(r: &Row, now: chrono::DateTime<Local>) -> rusqlite::Result<
         outstanding: r.get(5)?,
         loyalty_points: crate::loyalty::from_hundredths(r.get::<_, i64>(6)?),
         last_visit: visit_label(last.as_deref(), now),
+        gstin: r.get(8)?,
+        state_code: r.get(9)?,
     })
 }
 
-const CUSTOMER_SELECT: &str = "SELECT id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at FROM customers";
+const CUSTOMER_SELECT: &str = "SELECT id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at,gstin,state_code FROM customers";
 
 /// Every ACTIVE customer (inactive ones are hidden from the counter; Office lists them through `listCustomerRows`).
 pub fn list_customers(conn: &Connection) -> Result<Vec<Customer>> {
@@ -347,18 +349,31 @@ pub fn search_customers(conn: &Connection, query: &str, limit: usize, offset: us
     Ok(v)
 }
 
-pub fn quick_add_customer(conn: &mut Connection, name: &str, phone: &str) -> Result<Customer> {
+pub fn quick_add_customer(conn: &mut Connection, name: &str, phone: &str, gstin: &str, state_code: &str) -> Result<Customer> {
     let name = name.trim();
     if name.is_empty() {
         return invalid("Enter the customer name");
     }
+    // A GSTIN makes this a registered (B2B) customer; its first two digits are the customer's state. Without one, an optional state
+    // (for an inter-state consumer sale) may be given.
+    let gstin = gstin.trim().to_uppercase();
+    let state_code = state_code.trim();
+    if !state_code.is_empty() && crate::gst::state_name(state_code).is_none() {
+        return invalid("Choose a valid state");
+    }
+    if !gstin.is_empty() {
+        if let Some(p) = crate::gst::gstin_problem(&gstin, Some(state_code)) {
+            return invalid(format!("GSTIN: {p}"));
+        }
+    }
+    let state_code = if gstin.is_empty() { state_code.to_string() } else { gstin[..2].to_string() };
     let now = Local::now();
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let id = db::fresh_id(&tx, "customers", "c", "CUSTOMER")?;
     tx.execute(
-        "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at,created_at)
-         VALUES(?1,?2,?3,'Coimbatore',0,0,0,?4,?4)",
-        params![id, name, phone.trim(), iso(now)],
+        "INSERT INTO customers(id,name,phone,area,credit_limit,outstanding,loyalty_points,last_visit_at,created_at,type,gstin,state_code)
+         VALUES(?1,?2,?3,'Coimbatore',0,0,0,?4,?4,?5,?6,?7)",
+        params![id, name, phone.trim(), iso(now), if gstin.is_empty() { "retail" } else { "b2b" }, gstin, state_code],
     )?;
     audit(&tx, now, "counter", "create", "customer", &id, name)?;
     tx.commit()?;

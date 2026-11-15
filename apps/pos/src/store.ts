@@ -65,6 +65,8 @@ interface BillingState {
   wholesale: boolean;
   /** Cash discount percent x 100 (250 = 2.5%), on top of item discounts */
   cashDiscBps: number;
+  /** GST state code the cashier chose for the place of supply; '' = from the customer, else the shop's own state */
+  placeOfSupply: string;
   /** Add an item; returns the row index it landed on. Packed items merge, loose items get a new row. */
   addItem: (item: Item, qty?: number) => number;
   /** Add a one-off line that is not an item (Manual) */
@@ -80,6 +82,7 @@ interface BillingState {
   setStaff: (s: string) => void;
   setDelivery: (d: Delivery) => void;
   setCashDisc: (bps: number) => void;
+  setPlaceOfSupply: (state: string) => void;
   /** Switch wholesale on or off and re-price the lines that still carry the other mode's price. */
   setWholesale: (on: boolean, itemOf: (id: string) => Item | undefined) => void;
   clear: () => void;
@@ -89,7 +92,7 @@ interface BillingState {
 /** The rate an item is billed at in the current mode. */
 export const rateFor = (item: Item, wholesale: boolean): Paise => (wholesale && item.wholesalePrice ? item.wholesalePrice : item.price);
 
-const EMPTY = { lines: [] as BillLine[], selected: -1, customer: null as Customer | null, billDiscount: 0, staff: '', delivery: NO_DELIVERY, wholesale: false, cashDiscBps: 0 };
+const EMPTY = { lines: [] as BillLine[], selected: -1, customer: null as Customer | null, billDiscount: 0, staff: '', delivery: NO_DELIVERY, wholesale: false, cashDiscBps: 0, placeOfSupply: '' };
 
 function makeBillingStore() {
   return create<BillingState>((set, get) => ({
@@ -126,6 +129,7 @@ function makeBillingStore() {
     setStaff: (staff) => set({ staff }),
     setDelivery: (delivery) => set({ delivery }),
     setCashDisc: (cashDiscBps) => set({ cashDiscBps }),
+    setPlaceOfSupply: (placeOfSupply) => set({ placeOfSupply }),
     setWholesale: (on, itemOf) => set((s) => ({
       wholesale: on,
       lines: s.lines.map((l) => {
@@ -139,7 +143,7 @@ function makeBillingStore() {
     load: (h, customer) => set({
       lines: h.lines, selected: h.lines.length - 1, customer, billDiscount: h.billDiscount, staff: h.staff ?? '',
       delivery: { address: h.deliveryAddress ?? '', locality: h.deliveryLocality ?? '', charge: h.deliveryCharge ?? 0 },
-      wholesale: !!h.wholesale, cashDiscBps: h.cashDiscBps ?? 0,
+      wholesale: !!h.wholesale, cashDiscBps: h.cashDiscBps ?? 0, placeOfSupply: h.placeOfSupply ?? '',
     }),
   }));
 }

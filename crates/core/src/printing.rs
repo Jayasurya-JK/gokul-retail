@@ -247,16 +247,54 @@ fn finish(d: &mut Doc, c: &Config, cut: bool) {
     }
 }
 
+/// Which tax columns a list of slabs needs: CGST and SGST (within the shop's state), IGST (other states), cess (only when charged).
+#[derive(Debug, Clone, Copy)]
+pub struct TaxCols {
+    pub cgst_sgst: bool,
+    pub igst: bool,
+    pub cess: bool,
+}
+
+pub fn tax_cols(slabs: &[GstSlab]) -> TaxCols {
+    let igst = slabs.iter().any(|s| s.igst != 0);
+    let cs = slabs.iter().any(|s| s.cgst != 0 || s.sgst != 0);
+    TaxCols { cgst_sgst: cs || !igst, igst, cess: slabs.iter().any(|s| s.cess != 0) }
+}
+
 fn gst_table(d: &mut Doc, c: &Config, slabs: &[GstSlab]) {
     let cols = c.paper.cols();
-    let w = (cols - 6) / 3;
-    let first = cols - 3 * w;
-    let row = |a: &str, b: &str, cc: &str, e: &str| {
-        Op::Cols(vec![(a.into(), first, Align::Left), (b.into(), w, Align::Right), (cc.into(), w, Align::Right), (e.into(), w, Align::Right)], Style::NORMAL)
+    let tc = tax_cols(slabs);
+    let mut heads: Vec<&str> = vec!["Taxable"];
+    if tc.cgst_sgst {
+        heads.extend(["CGST", "SGST"]);
+    }
+    if tc.igst {
+        heads.push("IGST");
+    }
+    if tc.cess {
+        heads.push("Cess");
+    }
+    let n = heads.len();
+    let w = (cols - 6) / n;
+    let first = cols - n * w;
+    let row = |a: &str, vals: Vec<String>| {
+        let mut cells: Vec<(String, usize, Align)> = vec![(a.into(), first, Align::Left)];
+        cells.extend(vals.into_iter().map(|v| (v, w, Align::Right)));
+        Op::Cols(cells, Style::NORMAL)
     };
-    d.push(row("GST", "Taxable", "CGST", "SGST"));
+    d.push(row("GST", heads.iter().map(|h| h.to_string()).collect()));
     for s in slabs {
-        d.push(row(&format!("{}%", s.rate), &money(s.taxable), &money(s.cgst), &money(s.sgst)));
+        let mut v = vec![money(s.taxable)];
+        if tc.cgst_sgst {
+            v.extend([money(s.cgst), money(s.sgst)]);
+        }
+        if tc.igst {
+            v.push(money(s.igst));
+        }
+        if tc.cess {
+            v.push(money(s.cess));
+        }
+        d.push(row(&format!("{}%", s.rate), v));
     }
 }
 
@@ -478,13 +516,40 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
         d.push(Op::Rule('='));
     }
     if !c.composition && c.show_gst_summary && !t.slabs.is_empty() {
-        let (a, bb, cc, dd) = if cols >= 48 { (7, 11, 9, 9) } else { (4, 7, 6, 6) };
-        let trow = |x: &str, y: &str, z: &str, w: &str, v: &str, st: Style| {
-            Op::Cols(vec![(x.into(), a, Align::Left), (y.into(), bb, Align::Right), (z.into(), cc, Align::Right), (w.into(), dd, Align::Right), (v.into(), 0, Align::Right)], st)
+        // Tax % | Taxable | SGST | CGST (or IGST for another state, plus Cess when charged) | Total Amt
+        let tc = tax_cols(&t.slabs);
+        let wide = cols >= 48;
+        let a = if wide { 7 } else { 4 };
+        let mut heads: Vec<&str> = vec![if wide { "Taxable Val" } else { "Taxable" }];
+        if tc.cgst_sgst {
+            heads.extend(["SGST", "CGST"]);
+        }
+        if tc.igst {
+            heads.push("IGST");
+        }
+        if tc.cess {
+            heads.push("Cess");
+        }
+        let (w_taxable, w_tax) = if wide { (11, 9) } else { (7, 6) };
+        let trow = |x: &str, vals: Vec<String>, last: &str, st: Style| {
+            let mut cells: Vec<(String, usize, Align)> = vec![(x.into(), a, Align::Left)];
+            cells.extend(vals.into_iter().enumerate().map(|(i, v)| (v, if i == 0 { w_taxable } else { w_tax }, Align::Right)));
+            cells.push((last.into(), 0, Align::Right));
+            Op::Cols(cells, st)
         };
-        d.push(trow(if cols >= 48 { "Tax %" } else { "Tax%" }, if cols >= 48 { "Taxable Val" } else { "Taxable" }, "SGST", "CGST", "Total Amt", BOLD));
+        d.push(trow(if wide { "Tax %" } else { "Tax%" }, heads.iter().map(|h| h.to_string()).collect(), "Total Amt", BOLD));
         for s in &t.slabs {
-            d.push(trow(&format!("{}%", s.rate), &money(s.taxable), &money(s.sgst), &money(s.cgst), &money(s.taxable + s.cgst + s.sgst), Style::NORMAL));
+            let mut v = vec![money(s.taxable)];
+            if tc.cgst_sgst {
+                v.extend([money(s.sgst), money(s.cgst)]);
+            }
+            if tc.igst {
+                v.push(money(s.igst));
+            }
+            if tc.cess {
+                v.push(money(s.cess));
+            }
+            d.push(trow(&format!("{}%", s.rate), v, &money(s.taxable + s.cgst + s.sgst + s.igst + s.cess), Style::NORMAL));
         }
         d.rule();
     }

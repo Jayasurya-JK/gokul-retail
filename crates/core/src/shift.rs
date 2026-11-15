@@ -181,11 +181,11 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
     }
     let slabs: Vec<GstSlab> = {
         let mut st = conn.prepare_cached(
-            "SELECT sl.rate, SUM(sl.taxable), SUM(sl.cgst), SUM(sl.sgst), SUM(sl.cess) FROM bill_slabs sl JOIN bills b ON b.id=sl.bill_id
+            "SELECT sl.rate, SUM(sl.taxable), SUM(sl.cgst), SUM(sl.sgst), SUM(sl.cess), SUM(sl.igst) FROM bill_slabs sl JOIN bills b ON b.id=sl.bill_id
              WHERE b.shift_id=?1 AND b.status != 'cancelled' GROUP BY sl.rate ORDER BY sl.rate",
         )?;
         let v = st
-            .query_map([s.id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)?, igst: 0, cess: r.get(4)? }))?
+            .query_map([s.id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)?, igst: r.get(5)?, cess: r.get(4)? }))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         v
     };
@@ -265,6 +265,8 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         taxable: slabs.iter().map(|x| x.taxable).sum(),
         cgst: slabs.iter().map(|x| x.cgst).sum(),
         sgst: slabs.iter().map(|x| x.sgst).sum(),
+        igst: slabs.iter().map(|x| x.igst).sum(),
+        cess: slabs.iter().map(|x| x.cess).sum(),
         slabs,
         expenses_cash,
         expenses_count,

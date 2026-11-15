@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ReceiptIndianRupee, Truck, UserRound, UserRoundCheck, X, XCircle } from 'lucide-react';
-import type { BillTotals, CreditNote, Customer, CustomerWallet } from '@gokul/data';
+import type { BillTotals, CreditNote, Customer, CustomerWallet, Supply } from '@gokul/data';
 import type { Delivery } from '../store';
-import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees } from '@gokul/data';
+import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees, stateName } from '@gokul/data';
 import { Button, Kbd, Money, cn } from '@gokul/ui';
 
 function CustStat({ k, v, tone }: { k: string; v: string; tone?: 'warning' }) {
@@ -68,7 +68,7 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, staff, onStaff }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, staff, onStaff, supply, shopState, onPlace }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
@@ -84,6 +84,8 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   storeCredit: number; storeCreditUsed: number; focusStoreCredit: number; onApplyStoreCredit: (typed: string) => void; onClearStoreCredit: () => void;
   delivery: Delivery; onDelivery: () => void;
   staff: string; onStaff: () => void;
+  /** Place of supply of this bill (customer's state, else the shop's), the shop's own state, and the click to change it */
+  supply: Supply; shopState: string; onPlace: () => void;
 }) {
   const cashRef = useRef<HTMLInputElement>(null);
   const storeRef = useRef<HTMLInputElement>(null);
@@ -134,6 +136,21 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
           </span>
         )}
       </button>
+
+      <div className="mx-3 mt-2 flex shrink-0 flex-wrap items-center gap-1.5">
+        {supply.gstin && (
+          <span className="flex items-center gap-1.5 rounded-md bg-primary-soft px-2 py-1 text-[11px] font-bold tracking-wide text-primary" title={`Recipient GSTIN ${supply.gstin}`}>
+            B2B · Tax invoice <span className="num font-semibold tracking-normal text-ink/80">{supply.gstin}</span>
+          </span>
+        )}
+        <button
+          type="button" tabIndex={-1} onClick={onPlace} title="Place of supply (click to change)"
+          className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+            supply.inter ? 'bg-warning-soft text-warning hover:bg-warning/20' : 'bg-success-soft text-success hover:bg-success/20')}
+        >
+          {supply.inter ? `Inter-state · ${stateName(supply.place) ?? supply.place} (${supply.place}) · IGST` : `Local · ${stateName(shopState) ?? shopState} (${shopState})`}
+        </button>
+      </div>
 
       {(hasDelivery || staff) && (
         <div className="mx-3 mt-2 flex shrink-0 flex-col gap-1">

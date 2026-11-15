@@ -1,6 +1,7 @@
 import type { MockStore } from './store';
 import { mockExpensesReport, mockVoidedLinesReport } from './expenses';
 import type { Bill, BillLine, Item, Paise, PayMode, UnitCode } from '../types';
+import { setOff } from '../gst';
 
 // Area: Office reports: sales, item-wise, GST (GSTR-1, 3B, HSN), stock, profit, day-wise cash.
 // Every report returns the same generic shape (KPIs + optional chart + columns/rows/totals) so the
@@ -76,7 +77,7 @@ const dayKey = (d: Date | string) => {
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const pctOf = (a: number, b: number) => (b ? (a / b) * 100 : 0);
 const hash = (s: string) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
-const taxableOf = (amount: Paise, rate: number) => Math.round((amount * 100) / (100 + rate));
+const taxableOf = (amount: Paise, rate: number) => Math.round((amount * 10000) / (10000 + Math.round(rate * 100)));
 
 function daysBetween(from: string, to: string): string[] {
   const out: string[] = [];
@@ -349,25 +350,33 @@ function hourlyHeatmap(c: Ctx): ReportResult {
 
 /* ------------------------------------------------------------------ GST */
 
-const isB2B = (c: Ctx, b: Bill) => {
-  const cust = b.customerId ? c.store.customers.find((x) => x.id === b.customerId) : undefined;
-  return !!cust && cust.creditLimit > 0 && hash(cust.id) % 3 === 0;
-};
+/** A bill is B2B when it carries a valid GSTIN (the one the customer had when the bill was written), same as the Rust report. */
+const isB2B = (b: Bill) => !!b.customerGstin;
+
+/** Credit notes dated in the period, with their slabs added up. */
+function creditNoteSums(c: Ctx) {
+  const notes = (c.store.creditNotes ?? []).filter((n) => { const k = dayKey(n.at); return k >= c.p.from && k <= c.p.to; });
+  const sl = notes.flatMap((n) => n.totals.slabs);
+  return {
+    count: notes.length, taxable: sum(sl.map((s) => s.taxable)), cgst: sum(sl.map((s) => s.cgst)), sgst: sum(sl.map((s) => s.sgst)),
+    igst: sum(sl.map((s) => s.igst ?? 0)), cess: sum(sl.map((s) => s.cess ?? 0)),
+  };
+}
 
 function gstr1(c: Ctx): ReportResult {
-  interface Acc { bills: Set<string>; taxable: number; cgst: number; sgst: number }
+  interface Acc { bills: Set<string>; taxable: number; cgst: number; sgst: number; igst: number; cess: number }
   const mk = (): Map<number, Acc> => new Map();
   const b2b = mk(); const b2c = mk();
   for (const b of c.bills) {
-    const target = isB2B(c, b) ? b2b : b2c;
+    const target = isB2B(b) ? b2b : b2c;
     for (const s of b.totals.slabs) {
-      const cur = target.get(s.rate) ?? { bills: new Set(), taxable: 0, cgst: 0, sgst: 0 };
-      cur.bills.add(b.id); cur.taxable += s.taxable; cur.cgst += s.cgst; cur.sgst += s.sgst;
+      const cur = target.get(s.rate) ?? { bills: new Set(), taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 };
+      cur.bills.add(b.id); cur.taxable += s.taxable; cur.cgst += s.cgst; cur.sgst += s.sgst; cur.igst += s.igst ?? 0; cur.cess += s.cess ?? 0;
       target.set(s.rate, cur);
     }
   }
   const rows: ReportRow[] = [];
-  const tot = { invoices: 0, taxable: 0, cgst: 0, sgst: 0 };
+  const tot = { invoices: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 };
   const section = (ref: string, title: string, m: Map<number, Acc>, bills: Bill[]) => {
     rows.push({ _style: 'head', ref, desc: title });
     const rates = [...m.keys()].sort((a, b) => a - b);
@@ -376,28 +385,30 @@ function gstr1(c: Ctx): ReportResult {
       const a = m.get(r)!;
       rows.push({
         ref: '', desc: r === 0 ? 'Nil rated / exempt (0%)' : `Taxable supplies @ ${r}%`, invoices: a.bills.size, taxable: a.taxable,
-        cgst: a.cgst, sgst: a.sgst, igst: 0, tax: a.cgst + a.sgst, value: a.taxable + a.cgst + a.sgst,
+        cgst: a.cgst, sgst: a.sgst, igst: a.igst, cess: a.cess, tax: a.cgst + a.sgst + a.igst, value: a.taxable + a.cgst + a.sgst + a.igst + a.cess,
       });
-      tot.taxable += a.taxable; tot.cgst += a.cgst; tot.sgst += a.sgst;
+      tot.taxable += a.taxable; tot.cgst += a.cgst; tot.sgst += a.sgst; tot.igst += a.igst; tot.cess += a.cess;
     }
     tot.invoices += bills.length;
   };
-  const b2bBills = c.bills.filter((b) => isB2B(c, b));
-  const b2cBills = c.bills.filter((b) => !isB2B(c, b));
+  const b2bBills = c.bills.filter(isB2B);
+  const b2cBills = c.bills.filter((b) => !isB2B(b));
   section('4A', 'B2B - registered customers', b2b, b2bBills);
-  rows.push({ _style: 'head', ref: '5', desc: 'B2C Large - inter-state above Rs 2.5 lakh' });
-  rows.push({ ref: '', desc: 'None in this period', _style: 'muted' });
+  rows.push({ _style: 'head', ref: '5', desc: 'B2C Large - inter-state above Rs 2.5 lakh (see the GSTR-1 export)' });
+  rows.push({ ref: '', desc: 'Listed invoice by invoice in the GSTR-1 export', _style: 'muted' });
   section('7', 'B2C - unregistered customers', b2c, b2cBills);
-  const returned = c.store.bills.filter((b) => b.status === 'returned' && dayKey(b.at) >= c.p.from && dayKey(b.at) <= c.p.to);
+  const cn = creditNoteSums(c);
   rows.push({ _style: 'head', ref: '9B', desc: 'Credit / debit notes' });
-  rows.push({ ref: '', desc: returned.length ? 'Sales returns (credit notes, registered)' : 'No credit notes in this period', invoices: returned.length, taxable: 0, cgst: 0, sgst: 0, igst: 0, tax: 0, value: 0, _style: returned.length ? undefined : 'muted' });
+  rows.push(cn.count
+    ? { ref: '', desc: 'Sales returns (credit notes)', invoices: cn.count, taxable: cn.taxable, cgst: cn.cgst, sgst: cn.sgst, igst: cn.igst, cess: cn.cess, tax: cn.cgst + cn.sgst + cn.igst, value: cn.taxable + cn.cgst + cn.sgst + cn.igst + cn.cess }
+    : { ref: '', desc: 'No credit notes in this period', invoices: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0, tax: 0, value: 0, _style: 'muted' });
   const b2bTaxable = sum([...b2b.values()].map((a) => a.taxable));
   const b2cTaxable = sum([...b2c.values()].map((a) => a.taxable));
   return {
-    id: 'gstr1', title: 'GSTR-1 summary', note: 'Outward supplies, intra-state only (IGST nil)',
+    id: 'gstr1', title: 'GSTR-1 summary', note: "Outward supplies: CGST + SGST within the shop's state, IGST to other states. Totals are sales; credit notes are shown in 9B.",
     kpis: [
       { label: 'Taxable value', kind: 'money', value: tot.taxable, tone: 'primary' },
-      { label: 'Total GST', kind: 'money', value: tot.cgst + tot.sgst, hint: `CGST + SGST` },
+      { label: 'Total GST', kind: 'money', value: tot.cgst + tot.sgst + tot.igst, hint: 'CGST + SGST + IGST' },
       { label: 'B2B invoices', kind: 'int', value: b2bBills.length, hint: b2bBills.length ? 'with GSTIN' : 'none in period' },
       { label: 'B2C invoices', kind: 'int', value: b2cBills.length, hint: 'unregistered customers' },
     ],
@@ -406,10 +417,10 @@ function gstr1(c: Ctx): ReportResult {
       { key: 'ref', label: 'Ref', kind: 'text', w: '0.5fr' }, { key: 'desc', label: 'Description', kind: 'text', w: '3fr' },
       { key: 'invoices', label: 'Invoices', kind: 'int', w: '0.9fr' }, { key: 'taxable', label: 'Taxable value', kind: 'money', w: '1.5fr' },
       { key: 'cgst', label: 'CGST', kind: 'money' }, { key: 'sgst', label: 'SGST', kind: 'money' }, { key: 'igst', label: 'IGST', kind: 'money', w: '0.8fr' },
-      { key: 'tax', label: 'Total tax', kind: 'money' }, { key: 'value', label: 'Total value', kind: 'money', w: '1.5fr' },
+      { key: 'cess', label: 'Cess', kind: 'money', w: '0.7fr' }, { key: 'tax', label: 'Total tax', kind: 'money' }, { key: 'value', label: 'Total value', kind: 'money', w: '1.5fr' },
     ],
     rows,
-    totals: { desc: 'Total outward supplies', invoices: tot.invoices, taxable: tot.taxable, cgst: tot.cgst, sgst: tot.sgst, igst: 0, tax: tot.cgst + tot.sgst, value: tot.taxable + tot.cgst + tot.sgst },
+    totals: { desc: 'Total outward supplies', invoices: tot.invoices, taxable: tot.taxable, cgst: tot.cgst, sgst: tot.sgst, igst: tot.igst, cess: tot.cess, tax: tot.cgst + tot.sgst + tot.igst, value: tot.taxable + tot.cgst + tot.sgst + tot.igst + tot.cess },
   };
 }
 
@@ -417,8 +428,9 @@ function gstr3b(c: Ctx): ReportResult {
   const slabs = c.bills.flatMap((b) => b.totals.slabs);
   const taxed = slabs.filter((s) => s.rate > 0);
   const nil = slabs.filter((s) => s.rate === 0);
-  const a = { taxable: sum(taxed.map((s) => s.taxable)), cgst: sum(taxed.map((s) => s.cgst)), sgst: sum(taxed.map((s) => s.sgst)) };
+  const a = { taxable: sum(taxed.map((s) => s.taxable)), cgst: sum(taxed.map((s) => s.cgst)), sgst: sum(taxed.map((s) => s.sgst)), igst: sum(taxed.map((s) => s.igst ?? 0)) };
   const nilTaxable = sum(nil.map((s) => s.taxable));
+  const cn = creditNoteSums(c);
   // ITC: purchases in range, cost is GST inclusive
   let itcTaxable = 0; let itcGst = 0;
   for (const p of c.store.purchases) {
@@ -432,29 +444,32 @@ function gstr3b(c: Ctx): ReportResult {
     }
   }
   const itcC = Math.floor(itcGst / 2); const itcS = itcGst - itcC;
-  const out = a.cgst + a.sgst;
-  const netC = a.cgst - itcC; const netS = a.sgst - itcS;
+  const outI = a.igst - cn.igst; const outC = a.cgst - cn.cgst; const outS = a.sgst - cn.sgst;
+  const net = setOff([outI, outC, outS], [0, itcC, itcS]);
+  const out = outI + outC + outS;
+  const payable = net[0] + net[1] + net[2];
   const rows: ReportRow[] = [
     { _style: 'head', ref: '3.1', desc: 'Outward supplies and reverse-charge inward' },
-    { ref: '(a)', desc: 'Outward taxable supplies (other than zero/nil/exempt)', taxable: a.taxable, igst: 0, cgst: a.cgst, sgst: a.sgst },
+    { ref: '(a)', desc: 'Outward taxable supplies (other than zero/nil/exempt)', taxable: a.taxable, igst: a.igst, cgst: a.cgst, sgst: a.sgst },
     { ref: '(b)', desc: 'Outward taxable supplies (zero rated)', taxable: 0, igst: 0, cgst: 0, sgst: 0, _style: 'muted' },
     { ref: '(c)', desc: 'Other outward supplies (nil rated, exempted)', taxable: nilTaxable, igst: 0, cgst: 0, sgst: 0 },
     { ref: '(d)', desc: 'Inward supplies (liable to reverse charge)', taxable: 0, igst: 0, cgst: 0, sgst: 0, _style: 'muted' },
     { ref: '(e)', desc: 'Non-GST outward supplies', taxable: 0, igst: 0, cgst: 0, sgst: 0, _style: 'muted' },
+    { ref: '', desc: `Less: credit notes for sales returns (${cn.count})`, taxable: -cn.taxable, igst: -cn.igst, cgst: -cn.cgst, sgst: -cn.sgst, _style: cn.count ? undefined : 'muted' },
     { _style: 'head', ref: '4', desc: 'Eligible input tax credit' },
     { ref: '(A)(5)', desc: 'All other ITC (from purchase bills in this period)', taxable: itcTaxable, igst: 0, cgst: itcC, sgst: itcS },
     { _style: 'head', ref: '6.1', desc: 'Payment of tax' },
-    { _style: 'strong', ref: '', desc: 'Net tax payable in cash (output tax minus ITC)', taxable: undefined, igst: 0, cgst: Math.max(0, netC), sgst: Math.max(0, netS) },
+    { _style: 'strong', ref: '', desc: 'Net tax payable in cash (output tax minus ITC)', taxable: undefined, igst: net[0], cgst: net[1], sgst: net[2] },
   ];
   return {
-    id: 'gstr3b', title: 'GSTR-3B summary', note: 'ITC is taken from purchase bills dated in this period',
+    id: 'gstr3b', title: 'GSTR-3B summary', note: 'ITC is taken from purchase bills dated in this period; sales returns reduce the output tax. IGST credit is set off against IGST, then CGST, then SGST (confirm with CA)',
     kpis: [
-      { label: 'Output GST', kind: 'money', value: out, hint: 'on sales', tone: 'primary' },
+      { label: 'Output GST', kind: 'money', value: out, hint: 'on sales, after returns', tone: 'primary' },
       { label: 'Input tax credit', kind: 'money', value: itcGst, hint: 'on purchases', tone: 'success' },
-      { label: 'Net GST payable', kind: 'money', value: Math.max(0, netC) + Math.max(0, netS), tone: 'warning' },
-      { label: 'Taxable turnover', kind: 'money', value: a.taxable + nilTaxable },
+      { label: 'Net GST payable', kind: 'money', value: payable, tone: 'warning' },
+      { label: 'Taxable turnover', kind: 'money', value: a.taxable + nilTaxable - cn.taxable },
     ],
-    chart: { kind: 'bars', title: 'Output tax vs input credit vs payable', money: true, points: [{ label: 'Output GST', value: out }, { label: 'Input credit', value: itcGst }, { label: 'Net payable', value: Math.max(0, out - itcGst) }] },
+    chart: { kind: 'bars', title: 'Output tax vs input credit vs payable', money: true, points: [{ label: 'Output GST', value: out }, { label: 'Input credit', value: itcGst }, { label: 'Net payable', value: payable }] },
     columns: [
       { key: 'ref', label: 'Ref', kind: 'text', w: '0.6fr' }, { key: 'desc', label: 'Nature of supply', kind: 'text', w: '4fr' },
       { key: 'taxable', label: 'Taxable value', kind: 'money', w: '1.2fr' }, { key: 'igst', label: 'IGST', kind: 'money', w: '0.8fr' },
@@ -465,23 +480,25 @@ function gstr3b(c: Ctx): ReportResult {
 }
 
 function hsnWise(c: Ctx): ReportResult {
-  const agg = new Map<string, { hsn: string; desc: string; uqc: string; rate: number; qty: number; taxable: number; tax: number }>();
+  interface Acc { hsn: string; desc: string; uqc: string; rate: number; qty: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number; value: number }
+  const agg = new Map<string, Acc>();
   for (const f of lineFacts(c)) {
-    const hsn = f.item?.hsn ?? '0000';
+    const hsn = f.line.hsn || f.item?.hsn || '0000';
     const uqc = UQC[f.line.unit];
     const key = `${hsn}|${f.line.gstRate}|${uqc}`;
-    const cur = agg.get(key) ?? { hsn, desc: f.item?.category ?? 'Goods', uqc, rate: f.line.gstRate, qty: 0, taxable: 0, tax: 0 };
-    cur.qty += f.line.qty; cur.taxable += f.taxable; cur.tax += f.tax;
+    const t = f.line.tax ?? { taxable: f.taxable, cgst: Math.floor(f.tax / 2), sgst: f.tax - Math.floor(f.tax / 2), igst: 0, cess: 0 };
+    const cur = agg.get(key) ?? { hsn, desc: f.item?.category ?? 'Goods', uqc, rate: f.line.gstRate, qty: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0, value: 0 };
+    cur.qty += f.line.qty; cur.taxable += t.taxable; cur.cgst += t.cgst; cur.sgst += t.sgst; cur.igst += t.igst; cur.cess += t.cess; cur.value += f.line.amount;
     agg.set(key, cur);
   }
   const list = [...agg.values()].sort((a, b) => a.hsn.localeCompare(b.hsn) || a.uqc.localeCompare(b.uqc));
   const rows: ReportRow[] = list.map((x) => ({
-    hsn: x.hsn, desc: x.desc, uqc: x.uqc, qty: x.qty, rate: x.rate, taxable: x.taxable,
-    cgst: Math.floor(x.tax / 2), sgst: x.tax - Math.floor(x.tax / 2), tax: x.tax, value: x.taxable + x.tax,
+    hsn: x.hsn, desc: x.desc, uqc: x.uqc, qty: x.qty, rate: x.rate, taxable: x.taxable, cgst: x.cgst, sgst: x.sgst, igst: x.igst, cess: x.cess,
+    tax: x.cgst + x.sgst + x.igst, value: x.taxable + x.cgst + x.sgst + x.igst + x.cess,
   }));
   const t = (k: string) => sum(rows.map((r) => Number(r[k])));
   return {
-    id: 'hsn-wise', title: 'HSN-wise summary', note: 'GSTR-1 table 12. Quantities are per unit of measure (UQC).',
+    id: 'hsn-wise', title: 'HSN-wise summary', note: 'GSTR-1 table 12. Quantities are per unit of measure (UQC). Items with no HSN show as 0000.',
     kpis: [
       { label: 'Taxable value', kind: 'money', value: t('taxable'), tone: 'primary' },
       { label: 'Total GST', kind: 'money', value: t('tax') },
@@ -493,39 +510,41 @@ function hsnWise(c: Ctx): ReportResult {
       { key: 'hsn', label: 'HSN', kind: 'text', w: '0.9fr' }, { key: 'desc', label: 'Description', kind: 'text', w: '2fr' },
       { key: 'uqc', label: 'UQC', kind: 'text', w: '0.6fr' }, { key: 'qty', label: 'Total qty', kind: 'qty', w: '1fr' },
       { key: 'rate', label: 'Rate', kind: 'pct', w: '0.6fr' }, { key: 'taxable', label: 'Taxable value', kind: 'money', w: '1.2fr' },
-      { key: 'cgst', label: 'CGST', kind: 'money', w: '0.9fr' }, { key: 'sgst', label: 'SGST', kind: 'money', w: '0.9fr' }, { key: 'value', label: 'Total value', kind: 'money', w: '1.2fr' },
+      { key: 'igst', label: 'IGST', kind: 'money', w: '0.8fr' }, { key: 'cgst', label: 'CGST', kind: 'money', w: '0.9fr' }, { key: 'sgst', label: 'SGST', kind: 'money', w: '0.9fr' },
+      { key: 'cess', label: 'Cess', kind: 'money', w: '0.7fr' }, { key: 'value', label: 'Total value', kind: 'money', w: '1.2fr' },
     ],
     rows,
-    totals: { hsn: 'Total', taxable: t('taxable'), cgst: t('cgst'), sgst: t('sgst'), value: t('value') },
+    totals: { hsn: 'Total', taxable: t('taxable'), igst: t('igst'), cgst: t('cgst'), sgst: t('sgst'), cess: t('cess'), value: t('value') },
   };
 }
 
 function taxRate(c: Ctx): ReportResult {
-  const agg = new Map<number, { bills: Set<string>; taxable: number; cgst: number; sgst: number }>();
+  const agg = new Map<number, { bills: Set<string>; taxable: number; cgst: number; sgst: number; igst: number; cess: number }>();
   for (const b of c.bills) for (const s of b.totals.slabs) {
-    const cur = agg.get(s.rate) ?? { bills: new Set(), taxable: 0, cgst: 0, sgst: 0 };
-    cur.bills.add(b.id); cur.taxable += s.taxable; cur.cgst += s.cgst; cur.sgst += s.sgst;
+    const cur = agg.get(s.rate) ?? { bills: new Set(), taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 };
+    cur.bills.add(b.id); cur.taxable += s.taxable; cur.cgst += s.cgst; cur.sgst += s.sgst; cur.igst += s.igst ?? 0; cur.cess += s.cess ?? 0;
     agg.set(s.rate, cur);
   }
   const rows: ReportRow[] = [...agg.entries()].sort((a, b) => a[0] - b[0]).map(([rate, a]) => ({
-    rate, bills: a.bills.size, taxable: a.taxable, cgst: a.cgst, sgst: a.sgst, tax: a.cgst + a.sgst, value: a.taxable + a.cgst + a.sgst,
+    rate, bills: a.bills.size, taxable: a.taxable, cgst: a.cgst, sgst: a.sgst, igst: a.igst, cess: a.cess,
+    tax: a.cgst + a.sgst + a.igst, value: a.taxable + a.cgst + a.sgst + a.igst + a.cess,
   }));
   const t = (k: string) => sum(rows.map((r) => Number(r[k])));
   return {
     id: 'tax-rate', title: 'Tax-rate-wise summary',
     kpis: [
       { label: 'Taxable value', kind: 'money', value: t('taxable'), tone: 'primary' },
-      { label: 'CGST', kind: 'money', value: t('cgst') }, { label: 'SGST', kind: 'money', value: t('sgst') },
+      { label: 'CGST + SGST', kind: 'money', value: t('cgst') + t('sgst') }, { label: 'IGST', kind: 'money', value: t('igst') },
       { label: 'Slabs used', kind: 'int', value: rows.length },
     ],
     chart: { kind: 'split', title: 'GST collected by slab', parts: rows.map((r) => ({ label: `${r.rate}%`, value: Number(r.tax) })) },
     columns: [
       { key: 'rate', label: 'GST rate', kind: 'pct', w: '1fr' }, { key: 'bills', label: 'Bills', kind: 'int', w: '0.7fr' },
-      { key: 'taxable', label: 'Taxable value', kind: 'money' }, { key: 'cgst', label: 'CGST', kind: 'money' }, { key: 'sgst', label: 'SGST', kind: 'money' },
-      { key: 'tax', label: 'Total tax', kind: 'money' }, { key: 'value', label: 'Total value', kind: 'money' },
+      { key: 'taxable', label: 'Taxable value', kind: 'money' }, { key: 'cgst', label: 'CGST', kind: 'money' }, { key: 'sgst', label: 'SGST', kind: 'money' }, { key: 'igst', label: 'IGST', kind: 'money' },
+      { key: 'cess', label: 'Cess', kind: 'money', w: '0.7fr' }, { key: 'tax', label: 'Total tax', kind: 'money' }, { key: 'value', label: 'Total value', kind: 'money' },
     ],
     rows,
-    totals: { rate: 'Total', taxable: t('taxable'), cgst: t('cgst'), sgst: t('sgst'), tax: t('tax'), value: t('value') },
+    totals: { rate: 'Total', taxable: t('taxable'), cgst: t('cgst'), sgst: t('sgst'), igst: t('igst'), cess: t('cess'), tax: t('tax'), value: t('value') },
   };
 }
 

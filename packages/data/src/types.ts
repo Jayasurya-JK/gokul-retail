@@ -54,6 +54,10 @@ export interface Customer {
   outstanding: Paise;
   loyaltyPoints: number;
   lastVisit: string;
+  /** GSTIN of a registered (B2B) customer; absent for a consumer */
+  gstin?: string;
+  /** GST state code of the customer ("33"); absent = not recorded (billed as local) */
+  stateCode?: string;
   /** False = switched off: not offered at the counter, cannot go on a new bill. Missing means active. */
   active?: boolean;
 }
@@ -76,7 +80,14 @@ export interface BillLine {
   cessRate?: number;
   /** Final line amount incl. GST after discount */
   amount: Paise;
+  /** HSN code as it was when the bill was written (filled when the bill is saved) */
+  hsn?: string;
+  /** The line's tax split (saved bills and credit notes only) */
+  tax?: LineTax;
 }
+
+/** The tax split of one line, in paise. taxable + cgst + sgst + igst + cess = the line's final amount. */
+export interface LineTax { taxable: Paise; cgst: Paise; sgst: Paise; igst: Paise; cess: Paise }
 
 /** One GST rate on a bill. Intra-state fills cgst + sgst (half each); inter-state fills igst (the full rate). Cess is shown beside it. */
 export interface GstSlab { rate: number; taxable: Paise; cgst: Paise; sgst: Paise; igst: Paise; cess: Paise }
@@ -116,6 +127,17 @@ export interface BillExtras {
   exchangeRefund?: ExchangeRefund;
   /** Paise of this bill paid with exchange credit. It is a credit-note payment too, but not store credit. */
   exchangeCredit?: Paise;
+  /**
+   * GST state code of the place of supply. On a draft: the state the cashier chose (absent = from the customer, else the shop's own
+   * state). On a saved bill: where the supply was made.
+   */
+  placeOfSupply?: string;
+  /** Saved bills: "intra" (CGST + SGST) or "inter" (IGST), worked out by the server. */
+  supplyType?: 'intra' | 'inter';
+  /** Saved bills: the recipient's GSTIN as it was when the bill was written (absent = consumer bill) */
+  customerGstin?: string;
+  /** Saved bills: the recipient's address as it was when the bill was written */
+  customerAddress?: string;
 }
 
 /** The part of an exchange credit handed back because the new bill was smaller */
@@ -187,6 +209,8 @@ export interface Settings {
   shopName: string; address: string; gstin: string; phone: string;
   counter: string; billPrefix: string; receiptFooter: string;
   printer: string; roundToRupee: boolean;
+  /** The shop's GST state code ("33" = Tamil Nadu), from Settings */
+  stateCode?: string;
   /** GST percent on a home-delivery charge (0 = delivery is not taxed) */
   deliveryGstRate?: number;
 }

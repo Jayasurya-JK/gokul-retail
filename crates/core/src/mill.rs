@@ -782,7 +782,7 @@ pub fn close_sheet(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
         let lines: Vec<BillLine> = jobs
             .iter()
             .map(|(_, kg, rate)| {
-                recalc_line(&BillLine { item_id: service_id.clone(), code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: *kg, rate: *rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0 })
+                recalc_line(&BillLine { item_id: service_id.clone(), code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: *kg, rate: *rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0, hsn: String::new(), tax: None })
             })
             .collect();
         let total = compute_totals(&lines, 0, round).grand;
@@ -1111,7 +1111,7 @@ pub fn record_job_work(conn: &mut Connection, i: &JobWorkInput) -> Result<Value>
         }
     }
     let service_id = service_item(&tx, &s)?;
-    let line = recalc_line(&BillLine { item_id: service_id, code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: i.seed_kg, rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0 });
+    let line = recalc_line(&BillLine { item_id: service_id, code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: i.seed_kg, rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0, hsn: String::new(), tax: None });
     let lines = vec![line];
     let total = compute_totals(&lines, 0, db::load_settings(&tx)?.round_to_rupee).grand;
     if total > 0 {

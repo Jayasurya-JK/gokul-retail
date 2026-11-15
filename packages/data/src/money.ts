@@ -1,4 +1,4 @@
-import type { BillLine, BillTotals, GstSlab, Item, Milli, Paise } from './types';
+import type { BillLine, BillTotals, GstSlab, Item, LineTax, Milli, Paise } from './types';
 
 /** Indian digit grouping on an integer string: 1234567 -> 12,34,567 */
 export function groupIndian(intStr: string): string {
@@ -64,9 +64,6 @@ export function recalcLine(l: BillLine): BillLine {
 
 /** A percent rate (5, 0.25, 12.5) as hundredths of a percent (500, 25, 1250): the integer all tax maths uses. */
 export const rateBp = (r: number): number => Math.round(r * 100);
-
-/** The tax split of one line, in paise. taxable + cgst + sgst + igst + cess = the line's final amount. */
-export interface LineTax { taxable: Paise; cgst: Paise; sgst: Paise; igst: Paise; cess: Paise }
 
 /**
  * Split GST-inclusive line amounts into taxable value, GST and cess, and add them up per GST rate. Same as Rust `split_taxes`.

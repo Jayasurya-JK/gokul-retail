@@ -177,9 +177,10 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "peekNextBillNumber" => ok(bills::peek_next_bill_number(c)?),
         "quickAddCustomer" => {
             #[derive(serde::Deserialize)]
-            struct In { name: String, #[serde(default)] phone: String }
+            #[serde(rename_all = "camelCase")]
+            struct In { name: String, #[serde(default)] phone: String, #[serde(default)] gstin: String, #[serde(default)] state_code: String }
             let i: In = arg(a, 0, "input")?;
-            ok(store::quick_add_customer(c, &i.name, &i.phone)?)
+            ok(store::quick_add_customer(c, &i.name, &i.phone, &i.gstin, &i.state_code)?)
         }
 
         // ----- BillOpsApi -----

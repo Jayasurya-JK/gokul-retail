@@ -1,6 +1,7 @@
 //! Port of packages/data/src/money.ts. Same integer maths, same rounding as JavaScript's `Math.round`
 //! (half toward +infinity). The shared fixtures in tests/fixtures/money_cases.json prove both agree.
 
+pub use crate::types::LineTax;
 use crate::types::{BillLine, BillTotals, GstSlab, ReturnPick};
 use std::collections::BTreeMap;
 
@@ -29,16 +30,6 @@ pub fn recalc_line(l: &BillLine) -> BillLine {
 /// A percent rate (5, 0.25, 12.5) as hundredths of a percent (500, 25, 1250), the integer all tax maths uses.
 pub fn rate_bp(r: f64) -> i64 {
     (r * 100.0).round() as i64
-}
-
-/// The tax split of one bill line, in paise. `taxable + cgst + sgst + igst + cess` is the line's final amount.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct LineTax {
-    pub taxable: i64,
-    pub cgst: i64,
-    pub sgst: i64,
-    pub igst: i64,
-    pub cess: i64,
 }
 
 /// Split GST-inclusive line amounts into taxable value, GST and cess, and add them up per GST rate.

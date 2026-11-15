@@ -11,7 +11,8 @@ import { createMillMock } from './areas/mill';
 import { createPosReportsMock } from './areas/posreports';
 import { createProductionMock } from './areas/production';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
-import { cashDiscount, computeTotalsWithDelivery } from './money';
+import { cashDiscount, computeBill, computeTotalsWithDelivery } from './money';
+import { enabledRates, supplyFor } from './gst';
 import { fuzzyFilter } from './fuzzy';
 import {
   buildBills, buildCustomers, buildItems, buildProduction, buildPurchases, buildSuppliers, categories, settings, users,
@@ -87,15 +88,21 @@ export function createMockApi(): Api {
       const cashDisc = cashDiscount(draft.lines, draft.cashDiscBps ?? 0);
       const delivery = draft.deliveryCharge ?? 0;
       const dGst = settings.deliveryGstRate ?? 0;
-      const totals = computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDisc, settings.roundToRupee, delivery, dGst);
+      const cust = draft.customerId ? customers.find((c) => c.id === draft.customerId) : undefined;
+      const supply = supplyFor(settings.stateCode ?? '33', cust, draft.placeOfSupply);
+      for (const l of draft.lines) {
+        if (!(store.taxRates ?? enabledRates()).includes(l.gstRate)) throw new Error(`'${l.name}': GST ${l.gstRate}% is not in the GST rate list. The owner can change the list in Settings, Tax.`);
+      }
+      const { totals, taxes } = computeBill(draft.lines, draft.billDiscount + cashDisc, settings.roundToRupee, supply.inter, delivery > 0 ? { amount: delivery, gstRate: dGst } : undefined);
       const credit = draft.payments.some((p) => p.mode === 'credit');
       // Exchange credit keeps refundMode 'exchange' once spent, the same test as loyalty::split_credit_payments in Rust.
       const exchangeCredit = draft.payments
         .filter((p) => p.mode === 'credit_note' && p.ref && store.creditNotes?.some((x) => x.number === p.ref && x.refundMode === 'exchange'))
         .reduce((s, p) => s + p.amount, 0);
-      const lines = delivery > 0
+      const baseLines = delivery > 0
         ? [...draft.lines, { itemId: '_delivery', code: 'DLV', name: 'Delivery charge', unit: 'pc' as const, qty: 1000, rate: delivery, discount: 0, gstRate: dGst, amount: delivery }]
         : draft.lines;
+      const lines = baseLines.map((l, i) => ({ ...l, hsn: byId.get(l.itemId)?.hsn ?? (l.itemId === '_delivery' ? '9965' : ''), tax: taxes[i] }));
       const bill: Bill = {
         id: `b${billSeq}`, number: `${settings.billPrefix}-${String(48200 + billSeq).padStart(6, '0')}`,
         at: new Date().toISOString(), cashier: draft.cashier ?? 'Cashier', counter: settings.counter,
@@ -104,6 +111,7 @@ export function createMockApi(): Api {
         staff: draft.staff ?? '', deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: delivery,
         wholesale: !!draft.wholesale, cashDiscBps: draft.cashDiscBps ?? 0, cashDisc, remarks: draft.remarks ?? '',
         exchangeRefund: draft.exchangeRefund, exchangeCredit: exchangeCredit || undefined,
+        placeOfSupply: supply.place, supplyType: supply.inter ? 'inter' : 'intra', customerGstin: supply.gstin || undefined,
       };
       bills.push(bill);
       for (const l of draft.lines) {

@@ -27,7 +27,7 @@ export function SupplierForm({ open, supplier, onClose, onSaved }: {
     const e: typeof errs = {};
     if (!f.name.trim()) e.name = 'Enter the supplier name.';
     if (f.phone.replace(/\D/g, '').length < 10) e.phone = 'Enter a 10 digit phone number.';
-    if (f.gstin.trim() && !isValidGstin(f.gstin)) e.gstin = '15 characters, e.g. 33AAKFG4821M1ZQ.';
+    if (f.gstin.trim() && !isValidGstin(f.gstin)) e.gstin = '15 characters, e.g. 33AAKFG4821M1Z9.';
     setErrs(e);
     if (Object.keys(e).length) return;
     setBusy(true);
@@ -52,7 +52,7 @@ export function SupplierForm({ open, supplier, onClose, onSaved }: {
         <div className="col-span-2"><Input data-autofocus label="Supplier name" value={f.name} onChange={set('name')} error={errs.name} placeholder="e.g. Sri Murugan Oil Seeds" /></div>
         <Input label="Phone" value={f.phone} onChange={set('phone')} error={errs.phone} placeholder="94430 12871" inputMode="tel" />
         <Input label="Contact person" value={f.contact} onChange={set('contact')} placeholder="Who we speak to" />
-        <div className="col-span-2"><Input label="GSTIN" value={f.gstin} onChange={(e) => { setF((x) => ({ ...x, gstin: e.target.value.toUpperCase() })); setErrs((x) => ({ ...x, gstin: undefined })); }} error={errs.gstin} placeholder="33AAKFG4821M1ZQ" maxLength={15} className="num uppercase" /></div>
+        <div className="col-span-2"><Input label="GSTIN" value={f.gstin} onChange={(e) => { setF((x) => ({ ...x, gstin: e.target.value.toUpperCase() })); setErrs((x) => ({ ...x, gstin: undefined })); }} error={errs.gstin} placeholder="33AAKFG4821M1Z9" maxLength={15} className="num uppercase" /></div>
         <div className="col-span-2"><Input label="Address" value={f.address} onChange={set('address')} placeholder="Street, area" /></div>
         <Input label="City" value={f.city} onChange={set('city')} placeholder="Erode" />
         <div>

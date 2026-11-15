@@ -1,6 +1,6 @@
 import type { MockStore } from './store';
-import type { Bill, BillLine, BillTotals, Milli, Paise, UnitCode } from '../types';
-import { computeTotals, lineGross } from '../money';
+import type { Bill, BillLine, BillTotals, LineTax, Milli, Paise, UnitCode } from '../types';
+import { computeBill, lineGross } from '../money';
 
 // Area: POS bill history, reprint, cancel, returns and exchange.
 
@@ -23,6 +23,12 @@ export interface CreditNote {
   by: string;
   /** Still unused on this note (total minus what was already spent); missing means all of it */
   balance?: Paise;
+  /** The invoice this note is against: its date, the place of supply, intra or inter-state, and the recipient's GSTIN and address */
+  billAt?: string;
+  placeOfSupply?: string;
+  supplyType?: 'intra' | 'inter';
+  customerGstin?: string;
+  customerAddress?: string;
 }
 
 export interface CancelInfo { reason: string; by: string; approvedBy: string; at: string }
@@ -64,7 +70,7 @@ export const billHasCredit = (b: Bill) => b.payments.some((p) => p.mode === 'cre
  * Each returned line refunds its own (discounted) amount pro-rata, plus its share of any
  * bill-level discount, then GST is reversed with the same slab rules as a bill.
  */
-export function quoteReturn(bill: Bill, picks: ReturnPick[], roundToRupee = true, inter = false): { lines: BillLine[]; totals: BillTotals } {
+export function quoteReturn(bill: Bill, picks: ReturnPick[], roundToRupee = true, inter = false): { lines: BillLine[]; totals: BillTotals; taxes: LineTax[] } {
   const lines: BillLine[] = [];
   for (const p of picks) {
     const l = bill.lines[p.lineIndex];
@@ -78,7 +84,8 @@ export function quoteReturn(bill: Bill, picks: ReturnPick[], roundToRupee = true
   const billNet = bill.lines.reduce((s, l) => s + l.amount, 0);
   const retNet = lines.reduce((s, l) => s + l.amount, 0);
   const share = billNet > 0 ? Math.round((billDisc * retNet) / billNet) : 0;
-  return { lines, totals: computeTotals(lines, share, roundToRupee, inter) };
+  const { totals, taxes } = computeBill(lines, share, roundToRupee, inter);
+  return { lines, totals, taxes };
 }
 
 export interface BillOpsApi {
@@ -182,7 +189,8 @@ export function createBillOpsMock(store: MockStore): BillOpsApi {
         if (!l) throw new Error('Line not found');
         if (p.qty + done[p.lineIndex] > l.qty) throw new Error(`Cannot return more than sold for ${l.name}`);
       }
-      const q = quoteReturn(b, valid, store.settings.roundToRupee);
+      const inter = b.supplyType === 'inter';
+      const q = quoteReturn(b, valid, store.settings.roundToRupee, inter);
       for (const p of valid) {
         done[p.lineIndex] += p.qty;
         const it = store.items.find((i) => i.id === b.lines[p.lineIndex].itemId);
@@ -194,7 +202,8 @@ export function createBillOpsMock(store: MockStore): BillOpsApi {
       const note: CreditNote = {
         id: `cn${cnSeq}`, number: `CN-${String(cnSeq).padStart(6, '0')}`, at: new Date().toISOString(),
         billId: b.id, billNumber: b.number, customerId: b.customerId, customerName: b.customerName,
-        lines: q.lines, totals: q.totals, reason, refundMode, by, balance: q.totals.grand,
+        lines: q.lines.map((l, i) => ({ ...l, tax: q.taxes[i] })), totals: q.totals, reason, refundMode, by, balance: q.totals.grand,
+        billAt: b.at, placeOfSupply: b.placeOfSupply, supplyType: inter ? 'inter' : 'intra', customerGstin: b.customerGstin, customerAddress: b.customerAddress,
       };
       notes.push(note);
       if (refundMode === 'exchange') pendingExchange = note;

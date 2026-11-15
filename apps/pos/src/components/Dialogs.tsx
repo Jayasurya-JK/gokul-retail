@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft, PackageSearch, Search, UserPlus } from 'lucide-react';
-import { creditLeft, formatQty, isNoName, formatRupees, type Customer, type HeldBill, type Item } from '@gokul/data';
+import { GST_STATES, creditLeft, formatQty, gstinProblem, isNoName, formatRupees, stateLabel, type Customer, type HeldBill, type Item } from '@gokul/data';
 import { Badge, Button, Dialog, Kbd, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 import { plural } from '../plural';
@@ -113,7 +113,10 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
   const [mode, setMode] = useState<'list' | 'new'>('list');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [err, setErr] = useState<{ name?: string; phone?: string }>({});
+  const [gstin, setGstin] = useState('');
+  const [state, setState] = useState('');
+  const [biz, setBiz] = useState(false);
+  const [err, setErr] = useState<{ name?: string; phone?: string; gstin?: string }>({});
   const [busy, setBusy] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -123,7 +126,7 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
   const [more, setMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const loadingMore = useRef(false);
-  useEffect(() => { if (open) { setQ(''); setMode('list'); setName(''); setPhone(''); setErr({}); setBusy(false); setList([]); setMore(false); api.countCustomers().then(setTotal).catch(() => setTotal(null)); } }, [open]);
+  useEffect(() => { if (open) { setQ(''); setMode('list'); setName(''); setPhone(''); setGstin(''); setState(''); setBiz(false); setErr({}); setBusy(false); setList([]); setMore(false); api.countCustomers().then(setTotal).catch(() => setTotal(null)); } }, [open]);
   // Every keystroke searches ALL customers in the database (name, mobile, code, area); an empty box shows the recent ones.
   useEffect(() => {
     if (!open) return;
@@ -166,17 +169,20 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
 
   const save = async () => {
     const n = name.trim();
-    const e: { name?: string; phone?: string } = {};
+    const e: { name?: string; phone?: string; gstin?: string } = {};
     if (n.length < 2) e.name = 'Enter the customer name.';
     if (!phoneOk(phone)) e.phone = 'Enter a 10 digit mobile number starting with 6 to 9.';
+    const g = gstin.trim().toUpperCase();
+    if (biz && g) { const p = gstinProblem(g); if (p) e.gstin = p; }
     setErr(e);
     if (e.name) { nameRef.current?.focus(); return; }
     if (e.phone) { phoneRef.current?.focus(); return; }
+    if (e.gstin) return;
     const dup = (await api.searchCustomers(phone, 5)).find((c) => c.phone.replace(/\s/g, '') === phone);
-    if (dup) { onPick(dup); return; }
+    if (dup && !(biz && g)) { onPick(dup); return; }
     setBusy(true);
-    try { onPick(await api.quickAddCustomer({ name: n, phone: fmtPhone(phone) })); }
-    catch { setErr({ phone: 'Could not save. Nothing was changed, try again.' }); setBusy(false); }
+    try { onPick(await api.quickAddCustomer({ name: n, phone: fmtPhone(phone), ...(biz && g ? { gstin: g } : state ? { stateCode: state } : {}) })); }
+    catch (x) { setErr(biz && g ? { gstin: (x as Error).message } : { phone: 'Could not save. Nothing was changed, try again.' }); setBusy(false); }
   };
 
   return (
@@ -291,6 +297,36 @@ export function CustomerDialog({ open, onClose, current, onPick }: { open: boole
               </div>
               <span className="mt-1 block h-4 text-xs text-danger">{err.phone}</span>
             </label>
+            <div className="rounded-xl border border-line bg-surface-2 p-3">
+              <button type="button" onClick={() => setBiz((b) => !b)} className="flex w-full items-center justify-between text-left text-sm font-semibold text-ink">
+                <span>Business customer (GST invoice)</span><span className="text-xs font-normal text-primary">{biz ? 'Hide' : 'Add GSTIN'}</span>
+              </button>
+              {biz && (
+                <div className="mt-2.5 space-y-2.5">
+                  <label className="block">
+                    <span className="text-xs font-medium text-muted">GSTIN (the state is taken from it)</span>
+                    <input
+                      value={gstin} aria-label="Customer GSTIN" autoComplete="off" spellCheck={false}
+                      onChange={(e) => { setGstin(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15)); setErr((x) => ({ ...x, gstin: undefined })); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void save(); } }}
+                      placeholder="33ABCDE1234F1Z7"
+                      className={cn('num mt-1 h-10 w-full rounded-control border bg-surface px-3 text-base uppercase text-ink placeholder:text-subtle focus:ring-2', err.gstin ? 'border-danger focus:border-danger focus:ring-danger/25' : 'border-line-strong focus:border-primary focus:ring-primary/25')}
+                    />
+                    <span className="mt-1 block min-h-4 text-xs text-danger">{err.gstin}</span>
+                    {!err.gstin && gstin.length === 15 && !gstinProblem(gstin) && <span className="mt-1 block text-xs text-success">Valid. Place of supply: {stateLabel(gstin.slice(0, 2))}.</span>}
+                  </label>
+                </div>
+              )}
+              {!biz && (
+                <label className="mt-2.5 block">
+                  <span className="text-xs font-medium text-muted">State, if outside {`the shop's state`} (optional)</span>
+                  <select value={state} onChange={(e) => setState(e.target.value)} aria-label="Customer state" className="mt-1 h-10 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink">
+                    <option value="">Same as the shop (local)</option>
+                    {GST_STATES.map((s) => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-2 px-5 py-3">
             <Button onClick={() => setMode('list')} kbd="Esc">Back</Button>

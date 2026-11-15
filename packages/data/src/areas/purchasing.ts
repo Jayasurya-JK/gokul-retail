@@ -971,7 +971,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
     saveSupplier: async (d) => {
       const name = d.name.trim();
       if (!name) throw new Error('Enter the supplier name.');
-      if (d.gstin.trim() && !isValidGstin(d.gstin)) throw new Error('GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1ZQ.');
+      if (d.gstin.trim() && !isValidGstin(d.gstin)) throw new Error('GSTIN looks wrong. It has 15 letters and digits, e.g. 33AAKFG4821M1Z9.');
       if (d.phone.replace(/\D/g, '').length < 10) throw new Error('Enter a 10 digit phone number.');
       if (store.suppliers.some((s) => s.id !== d.id && s.name.toLowerCase() === name.toLowerCase())) throw new Error('A supplier with this name already exists.');
       let id = d.id;

@@ -68,6 +68,12 @@ pub struct Customer {
     /// Points with two decimals (the database holds hundredths).
     pub loyalty_points: f64,
     pub last_visit: String,
+    /// GSTIN, when the customer is a registered business (B2B). Empty for a consumer.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub gstin: String,
+    /// GST state code of the customer ("33"); empty = not recorded (billed as local).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub state_code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -79,7 +85,20 @@ pub struct Payment {
     pub r#ref: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// The tax split of one line, in paise: taxable value, CGST, SGST, IGST and cess. They add up to the line's final amount.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LineTax {
+    pub taxable: i64,
+    pub cgst: i64,
+    pub sgst: i64,
+    #[serde(default)]
+    pub igst: i64,
+    #[serde(default)]
+    pub cess: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BillLine {
     pub item_id: String,
@@ -95,6 +114,12 @@ pub struct BillLine {
     #[serde(default, skip_serializing_if = "rate_is_zero", with = "rate_serde")]
     pub cess_rate: f64,
     pub amount: i64,
+    /// HSN code as it was when the bill was written (filled by the server; empty on a draft).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hsn: String,
+    /// The line's tax split (saved bills and credit notes only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax: Option<LineTax>,
 }
 
 /// One GST rate on a bill: taxable value and the tax on it. Intra-state supply fills cgst and sgst (half each);
@@ -201,6 +226,19 @@ pub struct BillExtras {
     /// Exchange credit was larger than this bill: the difference handed back to the customer (needs a manager PIN).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exchange_refund: Option<ExchangeRefund>,
+    /// GST state code of the place of supply. On a draft: the state the cashier chose (empty = from the customer, else the shop's
+    /// own state). On a saved bill: where the supply was made.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub place_of_supply: String,
+    /// Saved bills only: "intra" (CGST + SGST) or "inter" (IGST). Always worked out by the server, never taken from the screen.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub supply_type: String,
+    /// Saved bills only: the recipient's GSTIN as it was when the bill was written (empty = consumer bill).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub customer_gstin: String,
+    /// Saved bills only: the recipient's address as it was when the bill was written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub customer_address: String,
 }
 
 /// The part of an exchange credit given back in cash or UPI because the new bill was smaller.
@@ -292,6 +330,9 @@ pub struct Settings {
     pub receipt_footer: String,
     pub printer: String,
     pub round_to_rupee: bool,
+    /// The shop's GST state code ("33" = Tamil Nadu), from Settings.
+    #[serde(default)]
+    pub state_code: String,
     /// GST percent on a home-delivery charge (any allowed rate; 0 = delivery is not taxed).
     #[serde(default, with = "rate_serde")]
     pub delivery_gst_rate: f64,
@@ -420,6 +461,10 @@ pub struct ShiftSummary {
     pub taxable: i64,
     pub cgst: i64,
     pub sgst: i64,
+    #[serde(default)]
+    pub igst: i64,
+    #[serde(default)]
+    pub cess: i64,
     pub slabs: Vec<GstSlab>,
     /// Expenses paid from the drawer during the shift (voided ones excluded); already taken off `expected_cash`
     #[serde(default)]
@@ -491,6 +536,17 @@ pub struct CreditNote {
     /// What is still unused on this note (grand minus used); only an exchange or store-credit note has any left.
     #[serde(default)]
     pub balance: i64,
+    /// The invoice this note is against: its date and the place of supply, intra or inter-state, and the recipient's GSTIN.
+    #[serde(default)]
+    pub bill_at: String,
+    #[serde(default)]
+    pub place_of_supply: String,
+    #[serde(default)]
+    pub supply_type: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub customer_gstin: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub customer_address: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
