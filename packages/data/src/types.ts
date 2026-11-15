@@ -26,7 +26,10 @@ export interface Item {
   shelfLife?: number;
   shelfLifeUnit?: 'days' | 'months';
   hsn: string;
-  gstRate: 0 | 5 | 12 | 18;
+  /** GST percent, e.g. 5 or 0.25. Must be one of the owner's rates (Settings, Tax). */
+  gstRate: number;
+  /** Optional cess percent on top of GST (0 / absent = none) */
+  cessRate?: number;
   /** MRP per unit, GST inclusive */
   mrp: Paise;
   /** Selling price per unit, GST inclusive */
@@ -69,11 +72,14 @@ export interface BillLine {
   /** Line discount in paise */
   discount: Paise;
   gstRate: number;
+  /** Cess percent on this line (price already includes it); absent = none */
+  cessRate?: number;
   /** Final line amount incl. GST after discount */
   amount: Paise;
 }
 
-export interface GstSlab { rate: number; taxable: Paise; cgst: Paise; sgst: Paise }
+/** One GST rate on a bill. Intra-state fills cgst + sgst (half each); inter-state fills igst (the full rate). Cess is shown beside it. */
+export interface GstSlab { rate: number; taxable: Paise; cgst: Paise; sgst: Paise; igst: Paise; cess: Paise }
 
 export interface BillTotals {
   itemCount: number;
@@ -81,7 +87,10 @@ export interface BillTotals {
   gross: Paise;
   discount: Paise;
   taxable: Paise;
+  /** Total GST (CGST + SGST + IGST), cess not included */
   gst: Paise;
+  /** Total cess */
+  cess: Paise;
   slabs: GstSlab[];
   beforeRound: Paise;
   roundOff: Paise;

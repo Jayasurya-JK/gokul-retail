@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, DatabaseBackup, Star, FolderOpen, ImagePlus, Printer, RotateCcw, Trash2, XCircle } from 'lucide-react';
-import { LABEL_PRESETS, type HardwareSettings, type LabelPresetId } from '@gokul/data';
+import { LABEL_PRESETS, enabledRates, rateOk, rateText, type HardwareSettings, type LabelPresetId } from '@gokul/data';
 import type { Category } from '@gokul/data';
 import type { BackupSettings, BillFormatSettings, ExpenseSettings, LoyaltySettings, MillSettings, PrinterSettings, SecuritySettings, SettingsBundle, ShopSettings, TaxSettings } from '@gokul/data';
 import { Badge, Button, Card, Dialog, Field, Checkbox, Input, NumberInput, Select, StatusDot, Switch, cn, useToast } from '@gokul/ui';
 import { api, useSession } from '../../store';
 import { BillFormatPreview } from './BillFormatPreview';
+import { useGstRates } from '../../useGstRates';
 import { ago, fmtDateTime, Segmented } from './common';
 
 const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -94,6 +95,7 @@ export function ShopTab({ v, set }: { v: ShopSettings; set: (n: ShopSettings) =>
 
 /* ------------------------------ Tax ------------------------------ */
 export function TaxTab({ v, set }: { v: TaxSettings; set: (n: TaxSettings) => void }) {
+  const [newRate, setNewRate] = useState('');
   const up = <K extends keyof TaxSettings>(k: K, val: TaxSettings[K]) => set({ ...v, [k]: val });
   const schemes: { id: TaxSettings['scheme']; title: string; body: string }[] = [
     { id: 'regular', title: 'Regular GST', body: 'Tax invoice with CGST and SGST split. Input credit on purchases. Files GSTR-1 and GSTR-3B.' },
@@ -122,18 +124,26 @@ export function TaxTab({ v, set }: { v: TaxSettings; set: (n: TaxSettings) => vo
       <Card title="GST rates in use" bodyClassName="!p-0">
         {v.rates.map((r, i) => (
           <div key={r.rate} className="flex items-center gap-4 border-b border-line/70 px-4 py-2.5 last:border-b-0">
-            <span className="w-12 text-md font-semibold text-ink num">{r.rate}%</span>
+            <span className="w-14 text-md font-semibold text-ink num">{rateText(r.rate)}</span>
             <span className="min-w-0 flex-1 text-sm text-muted">{r.label}</span>
             <Switch checked={r.enabled} onCheckedChange={(on) => up('rates', v.rates.map((x, j) => (j === i ? { ...x, enabled: on } : x)))} />
           </div>
         ))}
-        <div className="px-4 py-2 text-xs text-subtle">Only enabled rates appear in the item form.</div>
+        <div className="flex items-end gap-2 border-t border-line/70 px-4 py-3">
+          <div className="w-28"><Input label="Add a rate %" value={newRate} inputMode="decimal" className="num" placeholder="e.g. 7.5" onChange={(e) => setNewRate(e.target.value.replace(/[^\d.]/g, '').slice(0, 6))} /></div>
+          <Button size="sm" disabled={!newRate || !rateOk(Number(newRate)) || v.rates.some((x) => x.rate === Number(newRate))}
+            onClick={() => { up('rates', [...v.rates, { rate: Number(newRate), enabled: true, label: 'Added by owner' }].sort((a, b) => a.rate - b.rate)); setNewRate(''); }}>Add</Button>
+        </div>
+        <div className="px-4 py-2 text-xs text-subtle">
+          Only enabled rates can be used on items, bills and purchases. Since 22 Sep 2025 the main slabs are 0, 5, 18 and 40%, with special rates 0.25% and 3%;
+          12% and 28% are kept for older bills and items (confirm with CA). Changing this list never changes bills already saved.
+        </div>
       </Card>
       <Card title="Calculation and printing">
         <Row title="Prices include GST" hint="MRP and selling price are tax inclusive, as printed on packs."><Switch checked={v.pricesInclusive} onCheckedChange={(x) => up('pricesInclusive', x)} /></Row>
         <Row title="Round bill to whole rupee" hint="Round off line is printed on the bill."><Switch checked={v.roundToRupee} onCheckedChange={(x) => up('roundToRupee', x)} /></Row>
         <Row title="GST on home delivery charge" hint="The delivery charge added at the POS counter. 0 means it is billed without GST.">
-          <Select value={String(v.deliveryGstRate ?? 0)} onChange={(e) => up('deliveryGstRate', Number(e.target.value))} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: r === 0 ? 'No GST' : `${r}%` }))} />
+          <Select value={String(v.deliveryGstRate ?? 0)} onChange={(e) => up('deliveryGstRate', Number(e.target.value))} options={enabledRates(v.rates).map((r) => ({ value: String(r), label: r === 0 ? 'No GST' : rateText(r) }))} />
         </Row>
         <Row title="Show HSN code on bill" hint="Needed for B2B invoices."><Switch checked={v.showHsn} onCheckedChange={(x) => up('showHsn', x)} /></Row>
         <Row title="Interstate supply (IGST)" hint="Turn on only if the shop sells to other states."><Switch checked={v.interState} onCheckedChange={(x) => up('interState', x)} /></Row>
@@ -490,6 +500,7 @@ export function ExpensesTab({ v, set }: { v: ExpenseSettings; set: (n: ExpenseSe
 
 /* ------------------------------ Mill ------------------------------ */
 export function MillTab({ v, set }: { v: MillSettings; set: (n: MillSettings) => void }) {
+  const gstRates = useGstRates();
   const up = <K extends keyof MillSettings>(k: K, val: MillSettings[K]) => set({ ...v, [k]: val });
   const [draft, setDraft] = useState('');
   const add = () => { const n = draft.trim(); if (n && !v.operators.includes(n)) { up('operators', [...v.operators, n]); setDraft(''); } };
@@ -515,7 +526,7 @@ export function MillTab({ v, set }: { v: MillSettings; set: (n: MillSettings) =>
           <NumberInput label="Cake taken by customer, per kg" value={String(v.rateCakeTaken / 100)} prefix="₹" decimals={2} onValueChange={(x) => up('rateCakeTaken', Math.round(Number(x || 0) * 100))} hint="GST included, on the kg of seed." />
           <NumberInput label="Cake kept by the shop, per kg" value={String(v.rateCakeKept / 100)} prefix="₹" decimals={2} onValueChange={(x) => up('rateCakeKept', Math.round(Number(x || 0) * 100))} hint="Lower, as the shop keeps the punnaku." />
           <Input label="Service code (SAC) (verify)" value={v.serviceSac} className="num" onChange={(e) => up('serviceSac', e.target.value.replace(/\D/g, '').slice(0, 8))} hint="Printed on the aravai bill. Confirm with your accountant." />
-          <Select label="GST on aravai (verify)" value={String(v.serviceGstRate)} onChange={(e) => up('serviceGstRate', Number(e.target.value) as MillSettings['serviceGstRate'])} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: `${r}%` }))} />
+          <Select label="GST on aravai (verify)" value={String(v.serviceGstRate)} onChange={(e) => up('serviceGstRate', Number(e.target.value))} options={gstRates.map((r) => ({ value: String(r), label: rateText(r) }))} />
         </div>
         <p className="mt-3 text-xs text-subtle">The charge goes on the customer&apos;s account as a bill with the service item &quot;Aravai Job Work&quot;. It can also be sold at the counter as that item.</p>
       </Card>

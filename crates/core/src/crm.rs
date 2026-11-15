@@ -813,12 +813,12 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
         json!({ "name": g("shopName"), "legalName": "", "address": g("address"), "city": "", "state": "Tamil Nadu", "pincode": "",
                 "phone": g("phone"), "email": "", "gstin": g("gstin"), "fssai": "" })
     });
-    let tax = blob(conn, "bundle.tax")?.unwrap_or_else(|| {
-        json!({ "scheme": "regular", "compositionRatePct": 1,
-                "rates": [{"rate":0,"enabled":true,"label":"Exempt / nil"},{"rate":5,"enabled":true,"label":"Edible oils, ghee, pulses, cake"},
-                          {"rate":12,"enabled":true,"label":"Lamp oil, packaged foods"},{"rate":18,"enabled":true,"label":"Other goods"}],
-                "pricesInclusive": true, "roundToRupee": round, "showHsn": true, "interState": false, "deliveryGstRate": g("deliveryGstRate").parse::<i64>().unwrap_or(0) })
+    let mut tax = blob(conn, "bundle.tax")?.unwrap_or_else(|| {
+        json!({ "scheme": "regular", "compositionRatePct": 1, "rates": [],
+                "pricesInclusive": true, "roundToRupee": round, "showHsn": true, "interState": false, "deliveryGstRate": g("deliveryGstRate").parse::<f64>().map(crate::gst::rate_json).unwrap_or(json!(0)) })
     });
+    // The owner's GST rate list (saved rates, plus any default rate not yet in it). Items, bills and purchases are checked against it.
+    tax["rates"] = json!(crate::gst::tax_rates(conn));
     let bill_format = blob(conn, "bundle.billFormat")?.unwrap_or_else(|| {
         json!({ "header": "", "footer": g("receiptFooter"), "showSavings": true, "showHsn": true, "showGstSummary": true, "showQr": false,
                 "language": "en", "copies": 1, "paper": "80mm" })
@@ -908,12 +908,19 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
                 return invalid("Aravai rates cannot be negative.");
             }
         }
-        if ![0, 5, 12, 18].contains(&mill["serviceGstRate"].as_i64().unwrap_or(5)) {
-            return invalid("The aravai GST rate must be 0, 5, 12 or 18.");
-        }
+        crate::gst::check_rate(conn, mill["serviceGstRate"].as_f64().unwrap_or(5.0), "The aravai GST rate")?;
         let ops = mill["operators"].as_array().map(|a| a.iter().filter(|o| o.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)).count()).unwrap_or(0);
         if ops == 0 {
             return invalid("Add at least one operator for the mill sheet.");
+        }
+    }
+    // GST rate list: validated here, saved inside bundle.tax; the delivery rate must be one of the enabled rates (or 0).
+    let rate_list = crate::gst::clean_rate_list(&next["tax"]["rates"])?;
+    let dgst = next["tax"]["deliveryGstRate"].as_f64().unwrap_or(0.0);
+    if dgst != 0.0 {
+        let enabled: Vec<f64> = if rate_list.is_empty() { crate::gst::allowed_rates(conn) } else { rate_list.iter().filter(|r| r["enabled"].as_bool() == Some(true)).filter_map(|r| r["rate"].as_f64()).collect() };
+        if !enabled.iter().any(|r| (*r - dgst).abs() < 1e-9) {
+            return invalid(format!("The delivery GST rate {}% is not in the GST rate list.", dgst));
         }
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -931,7 +938,13 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     let mut shop_v = shop.clone();
     shop_v["gstin"] = json!(gstin);
     set_setting(&tx, "bundle.shop", &shop_v.to_string())?;
-    set_setting(&tx, "bundle.tax", &next["tax"].to_string())?;
+    let mut tax_v = next["tax"].clone();
+    if !rate_list.is_empty() {
+        tax_v["rates"] = json!(rate_list);
+    } else if let Some(o) = tax_v.as_object_mut() {
+        o.remove("rates"); // not sent: keep the defaults
+    }
+    set_setting(&tx, "bundle.tax", &tax_v.to_string())?;
     set_setting(&tx, "bundle.billFormat", &next["billFormat"].to_string())?;
     if next["loyalty"].is_object() {
         crate::loyalty::save_rules(&tx, &next["loyalty"])?;
@@ -965,7 +978,6 @@ pub fn save_settings_bundle(conn: &mut Connection, next: &Value) -> Result<Value
     set_setting(&tx, "receiptFooter", next["billFormat"]["footer"].as_str().unwrap_or(""))?;
     set_setting(&tx, "printer", next["printers"]["billPrinter"].as_str().unwrap_or(""))?;
     set_setting(&tx, "roundToRupee", if next["tax"]["roundToRupee"].as_bool().unwrap_or(true) { "1" } else { "0" })?;
-    let dgst = next["tax"]["deliveryGstRate"].as_i64().filter(|r| [0, 5, 12, 18].contains(r)).unwrap_or(0);
     set_setting(&tx, "deliveryGstRate", &dgst.to_string())?;
     audit(&tx, Local::now(), OFFICE, "update", "settings", "bundle", "")?;
     tx.commit()?;

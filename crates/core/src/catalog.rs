@@ -49,8 +49,11 @@ pub struct ItemInput {
     pub scale_code: String,
     #[serde(default)]
     pub hsn: String,
-    #[serde(default)]
-    pub gst_rate: i64,
+    #[serde(default, with = "crate::types::rate_serde")]
+    pub gst_rate: f64,
+    /// Optional cess percent on top of GST (0 = none).
+    #[serde(default, with = "crate::types::rate_serde")]
+    pub cess_rate: f64,
     #[serde(default)]
     pub mrp: i64,
     #[serde(default)]
@@ -146,8 +149,11 @@ pub fn validate_item(conn: &Connection, i: &ItemInput) -> Result<Issues> {
     if !(all_digits(hsn) && [4, 6, 8].contains(&hsn.len())) {
         e.insert("hsn".into(), "HSN is 4, 6 or 8 digits, for example 1508.".into());
     }
-    if ![0, 5, 12, 18].contains(&i.gst_rate) {
-        e.insert("gstRate".into(), "GST rate must be 0, 5, 12 or 18.".into());
+    if let Err(m) = crate::gst::check_rate(conn, i.gst_rate, "GST rate") {
+        e.insert("gstRate".into(), m.to_string());
+    }
+    if let Err(m) = crate::gst::check_cess(i.cess_rate, "Cess") {
+        e.insert("cessRate".into(), m.to_string());
     }
     if i.price <= 0 {
         e.insert("price".into(), "Selling price must be more than zero.".into());
@@ -223,10 +229,10 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
         Some(id) if tx.query_row("SELECT COUNT(*) FROM items WHERE id=?1", [id], |r| r.get::<_, i64>(0))? > 0 => {
             tx.execute(
                 "UPDATE items SET code=?1,name=?2,name_ta=?3,category_id=?4,brand=?5,unit=?6,loose=?7,pack_size=?8,parent_id=?9,scale_code=?10,
-                 hsn=?11,gst_rate=?12,mrp=?13,price=?14,cost=?15,reorder_level=?16,active=?17,shelf_life=?19,shelf_life_unit=?20 WHERE id=?18",
+                 hsn=?11,gst_rate=?12,mrp=?13,price=?14,cost=?15,reorder_level=?16,active=?17,shelf_life=?19,shelf_life_unit=?20,cess_rate=?21 WHERE id=?18",
                 params![
                     input.code.trim(), name, name_ta, input.category_id, brand, input.unit, input.loose, pack, parent, scale,
-                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, id, life, life_unit
+                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, id, life, life_unit, input.cess_rate
                 ],
             )?;
             tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
@@ -237,11 +243,11 @@ pub fn save_item(conn: &mut Connection, input: &ItemInput) -> Result<Value> {
         _ => {
             let id = fresh_id(&tx, "items", "i", "ITEM")?;
             tx.execute(
-                "INSERT INTO items(id,code,name,name_ta,category_id,brand,unit,loose,pack_size,parent_id,scale_code,hsn,gst_rate,mrp,price,cost,stock,reorder_level,active,created_at,shelf_life,shelf_life_unit)
-                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17,?18,?19,?20,?21)",
+                "INSERT INTO items(id,code,name,name_ta,category_id,brand,unit,loose,pack_size,parent_id,scale_code,hsn,gst_rate,mrp,price,cost,stock,reorder_level,active,created_at,shelf_life,shelf_life_unit,cess_rate)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0,?17,?18,?19,?20,?21,?22)",
                 params![
                     id, input.code.trim(), name, name_ta, input.category_id, brand, input.unit, input.loose, pack, parent, scale,
-                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, iso(now), life, life_unit
+                    input.hsn.trim(), input.gst_rate, input.mrp, input.price, input.cost, input.reorder_level, input.active, iso(now), life, life_unit, input.cess_rate
                 ],
             )?;
             tx.execute("UPDATE items SET wholesale_price=?1 WHERE id=?2", params![input.wholesale_price.filter(|w| *w > 0), id])?;
@@ -318,10 +324,8 @@ pub fn set_items_category(conn: &mut Connection, ids: &[String], category_id: &s
     bulk(conn, ids, &format!("category {category_id}"), "UPDATE items SET category_id=?1 WHERE id=?2", category_id.to_string().into())
 }
 
-pub fn set_items_gst(conn: &mut Connection, ids: &[String], rate: i64) -> Result<()> {
-    if ![0, 5, 12, 18].contains(&rate) {
-        return Err(ApiError::Invalid("GST rate must be 0, 5, 12 or 18.".into()));
-    }
+pub fn set_items_gst(conn: &mut Connection, ids: &[String], rate: f64) -> Result<()> {
+    crate::gst::check_rate(conn, rate, "GST rate")?;
     bulk(conn, ids, &format!("gst {rate}"), "UPDATE items SET gst_rate=?1 WHERE id=?2", rate.into())
 }
 

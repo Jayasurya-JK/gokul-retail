@@ -27,15 +27,16 @@ const m = await import(pathToFileURL(tmp).href);
 
 const mkLine = (l, i) => ({
   itemId: `i${i}`, code: String(i), name: `Item ${i}`, unit: 'pc',
-  qty: l.qty, rate: l.rate, discount: l.discount, gstRate: l.gstRate, amount: 0,
+  qty: l.qty, rate: l.rate, discount: l.discount, gstRate: l.gstRate, ...(l.cessRate ? { cessRate: l.cessRate } : {}), amount: 0,
 });
 const solve = (c) => {
   const lines = c.lines.map(mkLine).map(m.recalcLine);
-  const totals = m.computeTotals(lines, c.billDiscount, c.round);
+  const inter = !!c.inter;
+  const totals = m.computeTotals(lines, c.billDiscount, c.round, inter);
   const out = { lines: lines.map((l) => ({ discount: l.discount, amount: l.amount })), totals };
   if (c.kind === 'return') {
     const bill = { lines, totals };
-    const q = m.quoteReturn(bill, c.picks, c.round);
+    const q = m.quoteReturn(bill, c.picks, c.round, inter);
     out.ret = { lines: q.lines.map((l) => ({ qty: l.qty, amount: l.amount, discount: l.discount })), totals: q.totals };
   }
   return out;
@@ -54,9 +55,9 @@ function rng(seed) {
 
 function buildInputs() {
   const cases = [];
-  const L = (rate, qty, gstRate, discount = 0) => ({ rate, qty, gstRate, discount });
-  const add = (name, lines, billDiscount = 0, round = true, picks) =>
-    cases.push({ name, kind: picks ? 'return' : 'totals', round, billDiscount, lines, ...(picks ? { picks } : {}) });
+  const L = (rate, qty, gstRate, discount = 0, cessRate = 0) => ({ rate, qty, gstRate, discount, ...(cessRate ? { cessRate } : {}) });
+  const add = (name, lines, billDiscount = 0, round = true, picks, inter = false) =>
+    cases.push({ name, kind: picks ? 'return' : 'totals', round, billDiscount, lines, ...(picks ? { picks } : {}), ...(inter ? { inter: true } : {}) });
 
   // Hand-picked edge cases
   add('single pack 5%', [L(36000, 1000, 5)]);
@@ -107,6 +108,42 @@ function buildInputs() {
       if (!picks.length) picks.push({ lineIndex: 0, qty: 1 + Math.floor(r() * lines[0].qty) });
     }
     add(`random ${i}`, lines, billDiscount, round, picks);
+  }
+
+  // GST 2.0 rates, special rates, cess and inter-state (IGST) supply. Added after the original cases so those stay unchanged.
+  add('40% line', [L(14000, 1000, 40)], 0, false);
+  add('0.25% special rate', [L(1000000, 1000, 0.25)], 0, false);
+  add('3% special rate odd split', [L(10001, 1000, 3)], 0, false);
+  add('cess 12 on 28', [L(100000, 1000, 28, 0, 12)], 0, false);
+  add('cess 5 on 5 odd paise', [L(10001, 3000, 5, 0, 5)], 0, false);
+  add('cess with bill discount', [L(50000, 1000, 28, 0, 12), L(30000, 1000, 5, 0, 1.5)], 777);
+  add('all main slabs 0 5 18 40', [L(10000, 1000, 0), L(10000, 1000, 5), L(10000, 1000, 18), L(10000, 1000, 40)], 333);
+  add('inter-state 5%', [L(36000, 1000, 5)], 0, true, undefined, true);
+  add('inter-state mixed with discount', [L(10000, 1000, 5), L(20000, 1000, 18), L(3333, 3000, 0), L(7777, 1000, 40)], 1234, true, undefined, true);
+  add('inter-state odd paise', [L(10001, 1000, 5), L(10001, 1000, 5)], 0, false, undefined, true);
+  add('inter-state return', [L(10000, 3000, 5), L(2500, 4000, 18)], 1500, true, [{ lineIndex: 0, qty: 1000 }, { lineIndex: 1, qty: 1500 }], true);
+  add('intra-state return with cess', [L(50000, 2000, 28, 0, 12)], 0, true, [{ lineIndex: 0, qty: 1000 }]);
+  const r2 = rng(20251002);
+  const pick2 = (arr) => arr[Math.floor(r2() * arr.length)];
+  for (let i = 0; i < 300; i++) {
+    const n = 1 + Math.floor(r2() * 6);
+    const lines = [];
+    for (let k = 0; k < n; k++) {
+      const rate = 100 + Math.floor(r2() * 300000);
+      const qty = r2() < 0.5 ? (1 + Math.floor(r2() * 12)) * 500 : 1 + Math.floor(r2() * 20000);
+      const gross = Math.round((rate * qty) / 1000);
+      const discount = r2() < 0.25 ? Math.floor(r2() * gross * 0.3) : 0;
+      const cess = r2() < 0.2 ? pick2([1, 1.5, 5, 12, 21]) : 0;
+      lines.push(L(rate, qty, pick2([0, 0.25, 3, 5, 12, 18, 28, 40]), discount, cess));
+    }
+    const billDiscount = r2() < 0.35 ? Math.floor(r2() * 20000) : 0;
+    let picks;
+    if (i % 3 === 0) {
+      picks = [];
+      for (let k = 0; k < lines.length; k++) if (r2() < 0.6) picks.push({ lineIndex: k, qty: 1 + Math.floor(r2() * lines[k].qty) });
+      if (!picks.length) picks.push({ lineIndex: 0, qty: 1 + Math.floor(r2() * lines[0].qty) });
+    }
+    add(`gst2 random ${i}`, lines, billDiscount, r2() < 0.8, picks, r2() < 0.4);
   }
   return cases;
 }

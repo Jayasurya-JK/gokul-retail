@@ -1,4 +1,5 @@
 import type { MockStore } from './store';
+import { enabledRates, rateOk, rateText } from '../gst';
 import type { Brand, Category, Item, Milli, Paise, StockMovement, UnitCode } from '../types';
 
 // Area: Office items editor, categories, brands, barcode labels, stock levels/adjustments/stock take.
@@ -26,7 +27,9 @@ export interface ItemInput {
   /** Loose items only: product code on the weighing scale. */
   scaleCode: string;
   hsn: string;
-  gstRate: Item['gstRate'];
+  gstRate: number;
+  /** Optional cess percent on top of GST (0 / absent = none) */
+  cessRate?: number;
   mrp: Paise;
   price: Paise;
   cost: Paise;
@@ -126,7 +129,7 @@ export interface CatalogApi {
   listLooseItems(): Promise<Item[]>;
   setItemsActive(ids: string[], active: boolean): Promise<void>;
   setItemsCategory(ids: string[], categoryId: string): Promise<void>;
-  setItemsGst(ids: string[], rate: Item['gstRate']): Promise<void>;
+  setItemsGst(ids: string[], rate: number): Promise<void>;
   /** Bulk change brand (owner / manager). */
   setItemsBrand(ids: string[], brandId: string): Promise<void>;
   /** Items for one category and/or brand, with search and paging. */
@@ -161,14 +164,16 @@ export function isValidEan13(code: string): boolean {
 }
 
 /** Margin on selling price, in percent. Prices are GST inclusive, so margin is taken on the taxable value. */
-export function marginPercent(price: Paise, cost: Paise, gstRate: number): number | null {
+export function marginPercent(price: Paise, cost: Paise, gstRate: number, cessRate = 0): number | null {
   if (price <= 0) return null;
-  const taxable = (price * 100) / (100 + gstRate);
+  const taxable = (price * 100) / (100 + gstRate + cessRate);
   return ((taxable - cost) / taxable) * 100;
 }
 
-export function validateItemInput(i: ItemInput, others: { id: string; code: string; barcodes: string[] }[]): ItemIssues {
+export function validateItemInput(i: ItemInput, others: { id: string; code: string; barcodes: string[] }[], allowedRates: number[] = enabledRates()): ItemIssues {
   const e: ItemIssues = {};
+  if (!allowedRates.includes(i.gstRate)) e.gstRate = `GST rate ${rateText(i.gstRate)} is not in the GST rate list. Allowed: ${allowedRates.map(rateText).join(', ')}. The owner can change the list in Settings, Tax.`;
+  if (!rateOk(i.cessRate ?? 0)) e.cessRate = 'Cess must be a percentage between 0 and 100, for example 12 or 0.5.';
   if (!i.name.trim()) e.name = 'Enter the item name.';
   else if (i.name.trim().length < 3) e.name = 'Item name is too short. Use at least 3 letters.';
   if (!/^\d{1,6}$/.test(i.code.trim())) e.code = 'Counter code must be 1 to 6 digits, for example 142.';
@@ -280,9 +285,9 @@ export function createCatalogMock(store: MockStore): CatalogApi {
       if (!it) return null;
       return { item: it, barcodes: allBarcodes(it), parentId: parents.get(id) ?? '', scaleCode: scaleCodes.get(id) ?? '' };
     },
-    validateItem: async (input) => validateItemInput(input, current()),
+    validateItem: async (input) => validateItemInput(input, current(), store.taxRates),
     saveItem: async (input) => {
-      const issues = validateItemInput(input, current());
+      const issues = validateItemInput(input, current(), store.taxRates);
       const blocking = Object.keys(issues).filter((k) => !(k === 'cost' && input.cost > input.price));
       if (blocking.length) return { ok: false, issues };
       const existing = input.id ? byId(input.id) : undefined;
@@ -291,7 +296,7 @@ export function createCatalogMock(store: MockStore): CatalogApi {
         categoryId: input.categoryId, category: catName(input.categoryId), brand: input.brand.trim() || 'Loose',
         unit: input.unit, loose: input.loose, packSize: input.loose ? undefined : input.packSize.trim(),
         shelfLife: input.shelfLife && input.shelfLife > 0 ? input.shelfLife : undefined, shelfLifeUnit: input.shelfLife && input.shelfLife > 0 ? (input.shelfLifeUnit ?? 'months') : undefined,
-        hsn: input.hsn.trim(), gstRate: input.gstRate, mrp: input.mrp, price: input.price, cost: input.cost,
+        hsn: input.hsn.trim(), gstRate: input.gstRate, cessRate: input.cessRate && input.cessRate > 0 ? input.cessRate : undefined, mrp: input.mrp, price: input.price, cost: input.cost,
         wholesalePrice: input.wholesalePrice && input.wholesalePrice > 0 ? input.wholesalePrice : undefined,
         reorderLevel: input.reorderLevel, active: input.active,
       };
@@ -323,7 +328,7 @@ export function createCatalogMock(store: MockStore): CatalogApi {
     setItemsCategory: async (ids, categoryId) => {
       for (const id of ids) { const it = byId(id); if (it) { it.categoryId = categoryId; it.category = catName(categoryId); } }
     },
-    setItemsGst: async (ids, rate) => { for (const id of ids) { const it = byId(id); if (it) it.gstRate = rate; } },
+    setItemsGst: async (ids, rate) => { if (!(store.taxRates ?? enabledRates()).includes(rate)) throw new Error(`GST rate ${rateText(rate)} is not in the GST rate list.`); for (const id of ids) { const it = byId(id); if (it) it.gstRate = rate; } },
     setItemsBrand: async (ids, brandId) => {
       const b = brands.find((x) => x.id === brandId);
       if (!b) return;

@@ -6,6 +6,7 @@ import {
 } from '@gokul/data';
 import { Badge, Button, Field, Input, Money, NumberInput, Select, Switch, cn, useToast } from '@gokul/ui';
 import { api } from '../../store';
+import { useGstRates } from '../../useGstRates';
 import { Barcode } from './Barcode';
 import { Section, Segmented, unitText } from './shared';
 
@@ -13,7 +14,7 @@ interface FormState {
   name: string; nameTa: string; code: string; barcodes: string[]; barcodeDraft: string;
   categoryId: string; brand: string; unit: UnitCode; loose: boolean; packSize: string; parentId: string; scaleCode: string;
   shelfLife: string; shelfLifeUnit: 'days' | 'months';
-  hsn: string; gstRate: string; mrp: string; price: string; wholesale: string; cost: string; reorder: string; active: boolean; supplierId: string;
+  hsn: string; gstRate: string; cessRate: string; mrp: string; price: string; wholesale: string; cost: string; reorder: string; active: boolean; supplierId: string;
 }
 
 const LOOSE_UNITS: UnitCode[] = ['kg', 'l', 'g', 'ml'];
@@ -23,7 +24,7 @@ const rupees = (p: number) => (p ? (p / 100).toFixed(2).replace(/\.00$/, '') : '
 
 const blank = (): FormState => ({
   name: '', nameTa: '', code: '', barcodes: [], barcodeDraft: '', categoryId: '', brand: 'Gokul', unit: 'btl', loose: false,
-  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', mrp: '', price: '', wholesale: '', cost: '', reorder: '', active: true, supplierId: '',
+  packSize: '', parentId: '', scaleCode: '', shelfLife: '', shelfLifeUnit: 'months', hsn: '', gstRate: '5', cessRate: '', mrp: '', price: '', wholesale: '', cost: '', reorder: '', active: true, supplierId: '',
 });
 
 function toInput(f: FormState, id?: string): ItemInput {
@@ -31,7 +32,7 @@ function toInput(f: FormState, id?: string): ItemInput {
     id, name: f.name, nameTa: f.nameTa, code: f.code, barcodes: f.barcodes, categoryId: f.categoryId, brand: f.brand,
     unit: f.unit, loose: f.loose, packSize: f.packSize, parentId: f.parentId, scaleCode: f.scaleCode, hsn: f.hsn,
     shelfLife: Number(f.shelfLife) > 0 ? Number(f.shelfLife) : undefined, shelfLifeUnit: f.shelfLifeUnit,
-    gstRate: Number(f.gstRate) as Item['gstRate'],
+    gstRate: Number(f.gstRate), cessRate: Number(f.cessRate) > 0 ? Number(f.cessRate) : undefined,
     mrp: parsePaise(f.mrp) ?? 0, price: parsePaise(f.price) ?? 0, cost: parsePaise(f.cost) ?? 0, wholesalePrice: parsePaise(f.wholesale) ?? undefined,
     reorderLevel: parseQty(f.reorder) ?? 0, active: f.active, supplierId: f.supplierId,
   };
@@ -47,6 +48,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
   defaults?: { categoryId?: string; brand?: string };
 }) {
   const toast = useToast();
+  const gstRates = useGstRates();
   const [f, setF] = useState<FormState>(blank);
   const [loaded, setLoaded] = useState(!itemId);
   const [cats, setCats] = useState<Category[]>([]);
@@ -71,7 +73,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
         setF({
           name: i.name, nameTa: i.nameTa ?? '', code: i.code, barcodes: d.barcodes, barcodeDraft: '', categoryId: i.categoryId, brand: i.brand,
           unit: i.unit, loose: i.loose, packSize: i.packSize ?? '', parentId: d.parentId, scaleCode: d.scaleCode, shelfLife: i.shelfLife ? String(i.shelfLife) : '', shelfLifeUnit: i.shelfLifeUnit ?? 'months', hsn: i.hsn,
-          gstRate: String(i.gstRate), mrp: rupees(i.mrp), price: rupees(i.price), wholesale: rupees(i.wholesalePrice ?? 0), cost: rupees(i.cost),
+          gstRate: String(i.gstRate), cessRate: i.cessRate ? String(i.cessRate) : '', mrp: rupees(i.mrp), price: rupees(i.price), wholesale: rupees(i.wholesalePrice ?? 0), cost: rupees(i.cost),
           reorder: i.reorderLevel ? String(i.reorderLevel / 1000) : '', active: i.active, supplierId: i.supplierId ?? '',
         });
         setLoaded(true);
@@ -127,8 +129,8 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
     return () => window.removeEventListener('keydown', h);
   }, [save, layout, onCancel]);
 
-  const margin = marginPercent(input.price, input.cost, input.gstRate);
-  const taxable = input.price ? Math.round((input.price * 100) / (100 + input.gstRate)) : 0;
+  const margin = marginPercent(input.price, input.cost, input.gstRate, input.cessRate ?? 0);
+  const taxable = input.price ? Math.round((input.price * 10000) / (10000 + Math.round((input.gstRate + (input.cessRate ?? 0)) * 100))) : 0;
   const profit = taxable - input.cost;
   const mrpOff = input.mrp > 0 && input.price > 0 && input.price <= input.mrp ? ((input.mrp - input.price) / input.mrp) * 100 : 0;
   const marginTone = margin === null ? 'text-subtle' : margin < 0 ? 'text-danger' : margin < 10 ? 'text-warning' : 'text-success';
@@ -201,10 +203,14 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
 
           <div className="flex flex-col gap-3">
             <Section title="Tax and prices" hint={`Prices include GST${per}`}>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Input label="HSN code" value={f.hsn} inputMode="numeric" className="num" placeholder="e.g. 1508" onChange={(e) => set('hsn', e.target.value.replace(/\D/g, '').slice(0, 8))} onBlur={() => touch('hsn')} error={err('hsn')} />
-                <Select label="GST rate" value={f.gstRate} onChange={(e) => set('gstRate', e.target.value)} options={[0, 5, 12, 18].map((r) => ({ value: String(r), label: r === 0 ? '0% (exempt)' : `${r}%` }))} />
+                <Select label="GST rate" value={f.gstRate} title={err('gstRate')}
+                  onChange={(e) => set('gstRate', e.target.value)}
+                  options={[...new Set([...gstRates, Number(f.gstRate)])].sort((a, b) => a - b).map((r) => ({ value: String(r), label: r === 0 ? '0% (exempt)' : `${r}%` }))} />
+                <Input label="Cess %" value={f.cessRate} inputMode="decimal" className="num" placeholder="None" hint="Only for goods that carry cess (confirm with CA)" onChange={(e) => set('cessRate', e.target.value.replace(/[^\d.]/g, '').slice(0, 5))} error={err('cessRate')} />
               </div>
+              {err('gstRate') && <div className="mt-1 text-xs text-danger">{err('gstRate')}</div>}
               <div className="mt-3 grid grid-cols-3 gap-3">
                 <Field label={`MRP${per}`} error={err('mrp')}><NumberInput prefix="₹" value={f.mrp} onValueChange={(v) => set('mrp', v)} onBlur={() => touch('mrp')} placeholder="0.00" /></Field>
                 <Field label={`Selling price${per}`} error={err('price')}><NumberInput prefix="₹" value={f.price} onValueChange={(v) => set('price', v)} onBlur={() => touch('price')} placeholder="0.00" /></Field>
@@ -228,7 +234,7 @@ export function ItemForm({ itemId, onSaved, onCancel, layout = 'sheet', defaults
                 </div>
               </div>
               <div className="mt-2 text-xs text-subtle">
-                {input.price > 0 ? <>Price without GST <Money paise={taxable} />, GST <Money paise={input.price - taxable} /> at {input.gstRate}%. Margin is on the price without GST.</> : 'Margin is shown once you enter the selling price.'}
+                {input.price > 0 ? <>Price without GST <Money paise={taxable} />, GST{input.cessRate ? ' and cess' : ''} <Money paise={input.price - taxable} /> at {input.gstRate}%{input.cessRate ? ` + ${input.cessRate}% cess` : ''}. Margin is on the price without GST.</> : 'Margin is shown once you enter the selling price.'}
               </div>
               {costWarn && <div className="mt-2 rounded-control bg-warning-soft px-3 py-2 text-xs text-warning">{costWarn}</div>}
             </Section>

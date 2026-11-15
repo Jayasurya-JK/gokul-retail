@@ -61,6 +61,7 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     }
 
     let settings = db::load_settings(tx)?;
+    check_line_rates(tx, &lines)?;
     let cash_disc = cash_discount(&lines, ex.cash_disc_bps);
     let totals = compute_totals_with_delivery(&lines, draft.bill_discount + cash_disc, settings.round_to_rupee, ex.delivery_charge, settings.delivery_gst_rate);
 
@@ -111,6 +112,7 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             rate: ex.delivery_charge,
             discount: 0,
             gst_rate: settings.delivery_gst_rate,
+            cess_rate: 0.0,
             amount: ex.delivery_charge,
         });
     }
@@ -133,19 +135,19 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
 
     {
         let mut ins = tx.prepare_cached(
-            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cost)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,(SELECT cost FROM items WHERE id=?3))",
+            "INSERT INTO bill_lines(bill_id,line_no,item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cost,cess_rate)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,(SELECT cost FROM items WHERE id=?3),?12)",
         )?;
         for (i, l) in lines.iter().enumerate() {
-            ins.execute(params![bill_id, i as i64, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount])
+            ins.execute(params![bill_id, i as i64, l.item_id, l.code, l.name, l.unit, l.qty, l.rate, l.discount, l.gst_rate, l.amount, l.cess_rate])
                 .map_err(|e| match e {
                     rusqlite::Error::SqliteFailure(_, _) => ApiError::Invalid(format!("Item '{}' is not in the item list", l.name)),
                     other => other.into(),
                 })?;
         }
-        let mut slab = tx.prepare_cached("INSERT INTO bill_slabs(bill_id,rate,taxable,cgst,sgst) VALUES(?1,?2,?3,?4,?5)")?;
+        let mut slab = tx.prepare_cached("INSERT INTO bill_slabs(bill_id,rate,taxable,cgst,sgst,cess) VALUES(?1,?2,?3,?4,?5,?6)")?;
         for s in &totals.slabs {
-            slab.execute(params![bill_id, s.rate, s.taxable, s.cgst, s.sgst])?;
+            slab.execute(params![bill_id, s.rate, s.taxable, s.cgst, s.sgst, s.cess])?;
         }
     }
     hit(fault, Fault::AfterLines)?;
@@ -273,6 +275,18 @@ fn give_back_exchange_balance(
     Ok(())
 }
 
+/// Every line's GST and cess rate must be in the owner's rate list (the amounts are computed here, never taken from the screen).
+fn check_line_rates(conn: &Connection, lines: &[BillLine]) -> Result<()> {
+    let allowed = crate::gst::allowed_rates(conn);
+    for l in lines {
+        if !allowed.iter().any(|a| (*a - l.gst_rate).abs() < 1e-9) {
+            crate::gst::check_rate(conn, l.gst_rate, &format!("'{}': GST", l.name))?;
+        }
+        crate::gst::check_cess(l.cess_rate, &format!("'{}'", l.name))?;
+    }
+    Ok(())
+}
+
 pub const DELIVERY_ITEM: &str = "_delivery";
 /// A one-off line typed at the counter (Manual) is billed under this hidden item.
 pub const MANUAL_ITEM: &str = "_manual";
@@ -317,6 +331,7 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             discount: r.get(11)?,
             taxable: r.get(12)?,
             gst: r.get(13)?,
+            cess: 0, // filled from the slabs by fill_children
             slabs: vec![],
             before_round: r.get(14)?,
             round_off: r.get(15)?,
@@ -339,10 +354,10 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
 
 fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
     let mut lines = conn.prepare_cached(
-        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount FROM bill_lines WHERE bill_id=?1 ORDER BY line_no",
+        "SELECT item_id,code,name,unit,qty,rate,discount,gst_rate,amount,cess_rate FROM bill_lines WHERE bill_id=?1 ORDER BY line_no",
     )?;
     let mut pays = conn.prepare_cached("SELECT mode,amount,ref FROM bill_payments WHERE bill_id=?1 ORDER BY id")?;
-    let mut slabs = conn.prepare_cached("SELECT rate,taxable,cgst,sgst FROM bill_slabs WHERE bill_id=?1 ORDER BY rate")?;
+    let mut slabs = conn.prepare_cached("SELECT rate,taxable,cgst,sgst,cess FROM bill_slabs WHERE bill_id=?1 ORDER BY rate")?;
     let mut xr = conn.prepare_cached("SELECT credit_note,mode,amount FROM exchange_refunds WHERE bill_id=?1 LIMIT 1")?;
     for b in bills.iter_mut() {
         let id = parse_id("b", &b.id).unwrap_or(0);
@@ -358,6 +373,7 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
                     discount: r.get(6)?,
                     gst_rate: r.get(7)?,
                     amount: r.get(8)?,
+                    cess_rate: r.get(9)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -376,8 +392,9 @@ fn fill_children(conn: &Connection, bills: &mut [Bill]) -> Result<()> {
             .query_row([id], |r| Ok(ExchangeRefund { credit_note: r.get(0)?, mode: r.get(1)?, amount: r.get(2)? }))
             .optional()?;
         b.totals.slabs = slabs
-            .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)? }))?
+            .query_map([id], |r| Ok(GstSlab { rate: r.get(0)?, taxable: r.get(1)?, cgst: r.get(2)?, sgst: r.get(3)?, igst: 0, cess: r.get(4)? }))?
             .collect::<rusqlite::Result<_>>()?;
+        b.totals.cess = b.totals.slabs.iter().map(|s| s.cess).sum();
     }
     Ok(())
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Printer, Truck, UserPlus } from 'lucide-react';
-import { formatRupees, parsePaise, parseQty, type Bill, type BillLine, type Staff } from '@gokul/data';
+import { DEFAULT_GST_RATES, enabledRates, rateText, formatRupees, parsePaise, parseQty, type Bill, type BillLine, type Staff } from '@gokul/data';
 import { Button, Dialog, Field, Input, Money, cn } from '@gokul/ui';
 import { api } from '../store';
 import type { Delivery } from '../store';
@@ -165,9 +165,14 @@ export function ManualItemDialog({ open, onClose, onAdd }: { open: boolean; onCl
   const [name, setName] = useState('');
   const [rate, setRate] = useState('');
   const [qty, setQty] = useState('1');
-  const [gst, setGst] = useState<0 | 5 | 12 | 18>(5);
+  const [gst, setGst] = useState<number>(5);
+  const [gstRates, setGstRates] = useState<number[]>([...DEFAULT_GST_RATES]);
   const [error, setError] = useState('');
-  useEffect(() => { if (open) { setName(''); setRate(''); setQty('1'); setGst(5); setError(''); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setName(''); setRate(''); setQty('1'); setGst(5); setError('');
+    api.getSettingsBundle().then((b) => setGstRates(enabledRates(b.tax.rates))).catch(() => undefined);
+  }, [open]);
 
   const submit = () => {
     const r = parsePaise(rate);
@@ -191,8 +196,8 @@ export function ManualItemDialog({ open, onClose, onAdd }: { open: boolean; onCl
           <Input label="Price" inputMode="decimal" value={rate} onChange={(e) => { setRate(e.target.value.replace(/[^\d.]/g, '')); setError(''); }} className="text-right" />
           <Input label="Quantity" inputMode="decimal" value={qty} onChange={(e) => { setQty(e.target.value.replace(/[^\d.]/g, '')); setError(''); }} className="text-right" />
           <Field label="GST">
-            <select value={gst} onChange={(e) => setGst(Number(e.target.value) as 0 | 5 | 12 | 18)} className="h-9 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink">
-              {[0, 5, 12, 18].map((g) => <option key={g} value={g}>{g}%</option>)}
+            <select value={gst} onChange={(e) => setGst(Number(e.target.value))} className="h-9 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink">
+              {gstRates.map((g) => <option key={g} value={g}>{rateText(g)}</option>)}
             </select>
           </Field>
         </div>

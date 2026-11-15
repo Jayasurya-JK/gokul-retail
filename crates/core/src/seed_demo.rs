@@ -178,6 +178,7 @@ pub fn seed_demo(conn: &mut Connection) -> Result<()> {
                         rate: it.price,
                         discount: 0,
                         gst_rate: it.gst_rate,
+                        cess_rate: 0.0,
                         amount: 0,
                     })
                 })
@@ -270,24 +271,24 @@ fn seed_office(conn: &mut Connection, data: &SeedData, now: chrono::DateTime<Loc
     }
 
     // purchases over the last ~90 days
-    type Cand = (String, i64, i64, bool);
+    type Cand = (String, i64, f64, bool);
     let query = |conn: &Connection, sql: &str| -> Result<Vec<Cand>> {
         let mut st = conn.prepare(sql)?;
         let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? != 0)))?.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(v)
     };
-    let raw = |id: &str, cost: i64, gst: i64| -> Cand { (id.to_string(), cost, gst, true) };
+    let raw = |id: &str, cost: i64, gst: f64| -> Cand { (id.to_string(), cost, gst, true) };
     let order = ["s2", "s3", "s1", "s4", "s5", "s6", "s7", "s8", "s2", "s3", "s4", "s1", "s6", "s2", "s7", "s5", "s3", "s8", "s4", "s2", "s1", "s6", "s3", "s4", "s7", "s2", "s5", "s3"];
     for (k, sid) in order.iter().enumerate() {
         let cands: Vec<Cand> = match *sid {
-            "s1" => vec![raw("rm-sesame", 13800, 0), raw("rm-gn", 9800, 0)],
-            "s2" => vec![raw("rm-gn", 9800, 0)],
-            "s3" => vec![raw("rm-sesame", 13800, 0)],
-            "s4" => vec![raw("rm-copra", 16800, 5)],
+            "s1" => vec![raw("rm-sesame", 13800, 0.0), raw("rm-gn", 9800, 0.0)],
+            "s2" => vec![raw("rm-gn", 9800, 0.0)],
+            "s3" => vec![raw("rm-sesame", 13800, 0.0)],
+            "s4" => vec![raw("rm-copra", 16800, 5.0)],
             "s5" => query(conn, "SELECT id,cost,gst_rate,loose FROM items WHERE name LIKE '%Jaggery%(Loose)' AND kind='item' ORDER BY rowid LIMIT 8")?,
             "s6" => query(conn, "SELECT id,cost,gst_rate,loose FROM items WHERE category_id='pack' AND kind='item' ORDER BY rowid LIMIT 8")?,
             "s7" => query(conn, "SELECT id,cost,gst_rate,loose FROM items WHERE category_id IN ('dal','rice') AND loose=1 AND kind='item' ORDER BY rowid LIMIT 8")?,
-            _ => vec![raw("rm-btl500", 750, 18), raw("rm-btl1l", 1100, 18), raw("rm-tin15", 16500, 18), raw("rm-label", 120, 18)],
+            _ => vec![raw("rm-btl500", 750, 18.0), raw("rm-btl1l", 1100, 18.0), raw("rm-tin15", 16500, 18.0), raw("rm-label", 120, 18.0)],
         };
         if cands.is_empty() {
             continue;

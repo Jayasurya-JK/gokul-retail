@@ -26,6 +26,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (15, include_str!("../migrations/015_job_work.sql")),
     (16, include_str!("../migrations/016_roles_admin_staff.sql")),
     (17, include_str!("../migrations/017_record_corrections.sql")),
+    (18, include_str!("../migrations/018_gst_rates_cess.sql")),
 ];
 
 /// The schema version this build brings every database up to.
@@ -100,6 +101,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         if *version == 16 {
             allow_admin_and_staff_roles(&tx)?; // before the SQL below inserts the new roles
         }
+        if *version == 18 {
+            allow_any_gst_rate(&tx)?; // before the SQL below, so the new rows can hold any rate
+        }
         tx.execute_batch(sql)?;
         if *version == 10 {
             crate::lots::backfill(&tx)?; // lots from the existing ledger, in the same transaction
@@ -127,6 +131,21 @@ fn allow_admin_and_staff_roles(tx: &rusqlite::Transaction) -> Result<()> {
     tx.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", cookie + 1))?;
     if n != 1 || n2 != 1 {
         return Err(internal("could not allow the admin and staff roles on the users table"));
+    }
+    Ok(())
+}
+
+/// `items.gst_rate` was created with CHECK (gst_rate IN (0,5,12,18)). Which GST rates are allowed is now a setting (the owner's rate list),
+/// so the CHECK is loosened to "a sensible percentage" with the same schema-text technique as `allow_admin_and_staff_roles`.
+fn allow_any_gst_rate(tx: &rusqlite::Transaction) -> Result<()> {
+    let old = "CHECK (gst_rate IN (0,5,12,18))";
+    let new = "CHECK (gst_rate >= 0 AND gst_rate <= 100)";
+    let cookie: i64 = tx.query_row("PRAGMA schema_version", [], |r| r.get(0))?;
+    tx.execute_batch("PRAGMA writable_schema = ON")?;
+    let n = tx.execute("UPDATE sqlite_master SET sql = replace(sql, ?1, ?2) WHERE type='table' AND name='items'", rusqlite::params![old, new])?;
+    tx.execute_batch(&format!("PRAGMA schema_version = {}; PRAGMA writable_schema = OFF", cookie + 1))?;
+    if n != 1 {
+        return Err(internal("could not loosen the GST rate check on the items table"));
     }
     Ok(())
 }
@@ -270,7 +289,7 @@ pub fn load_settings(conn: &Connection) -> Result<Settings> {
         receipt_footer: g("receiptFooter")?,
         printer: g("printer")?,
         round_to_rupee: g("roundToRupee")? != "0",
-        delivery_gst_rate: g("deliveryGstRate")?.parse().ok().filter(|r| [0, 5, 12, 18].contains(r)).unwrap_or(0),
+        delivery_gst_rate: g("deliveryGstRate")?.parse::<f64>().ok().filter(|r| crate::gst::rate_ok(*r)).unwrap_or(0.0),
     })
 }
 

@@ -38,7 +38,7 @@ fn smaller_exchange_bill_refunds_the_difference_in_cash_and_the_drawer_follows()
         assert_eq!(cn.totals.grand, 36_000);
         assert_eq!(cn.balance, 36_000);
         assert_eq!(cn.totals.slabs.len(), 1);
-        assert_eq!(cn.totals.slabs[0].rate, 5, "the credit note reverses the 5% GST of the returned oil");
+        assert_eq!(cn.totals.slabs[0].rate, 5.0, "the credit note reverses the 5% GST of the returned oil");
 
         // no PIN for a cashier: refused, nothing saved
         let before = count(c, "bills");
@@ -53,7 +53,7 @@ fn smaller_exchange_bill_refunds_the_difference_in_cash_and_the_drawer_follows()
         let nb = save_bill(c, &small_bill(&cn, "cash", Some("2222"), 32_200))?;
         assert_eq!(nb.totals.grand, 3_800);
         assert_eq!(nb.totals.slabs.len(), 1);
-        assert_eq!(nb.totals.slabs[0].rate, 18, "the new bill charges GST only on the new line");
+        assert_eq!(nb.totals.slabs[0].rate, 18.0, "the new bill charges GST only on the new line");
         assert_eq!(nb.totals.gst, 580);
         assert_eq!(nb.extras.exchange_refund.as_ref().unwrap().amount, 32_200);
         assert_eq!(count(c, "exchange_refunds"), 1);

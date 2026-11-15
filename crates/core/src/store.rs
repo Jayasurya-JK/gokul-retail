@@ -173,7 +173,7 @@ pub fn list_categories(conn: &Connection) -> Result<Vec<Category>> {
 
 pub(crate) const ITEM_SELECT: &str = "SELECT i.id,i.code,COALESCE(b.barcode,''),i.name,i.name_ta,i.category_id,c.name,i.brand,i.unit,i.loose,i.pack_size,
     i.hsn,i.gst_rate,i.mrp,i.price,i.cost,i.stock,i.reorder_level,i.active,i.shelf_life,i.shelf_life_unit,i.wholesale_price,
-    i.supplier_id,COALESCE((SELECT s.name FROM suppliers s WHERE s.id=i.supplier_id),'')
+    i.supplier_id,COALESCE((SELECT s.name FROM suppliers s WHERE s.id=i.supplier_id),''),i.cess_rate
     FROM items i JOIN categories c ON c.id=i.category_id LEFT JOIN barcodes b ON b.item_id=i.id AND b.is_primary=1";
 
 pub(crate) fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
@@ -191,6 +191,7 @@ pub(crate) fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
         pack_size: r.get(10)?,
         hsn: r.get(11)?,
         gst_rate: r.get(12)?,
+        cess_rate: r.get(24)?,
         mrp: r.get(13)?,
         price: r.get(14)?,
         cost: r.get(15)?,

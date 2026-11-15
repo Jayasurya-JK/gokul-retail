@@ -34,7 +34,12 @@ pub struct Item {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shelf_life_unit: Option<String>,
     pub hsn: String,
-    pub gst_rate: i64,
+    /// GST percent, e.g. 5 or 0.25. Whole rates travel as integers.
+    #[serde(with = "rate_serde")]
+    pub gst_rate: f64,
+    /// Optional cess percent on top of GST (0 = none).
+    #[serde(default, skip_serializing_if = "rate_is_zero", with = "rate_serde")]
+    pub cess_rate: f64,
     pub mrp: i64,
     pub price: i64,
     pub cost: i64,
@@ -84,20 +89,50 @@ pub struct BillLine {
     pub qty: i64,
     pub rate: i64,
     pub discount: i64,
-    pub gst_rate: i64,
+    #[serde(with = "rate_serde")]
+    pub gst_rate: f64,
+    /// Cess percent on this line (0 = none). The price already includes it.
+    #[serde(default, skip_serializing_if = "rate_is_zero", with = "rate_serde")]
+    pub cess_rate: f64,
     pub amount: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// One GST rate on a bill: taxable value and the tax on it. Intra-state supply fills cgst and sgst (half each);
+/// inter-state fills igst (the full rate). Cess is shown beside it and is not part of `gst`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GstSlab {
-    pub rate: i64,
+    #[serde(with = "rate_serde")]
+    pub rate: f64,
     pub taxable: i64,
     pub cgst: i64,
     pub sgst: i64,
+    #[serde(default)]
+    pub igst: i64,
+    #[serde(default)]
+    pub cess: i64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+/// Percent rates on the wire: a whole rate is an integer (5), a fractional one a decimal (0.25).
+pub mod rate_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub fn serialize<S: Serializer>(v: &f64, s: S) -> Result<S::Ok, S::Error> {
+        if v.fract() == 0.0 && v.abs() < 1e9 {
+            s.serialize_i64(*v as i64)
+        } else {
+            s.serialize_f64(*v)
+        }
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+        f64::deserialize(d)
+    }
+}
+
+pub fn rate_is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BillTotals {
     pub item_count: i64,
@@ -105,7 +140,11 @@ pub struct BillTotals {
     pub gross: i64,
     pub discount: i64,
     pub taxable: i64,
+    /// Total GST (CGST + SGST + IGST), cess not included.
     pub gst: i64,
+    /// Total cess.
+    #[serde(default)]
+    pub cess: i64,
     pub slabs: Vec<GstSlab>,
     pub before_round: i64,
     pub round_off: i64,
@@ -253,9 +292,9 @@ pub struct Settings {
     pub receipt_footer: String,
     pub printer: String,
     pub round_to_rupee: bool,
-    /// GST percent on a home-delivery charge (0, 5, 12 or 18; 0 = delivery is not taxed).
-    #[serde(default)]
-    pub delivery_gst_rate: i64,
+    /// GST percent on a home-delivery charge (any allowed rate; 0 = delivery is not taxed).
+    #[serde(default, with = "rate_serde")]
+    pub delivery_gst_rate: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

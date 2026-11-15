@@ -11,6 +11,7 @@ import { ItemForm } from '../components/catalog/ItemForm';
 import { ItemDetailPane } from '../components/catalog/ItemDetailPane';
 import { AdjustmentDialog } from '../components/catalog/AdjustmentDialog';
 import { unitText } from '../components/catalog/shared';
+import { useGstRates } from '../useGstRates';
 
 const stockState = (r: Item) => (r.stock <= 0 ? 'out' : r.stock <= r.reorderLevel ? 'low' : 'ok');
 const worth = (r: Item) => Math.round((r.cost * r.stock) / 1000);
@@ -25,6 +26,7 @@ const GROUP_COLS = '36px 52px minmax(150px,1fr) 116px 70px 100px 84px 42px 90px'
 export function Items() {
   const nav = useNavigate();
   const toast = useToast();
+  const gstRates = useGstRates();
   const role = useSession((s) => s.user?.role);
   /** Purchase cost is for the owner and managers only, like the stock take screen. */
   const canSeeCost = role === 'owner' || role === 'admin' || role === 'manager';
@@ -198,7 +200,7 @@ export function Items() {
           <span className="text-sm font-semibold text-primary">{checked.size} selected</span>
           <span className="mx-1 h-4 w-px bg-primary/30" />
           <div className="w-44"><Select size="sm" value="" onChange={(e) => e.target.value && void bulk('Category changed', () => api.setItemsCategory(ids, e.target.value))} options={[{ value: '', label: 'Move to category...' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]} /></div>
-          <div className="w-32"><Select size="sm" value="" onChange={(e) => e.target.value !== '' && void bulk('GST rate changed', () => api.setItemsGst(ids, Number(e.target.value) as Item['gstRate']))} options={[{ value: '', label: 'Set GST...' }, ...[0, 5, 12, 18].map((r) => ({ value: String(r), label: `${r}%` }))]} /></div>
+          <div className="w-32"><Select size="sm" value="" onChange={(e) => e.target.value !== '' && void bulk('GST rate changed', () => api.setItemsGst(ids, Number(e.target.value)))} options={[{ value: '', label: 'Set GST...' }, ...gstRates.map((r) => ({ value: String(r), label: `${r}%` }))]} /></div>
           <Button size="sm" icon={<Eye size={13} />} onClick={() => void bulk('Items activated', () => api.setItemsActive(ids, true))}>Activate</Button>
           <Button size="sm" icon={<EyeOff size={13} />} onClick={() => void bulk('Items deactivated', () => api.setItemsActive(ids, false))}>Deactivate</Button>
           <Button size="sm" icon={<Barcode size={13} />} onClick={() => nav('/labels', { state: { ids } })}>Print labels</Button>
@@ -212,7 +214,7 @@ export function Items() {
           <div className="w-[180px]"><Combobox options={supplierOptions} value={supplierF} onChange={setSupplierF} placeholder="All suppliers" /></div>
           <div className="w-[180px]"><Select value={cat} onChange={(e) => setCat(e.target.value)} options={[{ value: 'all', label: 'All categories' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]} /></div>
           <div className="w-[140px]"><Select value={type} onChange={(e) => setType(e.target.value)} options={[{ value: 'all', label: 'All types' }, { value: 'loose', label: 'Loose only' }, { value: 'packed', label: 'Packed only' }]} /></div>
-          <div className="w-[104px]"><Select value={gst} onChange={(e) => setGst(e.target.value)} options={[{ value: 'all', label: 'Any GST' }, ...[0, 5, 12, 18].map((r) => ({ value: String(r), label: `GST ${r}%` }))]} /></div>
+          <div className="w-[104px]"><Select value={gst} onChange={(e) => setGst(e.target.value)} options={[{ value: 'all', label: 'Any GST' }, ...gstRates.map((r) => ({ value: String(r), label: `GST ${r}%` }))]} /></div>
           <div className="w-[124px]"><Select value={stockF} onChange={(e) => setStockF(e.target.value)} options={[{ value: 'all', label: 'Any stock' }, { value: 'low', label: 'Low stock' }, { value: 'out', label: 'Out of stock' }]} /></div>
           <div className="w-[150px]"><Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: 'active', label: 'Active only' }, { value: 'inactive', label: 'Inactive only' }, { value: 'all', label: 'All statuses' }]} /></div>
           {activeFilters > 0 && <Button size="sm" variant="ghost" icon={<X size={13} />} onClick={clearFilters}>Clear filters</Button>}

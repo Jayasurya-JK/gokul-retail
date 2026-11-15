@@ -274,7 +274,7 @@ fn body(d: &mut Doc, c: &Config, conn: &Connection, lines: &[BillLine], t: &Bill
             saved += (mrp - l.rate) * l.qty / 1000;
         }
         d.text(l.name.clone(), BOLD);
-        let gst = if l.gst_rate > 0 { format!(" ({}%)", l.gst_rate) } else { String::new() };
+        let gst = if l.gst_rate > 0.0 { format!(" ({}%)", l.gst_rate) } else { String::new() };
         let hs = if c.show_hsn && !hsn.is_empty() { format!(" HSN {hsn}") } else { String::new() };
         d.pair(format!("  {} {} x {}{gst}{hs}", qty(l.qty), l.unit, money(l.rate)), format!("{sign}{}", money(l.amount)));
         if l.discount > 0 {
@@ -376,7 +376,7 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
             .sum(),
         None => 0,
     };
-    let supply_only = c.composition || (b.totals.gst == 0 && b.lines.iter().all(|l| l.gst_rate == 0));
+    let supply_only = c.composition || (b.totals.gst == 0 && b.lines.iter().all(|l| l.gst_rate == 0.0));
     let word = if supply_only { "BILL OF SUPPLY" } else if !b2b_gstin.is_empty() { "TAX INVOICE (B2B)" } else { "TAX INVOICE" };
     let cols = c.paper.cols();
     let mut d = Doc::new();

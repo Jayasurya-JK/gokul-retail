@@ -26,8 +26,8 @@ pub struct GrnDraftLine {
     pub rate: i64,
     #[serde(default)]
     pub discount_pct: f64,
-    #[serde(default)]
-    pub gst_rate: i64,
+    #[serde(default, with = "crate::types::rate_serde")]
+    pub gst_rate: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,7 +37,8 @@ pub struct GrnLineCalc {
     pub qty: i64,
     pub rate: i64,
     pub discount_pct: f64,
-    pub gst_rate: i64,
+    #[serde(with = "crate::types::rate_serde")]
+    pub gst_rate: f64,
     pub gross: i64,
     pub discount: i64,
     pub taxable: i64,
@@ -77,7 +78,7 @@ pub fn compute_grn(lines: &[GrnDraftLine], freight: i64, other: i64, interstate:
             let bp = discount_bp(l.discount_pct);
             let discount = round_div(gross * bp, 10_000);
             let taxable = gross - discount;
-            let gst = round_div(taxable * l.gst_rate, 100);
+            let gst = round_div(taxable * crate::money::rate_bp(l.gst_rate), 10_000);
             GrnLineCalc {
                 item_id: l.item_id.clone(),
                 qty: l.qty,
@@ -97,7 +98,7 @@ pub fn compute_grn(lines: &[GrnDraftLine], freight: i64, other: i64, interstate:
     let taxable = sum(|l| l.taxable);
     let mut slabs: std::collections::BTreeMap<i64, (i64, i64)> = Default::default();
     for l in &calc {
-        let s = slabs.entry(l.gst_rate).or_default();
+        let s = slabs.entry(crate::money::rate_bp(l.gst_rate)).or_default();
         s.0 += l.taxable;
         s.1 += l.gst;
     }
@@ -118,7 +119,7 @@ pub fn compute_grn(lines: &[GrnDraftLine], freight: i64, other: i64, interstate:
         before_round,
         round_off: total - before_round,
         total,
-        slabs: slabs.into_iter().map(|(rate, (t, g))| json!({ "rate": rate, "taxable": t, "gst": g })).collect(),
+        slabs: slabs.into_iter().map(|(rate, (t, g))| json!({ "rate": crate::gst::rate_json(rate as f64 / 100.0), "taxable": t, "gst": g })).collect(),
         lines: calc,
     }
 }
@@ -229,9 +230,7 @@ pub fn create_grn_at(conn: &mut Connection, d: &GrnDraft, now: chrono::DateTime<
         if l.rate < 0 || !(0.0..=100.0).contains(&l.discount_pct) {
             return invalid("Check the rate and discount on each line.");
         }
-        if ![0, 5, 12, 18].contains(&l.gst_rate) {
-            return invalid("GST rate must be 0, 5, 12 or 18.");
-        }
+        crate::gst::check_rate(&tx, l.gst_rate, "GST rate")?;
         info.push(it);
     }
     let pay_mode = if PAY_MODES.contains(&d.pay_mode.as_str()) { d.pay_mode.clone() } else { "cash".into() };
@@ -297,7 +296,7 @@ fn load_grn(conn: &Connection, id: i64) -> Result<Option<Value>> {
     let mut st = conn.prepare_cached(
         "SELECT item_id,name,unit,kind,qty,rate,discount_bp,gst_rate FROM purchase_lines WHERE purchase_id=?1 ORDER BY line_no",
     )?;
-    let raw: Vec<(String, String, String, String, i64, i64, i64, i64)> = st
+    let raw: Vec<(String, String, String, String, i64, i64, i64, f64)> = st
         .query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let draft: Vec<GrnDraftLine> = raw

@@ -45,8 +45,8 @@ pub fn mini_db() -> (TempDir, Db) {
     (dir, db)
 }
 
-pub fn line(item: &str, code: &str, name: &str, qty: i64, rate: i64, gst: i64) -> BillLine {
-    BillLine { item_id: item.into(), code: code.into(), name: name.into(), unit: "pc".into(), qty, rate, discount: 0, gst_rate: gst, amount: 0 }
+pub fn line(item: &str, code: &str, name: &str, qty: i64, rate: i64, gst: impl Into<f64>) -> BillLine {
+    BillLine { item_id: item.into(), code: code.into(), name: name.into(), unit: "pc".into(), qty, rate, discount: 0, gst_rate: gst.into(), cess_rate: 0.0, amount: 0 }
 }
 
 /// A draft paid fully in cash. The grand total is computed with the same engine the server uses.

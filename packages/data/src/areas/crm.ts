@@ -1,6 +1,7 @@
 import type { MockStore } from './store';
 import type { Bill, Customer, Paise, PayMode, Role, UnitCode } from '../types';
 import { rng } from '../seed';
+import { defaultRateEntries, enabledRates, mergeRateEntries, rateOk } from '../gst';
 
 // Area: Office sales bills, customers, credit and collections, users and roles, settings.
 
@@ -422,7 +423,7 @@ export interface MillSettings {
   /** Service accounting code printed on the aravai bill (verify with the accountant) */
   serviceSac: string;
   /** GST rate on the aravai charge: 0, 5, 12 or 18 (verify with the accountant) */
-  serviceGstRate: 0 | 5 | 12 | 18;
+  serviceGstRate: number;
 }
 
 export interface LoyaltySettings {
@@ -663,10 +664,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     },
     tax: {
       scheme: 'regular', compositionRatePct: 1,
-      rates: [
-        { rate: 0, enabled: true, label: 'Exempt / nil' }, { rate: 5, enabled: true, label: 'Edible oils, ghee, pulses, cake' },
-        { rate: 12, enabled: true, label: 'Lamp oil, packaged foods' }, { rate: 18, enabled: true, label: 'Other goods' },
-      ],
+      rates: defaultRateEntries(),
       pricesInclusive: true, roundToRupee: s.roundToRupee, showHsn: true, interState: false,
     },
     billFormat: {
@@ -1077,9 +1075,15 @@ export function createCrmMock(store: MockStore): CrmApi {
     },
 
     /* settings */
-    getSettingsBundle: () => delay(clone(bundle)),
+    getSettingsBundle: () => delay(clone({ ...bundle, tax: { ...bundle.tax, rates: mergeRateEntries(bundle.tax.rates) } })),
     saveSettingsBundle: (next) => {
+      const rates = next.tax.rates.map((r) => r.rate);
+      if (rates.some((r) => !rateOk(r))) return Promise.reject(new Error('A GST rate in the list is not valid. Use a percentage from 0 to 100 with at most two decimals.'));
+      if (new Set(rates).size !== rates.length) return Promise.reject(new Error('A GST rate is listed twice.'));
+      if (rates.length && !next.tax.rates.some((r) => r.enabled)) return Promise.reject(new Error('Keep at least one GST rate switched on.'));
       bundle = clone(next);
+      bundle.tax.rates = mergeRateEntries(bundle.tax.rates);
+      store.taxRates = enabledRates(bundle.tax.rates);
       store.settings.shopName = bundle.shop.name;
       store.settings.gstin = bundle.shop.gstin;
       store.settings.phone = bundle.shop.phone;

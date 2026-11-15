@@ -29,10 +29,10 @@ fn two_lines() -> Vec<BillLine> {
 }
 
 /// A draft whose payment equals what the server will compute for these extras.
-fn draft_extras(lines: Vec<BillLine>, ex: BillExtras, gst_on_delivery: i64, mode: &str) -> BillDraft {
+fn draft_extras(lines: Vec<BillLine>, ex: BillExtras, gst_on_delivery: i32, mode: &str) -> BillDraft {
     let ls: Vec<BillLine> = lines.iter().map(recalc_line).collect();
     let cash = cash_discount(&ls, ex.cash_disc_bps);
-    let grand = compute_totals_with_delivery(&ls, cash, true, ex.delivery_charge, gst_on_delivery).grand;
+    let grand = compute_totals_with_delivery(&ls, cash, true, ex.delivery_charge, gst_on_delivery as f64).grand;
     BillDraft {
         customer_id: None,
         customer_name: None,
@@ -84,7 +84,7 @@ fn home_delivery_adds_a_service_line_with_the_setting_gst() {
         let before = db.with(|c| Ok(stock_of(c, "i1"))).unwrap();
         let bill = db.with(|c| bills::save_bill(c, &draft)).unwrap();
         let del = bill.lines.iter().find(|l| l.name == "Delivery charge").expect("delivery line");
-        assert_eq!((del.amount, del.gst_rate), (5_000, gst));
+        assert_eq!((del.amount, del.gst_rate), (5_000, gst as f64));
         assert_eq!(bill.totals.item_count, 2, "delivery is not counted as an item");
         let slab_sum: i64 = bill.totals.slabs.iter().map(|s| s.taxable + s.cgst + s.sgst).sum();
         assert_eq!(slab_sum, bill.totals.before_round);
@@ -94,7 +94,7 @@ fn home_delivery_adds_a_service_line_with_the_setting_gst() {
         let items = db.with(|c| gokul_core::store::list_items(c)).unwrap();
         assert!(items.iter().all(|i| i.id != "_delivery"));
         // GST on the delivery is part of the 18% slab only when the setting says so
-        let t = compute_totals_with_delivery(&two_lines().iter().map(recalc_line).collect::<Vec<_>>(), 0, true, 5_000, gst);
+        let t = compute_totals_with_delivery(&two_lines().iter().map(recalc_line).collect::<Vec<_>>(), 0, true, 5_000, gst as f64);
         assert_eq!(t.grand, bill.totals.grand);
     }
 }

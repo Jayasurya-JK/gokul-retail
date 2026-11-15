@@ -26,9 +26,68 @@ pub fn recalc_line(l: &BillLine) -> BillLine {
     BillLine { discount: d, amount: gross - d, ..l.clone() }
 }
 
-/// Bill totals in integer paise. Bill-level discount is spread pro-rata over lines (remainder to the
-/// last line) so GST slabs stay exact. Round-off to a whole rupee when `round_to_rupee`.
-pub fn compute_totals(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool) -> BillTotals {
+/// A percent rate (5, 0.25, 12.5) as hundredths of a percent (500, 25, 1250), the integer all tax maths uses.
+pub fn rate_bp(r: f64) -> i64 {
+    (r * 100.0).round() as i64
+}
+
+/// The tax split of one bill line, in paise. `taxable + cgst + sgst + igst + cess` is the line's final amount.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LineTax {
+    pub taxable: i64,
+    pub cgst: i64,
+    pub sgst: i64,
+    pub igst: i64,
+    pub cess: i64,
+}
+
+/// Split GST-inclusive line amounts into taxable value, GST and cess, and add them up per GST rate.
+/// `lines` = (gst rate %, cess rate %, final amount after every discount). Prices include GST and cess, so
+/// taxable = amount x 10000 / (10000 + rate bp + cess bp), cess = taxable x cess bp / 10000, and the GST is what is left:
+/// the three always add back to the amount, to the paisa. Intra-state: CGST = SGST = half (the odd paisa goes to SGST).
+/// Inter-state: IGST = the whole GST. The odd-paisa split is done on the running total of each rate, so the lines of one
+/// rate add up to exactly the slab's CGST and SGST.
+pub fn split_taxes(lines: &[(f64, f64, i64)], inter: bool) -> (Vec<LineTax>, Vec<GstSlab>) {
+    let mut cum: BTreeMap<i64, i64> = BTreeMap::new(); // rate bp -> running GST
+    let mut slab_map: BTreeMap<i64, GstSlab> = BTreeMap::new();
+    let mut out = Vec::with_capacity(lines.len());
+    for &(rate, cess_rate, fin) in lines {
+        let (rb, cb) = (rate_bp(rate), rate_bp(cess_rate));
+        let taxable = round_div(fin as i128 * 10000, 10000 + rb as i128 + cb as i128) as i64;
+        let cess = if cb == 0 { 0 } else { round_div(taxable as i128 * cb as i128, 10000) as i64 };
+        let gst = fin - taxable - cess;
+        let before = *cum.get(&rb).unwrap_or(&0);
+        let after = before + gst;
+        cum.insert(rb, after);
+        let (cgst, sgst, igst) = if inter {
+            (0, 0, gst)
+        } else {
+            let c = floor_div(after as i128, 2) as i64 - floor_div(before as i128, 2) as i64;
+            (c, gst - c, 0)
+        };
+        let slab = slab_map.entry(rb).or_insert(GstSlab { rate, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 });
+        slab.taxable += taxable;
+        slab.cgst += cgst;
+        slab.sgst += sgst;
+        slab.igst += igst;
+        slab.cess += cess;
+        out.push(LineTax { taxable, cgst, sgst, igst, cess });
+    }
+    (out, slab_map.into_values().collect())
+}
+
+/// A home-delivery charge on a bill: amount in paise (GST inclusive) and its GST / cess percent.
+#[derive(Debug, Clone, Copy)]
+pub struct Delivery {
+    pub amount: i64,
+    pub gst_rate: f64,
+    pub cess_rate: f64,
+}
+
+/// The whole bill: totals plus the tax split of every line (the item lines in order, then the delivery charge when there is one).
+/// Bill-level discount is spread pro-rata over the item lines (remainder to the last) so GST slabs stay exact.
+/// Round-off to a whole rupee when `round_to_rupee`. `inter` = inter-state supply (IGST instead of CGST + SGST).
+pub fn compute_bill(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool, inter: bool, delivery: Option<Delivery>) -> (BillTotals, Vec<LineTax>) {
     let gross_all: i64 = lines.iter().map(|l| line_gross(l.rate, l.qty)).sum();
     let line_net: Vec<i64> = lines.iter().map(|l| l.amount).collect();
     let net_sum: i64 = line_net.iter().sum();
@@ -48,36 +107,36 @@ pub fn compute_totals(lines: &[BillLine], bill_discount: i64, round_to_rupee: bo
         })
         .collect();
 
-    let mut slab_map: BTreeMap<i64, (i64, i64)> = BTreeMap::new(); // rate -> (taxable, gst)
-    for (l, &fin) in lines.iter().zip(finals.iter()) {
-        let taxable = round_div(fin as i128 * 100, 100 + l.gst_rate as i128) as i64;
-        let cur = slab_map.entry(l.gst_rate).or_insert((0, 0));
-        cur.0 += taxable;
-        cur.1 += fin - taxable;
+    let mut inputs: Vec<(f64, f64, i64)> = lines.iter().zip(finals.iter()).map(|(l, &f)| (l.gst_rate, l.cess_rate, f)).collect();
+    let delivery = delivery.filter(|d| d.amount > 0);
+    if let Some(d) = delivery {
+        inputs.push((d.gst_rate, d.cess_rate, d.amount));
     }
-    let slabs: Vec<GstSlab> = slab_map
-        .into_iter()
-        .map(|(rate, (taxable, gst))| {
-            let cgst = floor_div(gst as i128, 2) as i64;
-            GstSlab { rate, taxable, cgst, sgst: gst - cgst }
-        })
-        .collect();
+    let (taxes, slabs) = split_taxes(&inputs, inter);
 
-    let before_round: i64 = finals.iter().sum();
+    let delivery_amt = delivery.map(|d| d.amount).unwrap_or(0);
+    let before_round: i64 = finals.iter().sum::<i64>() + delivery_amt;
     let grand = if round_to_rupee { round_div(before_round as i128, 100) as i64 * 100 } else { before_round };
     let line_disc: i64 = lines.iter().map(|l| l.discount).sum();
-    BillTotals {
+    let totals = BillTotals {
         item_count: lines.len() as i64,
         qty_count: lines.iter().map(|l| l.qty).sum(),
-        gross: gross_all,
+        gross: gross_all + delivery_amt,
         discount: line_disc + bd,
         taxable: slabs.iter().map(|s| s.taxable).sum(),
-        gst: slabs.iter().map(|s| s.cgst + s.sgst).sum(),
+        gst: slabs.iter().map(|s| s.cgst + s.sgst + s.igst).sum(),
+        cess: slabs.iter().map(|s| s.cess).sum(),
         slabs,
         before_round,
         round_off: grand - before_round,
         grand,
-    }
+    };
+    (totals, taxes)
+}
+
+/// Intra-state bill totals without delivery (see `compute_bill`).
+pub fn compute_totals(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool) -> BillTotals {
+    compute_bill(lines, bill_discount, round_to_rupee, false, None).0
 }
 
 /// Cash discount in paise: `bps` (percent x 100) of the net of the item lines (after item discounts), rounded to the paisa.
@@ -89,34 +148,11 @@ pub fn cash_discount(lines: &[BillLine], bps: i64) -> i64 {
     round_div(net as i128 * bps as i128, 10000) as i64
 }
 
-/// Totals for item lines plus an optional home-delivery charge. The bill-level discount is spread over the item lines only;
-/// the delivery charge is a separate taxable amount at `delivery_gst` percent (0 = no GST), merged into the GST slabs.
-/// With no delivery charge this is exactly `compute_totals`.
-pub fn compute_totals_with_delivery(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool, delivery: i64, delivery_gst: i64) -> BillTotals {
-    if delivery <= 0 {
-        return compute_totals(lines, bill_discount, round_to_rupee);
-    }
-    let mut t = compute_totals(lines, bill_discount, false);
-    let taxable = round_div(delivery as i128 * 100, 100 + delivery_gst as i128) as i64;
-    let gst = delivery - taxable;
-    let mut per: BTreeMap<i64, (i64, i64)> = t.slabs.iter().map(|s| (s.rate, (s.taxable, s.cgst + s.sgst))).collect();
-    let e = per.entry(delivery_gst).or_insert((0, 0));
-    e.0 += taxable;
-    e.1 += gst;
-    t.slabs = per
-        .into_iter()
-        .map(|(rate, (taxable, gst))| {
-            let cgst = floor_div(gst as i128, 2) as i64;
-            GstSlab { rate, taxable, cgst, sgst: gst - cgst }
-        })
-        .collect();
-    t.gross += delivery;
-    t.taxable = t.slabs.iter().map(|s| s.taxable).sum();
-    t.gst = t.slabs.iter().map(|s| s.cgst + s.sgst).sum();
-    t.before_round += delivery;
-    t.grand = if round_to_rupee { round_div(t.before_round as i128, 100) as i64 * 100 } else { t.before_round };
-    t.round_off = t.grand - t.before_round;
-    t
+/// Totals for item lines plus an optional home-delivery charge (a separate taxable amount at `delivery_gst` percent; 0 = no GST).
+/// With no delivery charge this is exactly `compute_totals`. Intra-state.
+pub fn compute_totals_with_delivery(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool, delivery: i64, delivery_gst: f64) -> BillTotals {
+    let d = Delivery { amount: delivery, gst_rate: delivery_gst, cess_rate: 0.0 };
+    compute_bill(lines, bill_discount, round_to_rupee, false, Some(d)).0
 }
 
 /// Port of `quoteReturn` (billops.ts): each returned line refunds its own (discounted) amount pro-rata,
@@ -126,7 +162,8 @@ pub fn quote_return(
     bill_discount_total: i64,
     picks: &[ReturnPick],
     round_to_rupee: bool,
-) -> (Vec<BillLine>, BillTotals) {
+    inter: bool,
+) -> (Vec<BillLine>, BillTotals, Vec<LineTax>) {
     let mut lines: Vec<BillLine> = Vec::new();
     for p in picks {
         let Some(l) = usize::try_from(p.line_index).ok().and_then(|i| bill_lines.get(i)) else { continue };
@@ -146,11 +183,11 @@ pub fn quote_return(
     let bill_net: i64 = bill_lines.iter().map(|l| l.amount).sum();
     let ret_net: i64 = lines.iter().map(|l| l.amount).sum();
     let share = if bill_net > 0 { round_div(bill_disc as i128 * ret_net as i128, bill_net as i128) as i64 } else { 0 };
-    let totals = if lines.is_empty() {
+    let (totals, taxes) = if lines.is_empty() {
         // The TS version would index an empty array; an empty quote is simply all zero.
-        BillTotals::default()
+        (BillTotals::default(), vec![])
     } else {
-        compute_totals(&lines, share, round_to_rupee)
+        compute_bill(&lines, share, round_to_rupee, inter, None)
     };
-    (lines, totals)
+    (lines, totals, taxes)
 }

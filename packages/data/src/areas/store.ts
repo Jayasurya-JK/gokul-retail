@@ -25,6 +25,8 @@ export interface MockStore {
   /** Over this an expense needs a manager PIN (paise); kept in sync with Settings */
   expenseLimit?: number;
   mill?: MillSettings;
+  /** The owner's enabled GST rates (Settings, Tax); the catalog mock validates items against them. Unset = the defaults. */
+  taxRates?: number[];
   /** Set by the production mock; the purchasing mock reads the godown barrels a batch fills */
   godown?: GodownMockState;
   /** Set by the purchasing mock; the Mill daily report reads the pressing batches */

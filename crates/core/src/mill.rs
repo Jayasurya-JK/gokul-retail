@@ -100,7 +100,7 @@ pub struct MillSettings {
     pub rate_taken: i64,
     pub rate_kept: i64,
     pub sac: String,
-    pub gst_rate: i64,
+    pub gst_rate: f64,
 }
 
 pub fn mill_settings(conn: &Connection) -> MillSettings {
@@ -115,7 +115,7 @@ pub fn mill_settings(conn: &Connection) -> MillSettings {
         rate_taken: v["rateCakeTaken"].as_i64().unwrap_or(800),
         rate_kept: v["rateCakeKept"].as_i64().unwrap_or(500),
         sac: v["serviceSac"].as_str().unwrap_or("998811").to_string(),
-        gst_rate: v["serviceGstRate"].as_i64().unwrap_or(5),
+        gst_rate: v["serviceGstRate"].as_f64().unwrap_or(5.0),
     }
 }
 
@@ -144,7 +144,7 @@ fn fallback_category(conn: &Connection) -> Result<String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ensure_item(conn: &Connection, name: &str, code: &str, unit: &str, loose: bool, hsn: &str, gst: i64, price: i64, cost: i64, service: bool) -> Result<String> {
+fn ensure_item(conn: &Connection, name: &str, code: &str, unit: &str, loose: bool, hsn: &str, gst: f64, price: i64, cost: i64, service: bool) -> Result<String> {
     if let Some(id) = find_item_by_name(conn, name)? {
         return Ok(id);
     }
@@ -175,7 +175,7 @@ pub fn ensure_punnaku_item(conn: &Connection, seed: &str, machine: &str) -> Resu
         .query_row("SELECT price,cost FROM items WHERE name LIKE '%Oil Cake%' AND kind='item' ORDER BY rowid LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
         .optional()?
         .unwrap_or((4500, 3500));
-    ensure_item(conn, name, &format!("PK-{}", key.to_uppercase().replace('_', "")), "kg", true, "2305", 5, price, cost, false)
+    ensure_item(conn, name, &format!("PK-{}", key.to_uppercase().replace('_', "")), "kg", true, "2305", 5.0, price, cost, false)
 }
 
 fn ensure_all_items(conn: &Connection) -> Result<()> {
@@ -189,8 +189,8 @@ fn ensure_all_items(conn: &Connection) -> Result<()> {
         };
         ensure_punnaku_item(conn, seed, machine)?;
     }
-    ensure_item(conn, JAGGERY_ITEM, "VELLAM", "kg", true, "1701", 0, 9000, 7000, false)?;
-    ensure_item(conn, MALLI_ITEM, "MALLI", "kg", true, "0909", 0, 20000, 16000, false)?;
+    ensure_item(conn, JAGGERY_ITEM, "VELLAM", "kg", true, "1701", 0.0, 9000, 7000, false)?;
+    ensure_item(conn, MALLI_ITEM, "MALLI", "kg", true, "0909", 0.0, 20000, 16000, false)?;
     Ok(())
 }
 
@@ -782,7 +782,7 @@ pub fn close_sheet(conn: &mut Connection, c: &CloseInput) -> Result<Value> {
         let lines: Vec<BillLine> = jobs
             .iter()
             .map(|(_, kg, rate)| {
-                recalc_line(&BillLine { item_id: service_id.clone(), code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: *kg, rate: *rate, discount: 0, gst_rate: s.gst_rate, amount: 0 })
+                recalc_line(&BillLine { item_id: service_id.clone(), code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: *kg, rate: *rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0 })
             })
             .collect();
         let total = compute_totals(&lines, 0, round).grand;
@@ -1111,7 +1111,7 @@ pub fn record_job_work(conn: &mut Connection, i: &JobWorkInput) -> Result<Value>
         }
     }
     let service_id = service_item(&tx, &s)?;
-    let line = recalc_line(&BillLine { item_id: service_id, code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: i.seed_kg, rate, discount: 0, gst_rate: s.gst_rate, amount: 0 });
+    let line = recalc_line(&BillLine { item_id: service_id, code: SERVICE_CODE.into(), name: SERVICE_ITEM.into(), unit: "kg".into(), qty: i.seed_kg, rate, discount: 0, gst_rate: s.gst_rate, cess_rate: 0.0, amount: 0 });
     let lines = vec![line];
     let total = compute_totals(&lines, 0, db::load_settings(&tx)?.round_to_rupee).grand;
     if total > 0 {

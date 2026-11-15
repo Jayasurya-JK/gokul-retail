@@ -52,7 +52,7 @@ export function makeLine(item: Item, qty: Milli, discount: Paise = 0, rate: Pais
   const d = Math.min(discount, gross);
   return {
     itemId: item.id, code: item.code, name: item.name, unit: item.unit,
-    qty, rate, discount: d, gstRate: item.gstRate, amount: gross - d,
+    qty, rate, discount: d, gstRate: item.gstRate, ...(item.cessRate ? { cessRate: item.cessRate } : {}), amount: gross - d,
   };
 }
 
@@ -62,11 +62,50 @@ export function recalcLine(l: BillLine): BillLine {
   return { ...l, discount: d, amount: gross - d };
 }
 
+/** A percent rate (5, 0.25, 12.5) as hundredths of a percent (500, 25, 1250): the integer all tax maths uses. */
+export const rateBp = (r: number): number => Math.round(r * 100);
+
+/** The tax split of one line, in paise. taxable + cgst + sgst + igst + cess = the line's final amount. */
+export interface LineTax { taxable: Paise; cgst: Paise; sgst: Paise; igst: Paise; cess: Paise }
+
 /**
- * Bill totals in integer paise. Bill-level discount is spread pro-rata over lines
- * (remainder to the last line) so GST slabs stay exact. Round-off to whole rupee.
+ * Split GST-inclusive line amounts into taxable value, GST and cess, and add them up per GST rate. Same as Rust `split_taxes`.
+ * taxable = amount x 10000 / (10000 + rate bp + cess bp); cess = taxable x cess bp / 10000; GST is what is left, so the three
+ * always add back to the amount. Intra-state: CGST = SGST = half (odd paisa to SGST); inter-state: IGST = all of it.
+ * The odd-paisa split runs on the running total of each rate, so the lines of a rate add up to exactly the slab.
  */
-export function computeTotals(lines: BillLine[], billDiscount: Paise = 0, roundToRupee = true): BillTotals {
+export function splitTaxes(lines: { rate: number; cessRate: number; fin: Paise }[], inter: boolean): { taxes: LineTax[]; slabs: GstSlab[] } {
+  const cum = new Map<number, number>();
+  const slabMap = new Map<number, GstSlab>();
+  const taxes = lines.map(({ rate, cessRate, fin }) => {
+    const rb = rateBp(rate);
+    const cb = rateBp(cessRate);
+    const taxable = Math.round((fin * 10000) / (10000 + rb + cb));
+    const cess = cb === 0 ? 0 : Math.round((taxable * cb) / 10000);
+    const gst = fin - taxable - cess;
+    const before = cum.get(rb) ?? 0;
+    const after = before + gst;
+    cum.set(rb, after);
+    let cgst = 0, sgst = 0, igst = 0;
+    if (inter) igst = gst;
+    else { cgst = Math.floor(after / 2) - Math.floor(before / 2); sgst = gst - cgst; }
+    const slab = slabMap.get(rb) ?? { rate, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0 };
+    slab.taxable += taxable; slab.cgst += cgst; slab.sgst += sgst; slab.igst += igst; slab.cess += cess;
+    slabMap.set(rb, slab);
+    return { taxable, cgst, sgst, igst, cess };
+  });
+  return { taxes, slabs: [...slabMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v) };
+}
+
+/** A home-delivery charge on a bill: amount (GST inclusive) and its GST / cess percent. */
+export interface DeliveryCharge { amount: Paise; gstRate: number; cessRate?: number }
+
+/**
+ * The whole bill: totals plus the tax split of every line (item lines in order, then the delivery charge when there is one).
+ * Bill-level discount is spread pro-rata over the item lines (remainder to the last) so GST slabs stay exact.
+ * Round-off to whole rupee. `inter` = inter-state supply (IGST instead of CGST + SGST). Same as Rust `compute_bill`.
+ */
+export function computeBill(lines: BillLine[], billDiscount: Paise = 0, roundToRupee = true, inter = false, delivery?: DeliveryCharge): { totals: BillTotals; taxes: LineTax[] } {
   const grossAll = lines.reduce((s, l) => s + lineGross(l.rate, l.qty), 0);
   const lineNet = lines.map((l) => l.amount);
   const netSum = lineNet.reduce((a, b) => a + b, 0);
@@ -78,36 +117,32 @@ export function computeTotals(lines: BillLine[], billDiscount: Paise = 0, roundT
     allocated += share;
     return n - share;
   });
-  const slabMap = new Map<number, { taxable: Paise; gst: Paise }>();
-  lines.forEach((l, i) => {
-    const fin = finals[i];
-    const taxable = Math.round((fin * 100) / (100 + l.gstRate));
-    const cur = slabMap.get(l.gstRate) ?? { taxable: 0, gst: 0 };
-    cur.taxable += taxable;
-    cur.gst += fin - taxable;
-    slabMap.set(l.gstRate, cur);
-  });
-  const slabs: GstSlab[] = [...slabMap.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([rate, v]) => {
-      const cgst = Math.floor(v.gst / 2);
-      return { rate, taxable: v.taxable, cgst, sgst: v.gst - cgst };
-    });
-  const beforeRound = finals.reduce((a, b) => a + b, 0);
+  const inputs = lines.map((l, i) => ({ rate: l.gstRate, cessRate: l.cessRate ?? 0, fin: finals[i] }));
+  const dAmt = delivery && delivery.amount > 0 ? delivery.amount : 0;
+  if (delivery && dAmt > 0) inputs.push({ rate: delivery.gstRate, cessRate: delivery.cessRate ?? 0, fin: dAmt });
+  const { taxes, slabs } = splitTaxes(inputs, inter);
+  const beforeRound = finals.reduce((a, b) => a + b, 0) + dAmt;
   const grand = roundToRupee ? Math.round(beforeRound / 100) * 100 : beforeRound;
   const lineDisc = lines.reduce((s, l) => s + l.discount, 0);
-  return {
+  const totals: BillTotals = {
     itemCount: lines.length,
     qtyCount: lines.reduce((s, l) => s + l.qty, 0),
-    gross: grossAll,
+    gross: grossAll + dAmt,
     discount: lineDisc + bd,
     taxable: slabs.reduce((s, x) => s + x.taxable, 0),
-    gst: slabs.reduce((s, x) => s + x.cgst + x.sgst, 0),
+    gst: slabs.reduce((s, x) => s + x.cgst + x.sgst + x.igst, 0),
+    cess: slabs.reduce((s, x) => s + x.cess, 0),
     slabs,
     beforeRound,
     roundOff: grand - beforeRound,
     grand,
   };
+  return { totals, taxes };
+}
+
+/** Intra-state bill totals without delivery (see computeBill). */
+export function computeTotals(lines: BillLine[], billDiscount: Paise = 0, roundToRupee = true, inter = false): BillTotals {
+  return computeBill(lines, billDiscount, roundToRupee, inter).totals;
 }
 
 /** Cash discount in paise: bps (percent x 100) of the item lines' net, rounded. Same as the Rust `cash_discount`. */
@@ -120,23 +155,8 @@ export function cashDiscount(lines: BillLine[], bps: number): Paise {
  * Totals for item lines plus an optional home-delivery charge (a separate taxable amount at `deliveryGst` percent). The bill
  * discount is spread over the item lines only. With no delivery charge this is exactly `computeTotals`. Same as the Rust side.
  */
-export function computeTotalsWithDelivery(lines: BillLine[], billDiscount: Paise, roundToRupee: boolean, delivery: Paise, deliveryGst: number): BillTotals {
-  if (!(delivery > 0)) return computeTotals(lines, billDiscount, roundToRupee);
-  const t = computeTotals(lines, billDiscount, false);
-  const taxable = Math.round((delivery * 100) / (100 + deliveryGst));
-  const per = new Map<number, number[]>(t.slabs.map((s) => [s.rate, [s.taxable, s.cgst + s.sgst]]));
-  const cur = per.get(deliveryGst) ?? [0, 0];
-  per.set(deliveryGst, [cur[0] + taxable, cur[1] + delivery - taxable]);
-  const slabs: GstSlab[] = [...per.entries()].sort((a, b) => a[0] - b[0]).map(([rate, [tx, gst]]) => {
-    const cgst = Math.floor(gst / 2);
-    return { rate, taxable: tx, cgst, sgst: gst - cgst };
-  });
-  const beforeRound = t.beforeRound + delivery;
-  const grand = roundToRupee ? Math.round(beforeRound / 100) * 100 : beforeRound;
-  return {
-    ...t, gross: t.gross + delivery, slabs, beforeRound, grand, roundOff: grand - beforeRound,
-    taxable: slabs.reduce((s, x) => s + x.taxable, 0), gst: slabs.reduce((s, x) => s + x.cgst + x.sgst, 0),
-  };
+export function computeTotalsWithDelivery(lines: BillLine[], billDiscount: Paise, roundToRupee: boolean, delivery: Paise, deliveryGst: number, inter = false): BillTotals {
+  return computeBill(lines, billDiscount, roundToRupee, inter, delivery > 0 ? { amount: delivery, gstRate: deliveryGst } : undefined).totals;
 }
 
 /**
