@@ -1115,4 +1115,21 @@ if ($Problems.Count -eq 0) {
 }
 Say ''
 Say ('Nothing on this computer was deleted, formatted or changed except the new folder ' + $script:OutDir + '.') 'Green'
+Write-Host ''
+$bar = ''.PadRight(66, '#')
+if ($cntBad -eq 0 -and $cntOk -eq $dbFiles.Count) {
+    Write-Host $bar -ForegroundColor Green
+    Write-Host '#                                                                #' -ForegroundColor Green
+    Write-Host '#        JOB COMPLETE - ALL DATA COPIED.  YOU CAN CLOSE THIS.     #' -ForegroundColor Green
+    Write-Host '#        Eject the disk and bring it back.                       #' -ForegroundColor Green
+    Write-Host '#                                                                #' -ForegroundColor Green
+    Write-Host $bar -ForegroundColor Green
+    try { Add-Content -Path $script:LogFile -Value 'JOB COMPLETE - ALL DATA COPIED.' -Encoding ASCII } catch { }
+} else {
+    Write-Host $bar -ForegroundColor Red
+    Write-Host '#   JOB NOT COMPLETE - some database files did not copy.         #' -ForegroundColor Red
+    Write-Host '#   Take a PHOTO of this screen and send it before closing.      #' -ForegroundColor Red
+    Write-Host $bar -ForegroundColor Red
+    try { Add-Content -Path $script:LogFile -Value 'JOB NOT COMPLETE.' -Encoding ASCII } catch { }
+}
 exit 0
