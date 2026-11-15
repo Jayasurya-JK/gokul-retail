@@ -112,6 +112,21 @@ pub fn rate_json(r: f64) -> Value {
     if r.fract() == 0.0 { json!(r as i64) } else { json!(r) }
 }
 
+/// The GSTN unit quantity code (UQC) for an item unit (confirm with CA).
+pub fn uqc_of(unit: &str) -> &'static str {
+    match unit {
+        "kg" => "KGS",
+        "g" => "GMS",
+        "l" => "LTR",
+        "ml" => "MLT",
+        "pc" => "PCS",
+        "tin" => "CAN",
+        "btl" => "BTL",
+        "pkt" => "PAC",
+        _ => "OTH",
+    }
+}
+
 // ---------- states and GSTIN ----------
 
 /// GST state and union-territory codes (the first two characters of a GSTIN). 25 and 28 are the old Daman and Diu / Andhra Pradesh

@@ -319,7 +319,12 @@ fn upi_uri(c: &Config, amount: i64, note: &str) -> String {
 /// The bill number as printed: "YY/NNNNN" (financial-year digits and a five digit running number, e.g. 26/00123), or the raw
 /// internal number when the format setting says so. Gapless numbering is unchanged: this only changes how it is shown.
 pub fn print_number(c: &Config, number: &str) -> String {
-    if c.number_format == "raw" {
+    print_number_fmt(c.number_format == "raw", number)
+}
+
+/// `raw` = show the internal number as it is; otherwise "YY/NNNNN".
+pub fn print_number_fmt(raw: bool, number: &str) -> String {
+    if raw {
         return number.to_string();
     }
     let parts: Vec<&str> = number.split('-').collect();

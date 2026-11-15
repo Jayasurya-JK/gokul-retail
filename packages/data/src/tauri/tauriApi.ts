@@ -27,6 +27,8 @@ import type {
 import type { JobWork, JobWorkInput, MillDay, MillDayInput, MillSheet, MillSheetInput, MillSheetSummary } from '../areas/mill';
 import type { PaymodeReport, ReportQuery, SalesReport, Staff, StaffReportRow, StockReport } from '../areas/posreports';
 import type { MillAnalysis, MillAnalysisQuery } from '../areas/analysis';
+import type { HsnImportPreview, HsnImportRow, HsnSuggestResult, HsnUpdate } from '../areas/hsn';
+import type { GstrFacts } from '../gstr';
 import type {
   AddBarrelsInput, EditBarrelInput, GodownBarrel, GodownDetail, GodownTransfer, MillDaily, OutsourcedInput, OutsourcedOil, StatusInput, StickInput, TransferInput,
 } from '../areas/production';
@@ -70,6 +72,7 @@ export const REAL_METHODS = [
   'listStaff', 'addStaff', 'salesReport', 'paymodeReport', 'staffReport', 'stockReport',
   'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
   'listOutsourcedOil', 'editOutsourcedOil', 'deleteOutsourcedOil', 'deleteStickReading', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
+  'suggestHsn', 'applyHsn', 'previewHsnImport', 'getGstrFacts',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -246,6 +249,14 @@ export function createTauriApi(): Api {
     saveMillDay: (input: MillDayInput) => call<MillDay>('saveMillDay', input),
     closeMillDay: (input: { day: string; managerPin?: string }) => call<MillDay>('closeMillDay', input),
     listMillSheets: (limit?: number) => call<MillSheetSummary[]>('listMillSheets', limit ?? null),
+
+    // ----- HsnApi -----
+    suggestHsn: (opts) => call<HsnSuggestResult>('suggestHsn', opts ?? {}),
+    applyHsn: (updates: HsnUpdate[]) => call<{ ok: true; applied: number; ratesChanged: number }>('applyHsn', updates),
+    previewHsnImport: (rows: HsnImportRow[]) => call<HsnImportPreview>('previewHsnImport', rows),
+
+    // ----- GstrApi -----
+    getGstrFacts: (month: string) => call<GstrFacts>('getGstrFacts', month),
 
     // ----- ProductionApi -----
     listGodownBarrels: () => call<GodownBarrel[]>('listGodownBarrels'),

@@ -10,6 +10,8 @@ import { createExpensesMock } from './areas/expenses';
 import { createMillMock } from './areas/mill';
 import { createPosReportsMock } from './areas/posreports';
 import { createProductionMock } from './areas/production';
+import { createHsnMock } from './areas/hsn';
+import { createGstrMock } from './areas/gstr';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
 import { cashDiscount, computeBill, computeTotalsWithDelivery } from './money';
 import { enabledRates, supplyFor } from './gst';
@@ -209,6 +211,8 @@ export function createMockApi(): Api {
     ...createExpensesMock(store),
     ...createMillMock(store),
     ...createProductionMock(store),
+    ...createHsnMock(store),
+    ...createGstrMock(store),
     ...createPosReportsMock(store),
     ...createReportsMock(store),
   };

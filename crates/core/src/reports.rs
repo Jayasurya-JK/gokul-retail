@@ -86,7 +86,7 @@ fn rupees(p: i64) -> String {
 }
 
 const UNIT_LABEL: &[(&str, &str)] = &[("kg", "kg"), ("g", "g"), ("l", "L"), ("ml", "ml"), ("pc", "pc"), ("tin", "tin"), ("btl", "btl"), ("pkt", "pkt")];
-const UQC: &[(&str, &str)] = &[("kg", "KGS"), ("g", "GMS"), ("l", "LTR"), ("ml", "MLT"), ("pc", "PCS"), ("tin", "NOS"), ("btl", "BTL"), ("pkt", "PAC")];
+const UQC: &[(&str, &str)] = &[("kg", "KGS"), ("g", "GMS"), ("l", "LTR"), ("ml", "MLT"), ("pc", "PCS"), ("tin", "CAN"), ("btl", "BTL"), ("pkt", "PAC")];
 fn lookup<'a>(t: &'a [(&str, &'a str)], k: &'a str) -> &'a str {
     t.iter().find(|(a, _)| *a == k).map(|(_, b)| *b).unwrap_or(k)
 }
@@ -612,33 +612,50 @@ fn gstr3b(conn: &Connection, p: &ReportParams) -> Result<Value> {
 }
 
 fn hsn_wise(conn: &Connection, p: &ReportParams) -> Result<Value> {
-    let (w, a) = bills_where(p, true);
-    // Added up from the tax split saved on every bill line, so the rows tie to the bills to the paisa.
-    let data = run(
-        conn,
-        &format!(
-            "SELECT COALESCE(NULLIF(l.hsn,''),'0000'),l.gst_rate,l.unit,MAX(COALESCE(c.name,'Goods')),SUM(l.qty),SUM(l.taxable),SUM(l.cgst),SUM(l.sgst),SUM(l.igst),SUM(l.cess),SUM(l.amount)
-             FROM bills b CROSS JOIN bill_lines l ON l.bill_id=b.id LEFT JOIN items i ON i.id=l.item_id LEFT JOIN categories c ON c.id=i.category_id
-             WHERE {w} GROUP BY 1,2,3 ORDER BY 1,3"
-        ),
-        a,
-    )?;
-    let rows: Vec<Value> = data
-        .iter()
-        .map(|r| {
-            let (taxable, cgst, sgst, igst, cess) = (si(&r[5]), si(&r[6]), si(&r[7]), si(&r[8]), si(&r[9]));
-            let tax = cgst + sgst + igst;
-            json!({ "hsn": ss(&r[0]), "desc": ss(&r[3]), "uqc": lookup(UQC, &ss(&r[2])), "qty": si(&r[4]), "rate": crate::gst::rate_json(sf(&r[1])), "taxable": taxable,
-                    "cgst": cgst, "sgst": sgst, "igst": igst, "cess": cess, "tax": tax, "value": taxable + tax + cess })
-        })
-        .collect();
-    let t = |k: &str| sum_i(&rows, k);
-    let mut by_taxable = rows.clone();
+    // GSTR-1 table 12 as the GST portal now takes it: one summary for supplies to registered buyers (B2B) and one for the rest (B2C),
+    // each net of the credit notes of the period. Added up from the tax saved on every bill and credit note line, so the rows tie to
+    // the bills to the paisa. (confirm the layout and the net-of-credit-notes treatment with the CA)
+    let (sales, returns) = crate::gstr::hsn_rows(conn, &p.from, &p.to, p.category_id.as_deref())?;
+    type Key = (bool, String, String, i64);
+    let key = |v: &Value| -> Key { (v["b2b"].as_bool().unwrap_or(false), v["hsn"].as_str().unwrap_or("").to_string(), v["unit"].as_str().unwrap_or("").to_string(), crate::money::rate_bp(v["rate"].as_f64().unwrap_or(0.0))) };
+    let mut net: BTreeMap<Key, Value> = BTreeMap::new();
+    for (list, sign) in [(&sales, 1i64), (&returns, -1)] {
+        for v in list.iter() {
+            let e = net.entry(key(v)).or_insert_with(|| {
+                json!({ "b2b": v["b2b"], "hsn": v["hsn"], "desc": v["desc"], "unit": v["unit"], "uqc": v["uqc"], "rate": v["rate"], "qty": 0, "taxable": 0, "cgst": 0, "sgst": 0, "igst": 0, "cess": 0, "value": 0 })
+            });
+            for k in ["qty", "taxable", "cgst", "sgst", "igst", "cess", "value"] {
+                e[k] = json!(e[k].as_i64().unwrap_or(0) + sign * v[k].as_i64().unwrap_or(0));
+            }
+        }
+    }
+    let mut rows: Vec<Value> = vec![];
+    let mut all: Vec<Value> = vec![];
+    for (b2b, title) in [(true, "12 - HSN summary of supplies to registered buyers (B2B)"), (false, "12 - HSN summary of supplies to consumers and unregistered buyers (B2C)")] {
+        rows.push(json!({ "_style": "head", "hsn": title }));
+        let mine: Vec<&Value> = net.values().filter(|v| v["b2b"].as_bool() == Some(b2b) && ["taxable", "value", "qty"].iter().any(|k| v[*k].as_i64().unwrap_or(0) != 0)).collect();
+        if mine.is_empty() {
+            rows.push(json!({ "hsn": "None in this period", "_style": "muted" }));
+        }
+        for v in mine {
+            let hsn = v["hsn"].as_str().unwrap_or("");
+            let (tax, desc) = (v["cgst"].as_i64().unwrap_or(0) + v["sgst"].as_i64().unwrap_or(0) + v["igst"].as_i64().unwrap_or(0), v["desc"].as_str().unwrap_or(""));
+            let mut r = v.clone();
+            r["hsn"] = json!(if hsn.is_empty() { "0000".to_string() } else { hsn.to_string() });
+            r["desc"] = json!(if desc.is_empty() { "Goods".to_string() } else { desc.to_string() });
+            r["tax"] = json!(tax);
+            rows.push(r.clone());
+            all.push(r);
+        }
+    }
+    let t = |k: &str| sum_i(&all, k);
+    let mut by_taxable = all.clone();
     by_taxable.sort_by(|a, b| b["taxable"].as_i64().cmp(&a["taxable"].as_i64()));
-    let distinct: std::collections::BTreeSet<String> = rows.iter().map(|r| r["hsn"].as_str().unwrap_or("").to_string()).collect();
+    let distinct: std::collections::BTreeSet<String> = all.iter().map(|r| r["hsn"].as_str().unwrap_or("").to_string()).collect();
+    let cn_taxable: i64 = returns.iter().map(|v| v["taxable"].as_i64().unwrap_or(0)).sum();
     Ok(json!({
-        "id": "hsn-wise", "title": "HSN-wise summary", "note": "GSTR-1 table 12. Quantities are per unit of measure (UQC). Items with no HSN show as 0000.",
-        "kpis": [kpi("Taxable value", "money", t("taxable"), None, Some("primary")), kpi("Total GST", "money", t("tax"), None, None),
+        "id": "hsn-wise", "title": "HSN-wise summary", "note": "GSTR-1 table 12, split into B2B and B2C, net of credit notes (confirm the layout with the CA). Quantities are per unit of measure (UQC). Items with no HSN show as 0000.",
+        "kpis": [kpi("Taxable value", "money", t("taxable"), Some(if cn_taxable > 0 { "after returns".into() } else { "no returns".into() }), Some("primary")), kpi("Total GST", "money", t("tax"), None, None),
                  kpi("HSN codes", "int", distinct.len(), Some("in this period".into()), None), kpi("Invoice value", "money", t("value"), None, None)],
         "chart": { "kind": "bars", "title": "Taxable value by HSN", "money": true,
                    "points": by_taxable.iter().take(8).map(|r| json!({ "label": format!("{} @ {}% ({})", r["hsn"].as_str().unwrap_or(""), r["rate"], r["uqc"].as_str().unwrap_or("")), "value": r["taxable"] })).collect::<Vec<_>>() },

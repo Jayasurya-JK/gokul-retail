@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Barcode, Check, ChevronRight, Eye, EyeOff, Package, Plus, Search, X } from 'lucide-react';
-import { formatQty, fuzzyFilter, groupStock, type Category, type Item, type Supplier } from '@gokul/data';
+import { ArrowDown, ArrowUp, Barcode, Check, ChevronRight, Eye, EyeOff, Package, Plus, Search, Wand2, X } from 'lucide-react';
+import { formatQty, fuzzyFilter, groupStock, hsnOk, type Category, type Item, type Supplier } from '@gokul/data';
 import {
   Badge, Button, Checkbox, ColResizer, Combobox, DataTable, EmptyState, FilterBar, Input, Kbd, Money, PageHeader, ROW_COLS, Select, Sheet, Switch, cn,
   parseTracks, useResizableColumns, useToast, type ColumnDef, useRefreshOnFocus
@@ -19,9 +19,9 @@ const worth = (r: Item) => Math.round((r.cost * r.stock) / 1000);
 /** Column order for the grouped view. The first entry is the tick box, the rest are sortable headings. */
 const GHEAD: [string, string, boolean][] = [
   ['pick', '', false], ['code', 'Code', false], ['name', 'Item', false], ['category', 'Category', false], ['type', 'Type', false],
-  ['supplier', 'Supplier', false], ['price', 'Price', true], ['gst', 'GST', true], ['stock', 'Stock', true],
+  ['supplier', 'Supplier', false], ['price', 'Price', true], ['hsn', 'HSN', false], ['gst', 'GST', true], ['stock', 'Stock', true],
 ];
-const GROUP_COLS = '36px 52px minmax(150px,1fr) 116px 70px 100px 84px 42px 90px';
+const GROUP_COLS = '36px 52px minmax(150px,1fr) 116px 70px 100px 84px 70px 42px 90px';
 
 export function Items() {
   const nav = useNavigate();
@@ -38,6 +38,7 @@ export function Items() {
   const [supplierF, setSupplierF] = useState('all');
   const [type, setType] = useState('all');
   const [gst, setGst] = useState('all');
+  const [hsnF, setHsnF] = useState('all');
   const [stockF, setStockF] = useState('all');
   const [status, setStatus] = useState('active');
   const [groupBy, setGroupBy] = useState(false);
@@ -66,10 +67,11 @@ export function Items() {
       (supplierF === 'all' || (supplierF === 'none' ? !i.supplierId : i.supplierId === supplierF)) &&
       (type === 'all' || (type === 'loose') === i.loose) &&
       (gst === 'all' || i.gstRate === Number(gst)) &&
+      (hsnF === 'all' || (hsnF === 'missing') === !hsnOk(i.hsn)) &&
       (stockF === 'all' || (stockF === 'low' ? stockState(i) !== 'ok' : stockState(i) === 'out')) &&
       (status === 'all' || (status === 'active') === i.active));
     return fuzzyFilter(base, q, (i) => [i.name, i.code, i.barcode, i.nameTa ?? ''], Infinity);
-  }, [items, q, cat, supplierF, type, gst, stockF, status]);
+  }, [items, q, cat, supplierF, type, gst, hsnF, stockF, status]);
 
   /** Searchable supplier filter: every supplier with how many items it supplies, plus the items with none. */
   const supplierOptions = useMemo(() => {
@@ -90,7 +92,7 @@ export function Items() {
     const get: Record<string, (i: Item) => string | number> = {
       code: (i) => Number(i.code) || 0, name: (i) => i.name.toLowerCase(), category: (i) => i.category.toLowerCase(),
       type: (i) => (i.loose ? 'Loose' : 'Packed'), supplier: (i) => (i.supplier ?? '').toLowerCase(),
-      price: (i) => i.price, gst: (i) => i.gstRate, stock: (i) => i.stock,
+      price: (i) => i.price, hsn: (i) => (hsnOk(i.hsn) ? i.hsn : ''), gst: (i) => i.gstRate, stock: (i) => i.stock,
     };
     const f = get[gsort.key] ?? get.name;
     return [...rows].sort((a, b) => {
@@ -113,8 +115,8 @@ export function Items() {
   }, [visibleIds]);
 
   const sel = items.find((i) => i.id === selId) ?? null;
-  const activeFilters = [cat, type, gst, stockF].filter((v) => v !== 'all').length + (supplierF !== 'all' ? 1 : 0) + (status !== 'active' ? 1 : 0) + (q ? 1 : 0);
-  const clearFilters = () => { setQ(''); setCat('all'); setSupplierF('all'); setType('all'); setGst('all'); setStockF('all'); setStatus('active'); };
+  const activeFilters = [cat, type, gst, hsnF, stockF].filter((v) => v !== 'all').length + (supplierF !== 'all' ? 1 : 0) + (status !== 'active' ? 1 : 0) + (q ? 1 : 0);
+  const clearFilters = () => { setQ(''); setCat('all'); setSupplierF('all'); setType('all'); setGst('all'); setHsnF('all'); setStockF('all'); setStatus('active'); };
 
   const toggle = useCallback((id: string) => setChecked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }), []);
   const allShown = rows.length > 0 && rows.every((r) => checked.has(r.id));
@@ -144,6 +146,10 @@ export function Items() {
       cell: (c) => <Badge tone={c.getValue<string>() === 'Loose' ? 'info' : 'neutral'}>{c.getValue<string>()}</Badge>,
     },
     { accessorKey: 'price', header: 'Price', meta: { w: '92px', align: 'right', num: true }, cell: (c) => <Money paise={c.getValue<number>()} /> },
+    {
+      accessorKey: 'hsn', header: 'HSN', meta: { w: '74px', num: true },
+      cell: (c) => (hsnOk(c.getValue<string>()) ? <span>{c.getValue<string>()}</span> : <Badge tone="warning">Missing</Badge>),
+    },
     { accessorKey: 'gstRate', header: 'GST', meta: { w: '52px', align: 'right', num: true }, cell: (c) => `${c.getValue<number>()}%` },
     {
       accessorKey: 'stock', header: 'Stock', meta: { w: '104px', align: 'right', num: true },
@@ -192,6 +198,7 @@ export function Items() {
         title="Items" subtitle={`${items.length} items, ${items.filter((i) => stockState(i) !== 'ok').length} need reorder`} icon={<Package size={17} />}
         actions={<>
           <Switch checked={groupBy} onCheckedChange={setGroupBy} label="Group by supplier" />
+          <Button icon={<Wand2 size={15} />} onClick={() => nav('/items/hsn')}>HSN helper</Button>
           <Button variant="primary" icon={<Plus size={15} />} onClick={() => setEditing({})} kbd="Ctrl+N">New item</Button>
         </>}
       />
@@ -214,6 +221,7 @@ export function Items() {
           <div className="w-[180px]"><Combobox options={supplierOptions} value={supplierF} onChange={setSupplierF} placeholder="All suppliers" /></div>
           <div className="w-[180px]"><Select value={cat} onChange={(e) => setCat(e.target.value)} options={[{ value: 'all', label: 'All categories' }, ...cats.map((c) => ({ value: c.id, label: c.name }))]} /></div>
           <div className="w-[140px]"><Select value={type} onChange={(e) => setType(e.target.value)} options={[{ value: 'all', label: 'All types' }, { value: 'loose', label: 'Loose only' }, { value: 'packed', label: 'Packed only' }]} /></div>
+          <div className="w-[130px]"><Select value={hsnF} onChange={(e) => setHsnF(e.target.value)} options={[{ value: 'all', label: 'Any HSN' }, { value: 'missing', label: 'Missing HSN' }, { value: 'has', label: 'Has HSN' }]} /></div>
           <div className="w-[104px]"><Select value={gst} onChange={(e) => setGst(e.target.value)} options={[{ value: 'all', label: 'Any GST' }, ...gstRates.map((r) => ({ value: String(r), label: `GST ${r}%` }))]} /></div>
           <div className="w-[124px]"><Select value={stockF} onChange={(e) => setStockF(e.target.value)} options={[{ value: 'all', label: 'Any stock' }, { value: 'low', label: 'Low stock' }, { value: 'out', label: 'Out of stock' }]} /></div>
           <div className="w-[150px]"><Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: 'active', label: 'Active only' }, { value: 'inactive', label: 'Inactive only' }, { value: 'all', label: 'All statuses' }]} /></div>
@@ -275,6 +283,7 @@ export function Items() {
                             <span className="px-2"><Badge tone={r.loose ? 'info' : 'neutral'}>{r.loose ? 'Loose' : 'Packed'}</Badge></span>
                             <span className="truncate px-2 text-muted" title={r.supplier ?? ''}>{r.supplier || '-'}</span>
                             <span className="num px-2 text-right"><Money paise={r.price} /></span>
+                            <span className="num px-2">{hsnOk(r.hsn) ? r.hsn : <Badge tone="warning">Missing</Badge>}</span>
                             <span className="num px-2 text-right">{r.gstRate}%</span>
                             <span className={cn('num truncate px-2 text-right', s === 'out' ? 'font-semibold text-danger' : s === 'low' ? 'font-semibold text-warning' : '')}>{formatQty(r.stock, r.loose)} {unitText(r.unit)}</span>
                           </div>

@@ -83,6 +83,16 @@ export function downloadText(filename: string, text: string, mime = 'text/csv') 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Saves bytes (an Excel file, JSON) the way a browser download does; in the desktop app this opens the save dialog. */
+export function downloadBytes(filename: string, bytes: Uint8Array | string, mime: string) {
+  const part = typeof bytes === 'string' ? bytes : (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+  const url = URL.createObjectURL(new Blob([part], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const csvCell = (v: string | number) => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
 /** Master/detail right pane shell. */

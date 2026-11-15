@@ -23,6 +23,7 @@ import { Reports } from './pages/Reports';
 import { Users } from './pages/Users';
 import { SettingsPage } from './pages/SettingsPage';
 import { ItemEditor } from './pages/ItemEditor';
+import { HsnHelper } from './pages/HsnHelper';
 import { Expenses } from './pages/Expenses';
 import { MillDailyPage } from './pages/MillDaily';
 
@@ -96,6 +97,7 @@ function Shell() {
         <Route path="/mill-daily" element={<MillDailyPage />} />
         <Route path="/mill" element={<Navigate to="/mill-daily" replace />} />
         <Route path="/items/new" element={<ItemEditor />} />
+        <Route path="/items/hsn" element={<HsnHelper />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </OfficeLayout>

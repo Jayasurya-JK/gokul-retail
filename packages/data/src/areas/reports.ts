@@ -2,6 +2,7 @@ import type { MockStore } from './store';
 import { mockExpensesReport, mockVoidedLinesReport } from './expenses';
 import type { Bill, BillLine, Item, Paise, PayMode, UnitCode } from '../types';
 import { setOff } from '../gst';
+import { mockGstrFactsFor } from './gstrmock';
 
 // Area: Office reports: sales, item-wise, GST (GSTR-1, 3B, HSN), stock, profit, day-wise cash.
 // Every report returns the same generic shape (KPIs + optional chart + columns/rows/totals) so the
@@ -87,7 +88,6 @@ function daysBetween(from: string, to: string): string[] {
   return out;
 }
 
-const UQC: Record<UnitCode, string> = { kg: 'KGS', g: 'GMS', l: 'LTR', ml: 'MLT', pc: 'PCS', tin: 'NOS', btl: 'BTL', pkt: 'PAC' };
 const UNIT_LABEL: Record<UnitCode, string> = { kg: 'kg', g: 'g', l: 'L', ml: 'ml', pc: 'pc', tin: 'tin', btl: 'btl', pkt: 'pkt' };
 const MODE_LABEL: Record<PayMode, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', credit_note: 'Credit note', points: 'Points', sodexo: 'Sodexo' };
 const hourLabel = (h: number) => `${pad(h)}:00`;
@@ -480,32 +480,40 @@ function gstr3b(c: Ctx): ReportResult {
 }
 
 function hsnWise(c: Ctx): ReportResult {
-  interface Acc { hsn: string; desc: string; uqc: string; rate: number; qty: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number; value: number }
-  const agg = new Map<string, Acc>();
-  for (const f of lineFacts(c)) {
-    const hsn = f.line.hsn || f.item?.hsn || '0000';
-    const uqc = UQC[f.line.unit];
-    const key = `${hsn}|${f.line.gstRate}|${uqc}`;
-    const t = f.line.tax ?? { taxable: f.taxable, cgst: Math.floor(f.tax / 2), sgst: f.tax - Math.floor(f.tax / 2), igst: 0, cess: 0 };
-    const cur = agg.get(key) ?? { hsn, desc: f.item?.category ?? 'Goods', uqc, rate: f.line.gstRate, qty: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0, value: 0 };
-    cur.qty += f.line.qty; cur.taxable += t.taxable; cur.cgst += t.cgst; cur.sgst += t.sgst; cur.igst += t.igst; cur.cess += t.cess; cur.value += f.line.amount;
-    agg.set(key, cur);
+  // GSTR-1 table 12 as the GST portal now takes it: B2B and B2C summaries, each net of the credit notes of the period (confirm with CA).
+  const facts = mockGstrFactsFor(c.store, c.p.from, c.p.to, { month: c.p.from.slice(0, 7), fp: '' });
+  interface Acc { b2b: boolean; hsn: string; desc: string; uqc: string; rate: number; qty: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number; value: number }
+  const net = new Map<string, Acc>();
+  const add = (list: typeof facts.hsn.sales, sign: number) => {
+    for (const h of list) {
+      const key = `${h.b2b}|${h.hsn}|${h.unit}|${h.rate}`;
+      const cur = net.get(key) ?? { b2b: h.b2b, hsn: h.hsn || '0000', desc: h.desc || 'Goods', uqc: h.uqc, rate: h.rate, qty: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, cess: 0, value: 0 };
+      cur.qty += sign * h.qty; cur.taxable += sign * h.taxable; cur.cgst += sign * h.cgst; cur.sgst += sign * h.sgst; cur.igst += sign * h.igst; cur.cess += sign * h.cess; cur.value += sign * h.value;
+      net.set(key, cur);
+    }
+  };
+  add(facts.hsn.sales, 1); add(facts.hsn.returns, -1);
+  const rows: ReportRow[] = [];
+  const all: ReportRow[] = [];
+  for (const [b2b, title] of [[true, '12 - HSN summary of supplies to registered buyers (B2B)'], [false, '12 - HSN summary of supplies to consumers and unregistered buyers (B2C)']] as const) {
+    rows.push({ _style: 'head', hsn: title });
+    const mine = [...net.values()].filter((x) => x.b2b === b2b && (x.taxable !== 0 || x.value !== 0 || x.qty !== 0)).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.uqc.localeCompare(b.uqc) || a.rate - b.rate);
+    if (!mine.length) rows.push({ hsn: 'None in this period', _style: 'muted' });
+    for (const x of mine) {
+      const r: ReportRow = { hsn: x.hsn, desc: x.desc, uqc: x.uqc, qty: x.qty, rate: x.rate, taxable: x.taxable, cgst: x.cgst, sgst: x.sgst, igst: x.igst, cess: x.cess, tax: x.cgst + x.sgst + x.igst, value: x.value };
+      rows.push(r); all.push(r);
+    }
   }
-  const list = [...agg.values()].sort((a, b) => a.hsn.localeCompare(b.hsn) || a.uqc.localeCompare(b.uqc));
-  const rows: ReportRow[] = list.map((x) => ({
-    hsn: x.hsn, desc: x.desc, uqc: x.uqc, qty: x.qty, rate: x.rate, taxable: x.taxable, cgst: x.cgst, sgst: x.sgst, igst: x.igst, cess: x.cess,
-    tax: x.cgst + x.sgst + x.igst, value: x.taxable + x.cgst + x.sgst + x.igst + x.cess,
-  }));
-  const t = (k: string) => sum(rows.map((r) => Number(r[k])));
+  const t = (k: string) => sum(all.map((r) => Number(r[k])));
   return {
-    id: 'hsn-wise', title: 'HSN-wise summary', note: 'GSTR-1 table 12. Quantities are per unit of measure (UQC). Items with no HSN show as 0000.',
+    id: 'hsn-wise', title: 'HSN-wise summary', note: 'GSTR-1 table 12, split into B2B and B2C, net of credit notes (confirm the layout with the CA). Quantities are per unit of measure (UQC). Items with no HSN show as 0000.',
     kpis: [
       { label: 'Taxable value', kind: 'money', value: t('taxable'), tone: 'primary' },
       { label: 'Total GST', kind: 'money', value: t('tax') },
-      { label: 'HSN codes', kind: 'int', value: new Set(list.map((x) => x.hsn)).size, hint: 'in this period' },
+      { label: 'HSN codes', kind: 'int', value: new Set(all.map((r) => r.hsn)).size, hint: 'in this period' },
       { label: 'Invoice value', kind: 'money', value: t('value') },
     ],
-    chart: { kind: 'bars', title: 'Taxable value by HSN', money: true, points: [...rows].sort((a, b) => Number(b.taxable) - Number(a.taxable)).slice(0, 8).map((r) => ({ label: `${r.hsn} @ ${r.rate}% (${r.uqc})`, value: Number(r.taxable) })) },
+    chart: { kind: 'bars', title: 'Taxable value by HSN', money: true, points: [...all].sort((a, b) => Number(b.taxable) - Number(a.taxable)).slice(0, 8).map((r) => ({ label: `${r.hsn} @ ${r.rate}% (${r.uqc})`, value: Number(r.taxable) })) },
     columns: [
       { key: 'hsn', label: 'HSN', kind: 'text', w: '0.9fr' }, { key: 'desc', label: 'Description', kind: 'text', w: '2fr' },
       { key: 'uqc', label: 'UQC', kind: 'text', w: '0.6fr' }, { key: 'qty', label: 'Total qty', kind: 'qty', w: '1fr' },

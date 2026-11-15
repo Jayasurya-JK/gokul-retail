@@ -140,7 +140,7 @@ enum Rule {
 fn rule_for(method: &str, args: &[Value]) -> Rule {
     use Rule::*;
     match method {
-        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
+        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "applyHsn" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
         | "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => Perm("canManageItems"),
         "editPressingBatch" | "deletePressingBatch" | "saveSeedNorms" | "editGodownBarrel" | "editOutsourcedOil" | "deleteOutsourcedOil" | "deleteStickReading" => EditRecords,
         "createGrn" | "saveSupplier" | "recordSupplierPayment" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
@@ -152,7 +152,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => Perm("canManageUsers"),
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => Perm("canChangeSettings"),
-        "runReport" | "pointsOverview" | "pointsReport" | "pointsExpiring" => Perm("canSeeReports"),
+        "runReport" | "getGstrFacts" | "pointsOverview" | "pointsReport" | "pointsExpiring" => Perm("canSeeReports"),
         "adjustPoints" | "bulkAdjustPoints" => PermAndPin { perm: "canEditPrices", action_what: "change customer points" },
         "setLoyaltyGoLive" => Owner,
         "cancelBill" => PermPin { perm: "canCancelBill", action: "cancel_bill", pin_arg: 0, pin_key: Some("managerPin") },
@@ -174,7 +174,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
 
 fn describe(method: &str) -> &'static str {
     match method {
-        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" => "change items",
+        "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "applyHsn" => "change items",
         "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory" => "change categories",
         "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => "change brands",
         "createGrn" | "saveSupplier" | "recordSupplierPayment" => "record purchases and supplier payments",
@@ -184,7 +184,7 @@ fn describe(method: &str) -> &'static str {
         "setCustomerCredit" => "allow credit for a customer",
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => "manage users",
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => "change settings or backups",
-        "runReport" | "pointsOverview" | "pointsReport" | "pointsExpiring" => "see reports",
+        "runReport" | "getGstrFacts" | "pointsOverview" | "pointsReport" | "pointsExpiring" => "see reports",
         "adjustPoints" | "bulkAdjustPoints" => "change customer points",
         "setLoyaltyGoLive" => "change the points go-live date",
         "cancelBill" => "cancel a bill",

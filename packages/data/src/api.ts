@@ -8,6 +8,8 @@ import type { ExpensesApi } from "./areas/expenses";
 import type { MillApi } from "./areas/mill";
 import type { PosReportsApi } from "./areas/posreports";
 import type { ProductionApi } from "./areas/production";
+import type { HsnApi } from "./areas/hsn";
+import type { GstrApi } from "./areas/gstr";
 import type {
   Bill, BillDraft, BillFilter, Category, Customer, DashboardStats, HeldBill, Item, ProductionBatch, Purchase,
   Settings, Shift, StockMovement, Supplier, TopItem, User,
@@ -59,4 +61,4 @@ export interface CoreApi {
 }
 
 /** Full contract = core + one interface per area (see ./areas). */
-export interface Api extends CoreApi, ShiftApi, BillOpsApi, CatalogApi, PurchasingApi, CrmApi, ReportsApi, ExpensesApi, MillApi, PosReportsApi, ProductionApi {}
+export interface Api extends CoreApi, ShiftApi, BillOpsApi, CatalogApi, PurchasingApi, CrmApi, ReportsApi, ExpensesApi, MillApi, PosReportsApi, ProductionApi, HsnApi, GstrApi {}

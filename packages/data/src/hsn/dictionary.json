@@ -1,0 +1,2145 @@
+{
+ "version": 1,
+ "note": "Keyword dictionary for the HSN helper (Gokul Office, Items). Built for the goods of a wood-pressed oil and grocery shop. Single source for the Rust core (crates/core/src/hsn.rs) and the TypeScript mock (packages/data/src/areas/hsn.ts). Every suggestion is only a suggestion: nothing is applied until the owner confirms, and every rate must be verified with the CA.",
+ "entries": [
+  {
+   "id": "asafoetida",
+   "hsn": "1301",
+   "desc": "Lac; natural gums, resins (asafoetida)",
+   "keywords": [
+    "asafoetida",
+    "perungayam",
+    "hing",
+    "perunkayam",
+    "kayam",
+    "hing powder"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "biscuit",
+   "hsn": "1905",
+   "desc": "Bread, pastry, cakes, biscuits and bakery wares",
+   "keywords": [
+    "biscuit",
+    "biscuits",
+    "cookies",
+    "cookie",
+    "rusk",
+    "bread",
+    "bun",
+    "cake",
+    "pastry",
+    "wafer",
+    "wafers",
+    "cracker",
+    "crackers",
+    "marie",
+    "good day",
+    "parle",
+    "papad",
+    "pappad",
+    "appalam",
+    "appalams",
+    "papadam",
+    "pappadam",
+    "murukku",
+    "thenkuzhal",
+    "chakli",
+    "namkeen",
+    "khakhra",
+    "cream roll",
+    "puff",
+    "cutlet"
+   ],
+   "rate": 18,
+   "rateNote": "Biscuits and bakery wares; papad is nil rated (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil cake",
+    "cattle",
+    "punnaku",
+    "cake feed",
+    "poonaku"
+   ],
+   "alt": [
+    {
+     "hsn": "2106",
+     "desc": "Namkeen, mixture, savoury snacks"
+    }
+   ]
+  },
+  {
+   "id": "bottle-glass",
+   "hsn": "7010",
+   "desc": "Glass carboys, bottles, jars and containers",
+   "keywords": [
+    "glass bottle",
+    "empty bottle",
+    "empty bottles",
+    "bottle glass",
+    "glass jar",
+    "glass container",
+    "glass bottles",
+    "amber bottle",
+    "glass tumbler",
+    "carboy"
+   ],
+   "rate": 18,
+   "rateNote": "Glass goods 18% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "3923",
+     "desc": "Plastic bottles"
+    }
+   ],
+   "kind": "pack"
+  },
+  {
+   "id": "bottle-plastic",
+   "hsn": "3923",
+   "desc": "Plastic containers, bottles, caps and closures",
+   "keywords": [
+    "plastic bottle",
+    "pet bottle",
+    "empty bottle plastic",
+    "plastic can",
+    "plastic container",
+    "plastic jar",
+    "plastic cap",
+    "bottle cap",
+    "can 5 litre",
+    "plastic jug",
+    "plastic bucket",
+    "plastic tin",
+    "hdpe can",
+    "empty can",
+    "pet jar",
+    "plastic jerry can",
+    "jerry can",
+    "water bottle",
+    "plastic box",
+    "tiffin box"
+   ],
+   "rate": 18,
+   "rateNote": "Plastic goods 18% (confirm with CA)",
+   "base": "medium",
+   "kind": "pack"
+  },
+  {
+   "id": "bran",
+   "hsn": "2302",
+   "desc": "Bran, sharps and other residues of cereals",
+   "keywords": [
+    "bran",
+    "rice bran feed",
+    "wheat bran",
+    "thavudu",
+    "thavidu"
+   ],
+   "rate": 5,
+   "rateNote": "Cattle feed; rate depends on use (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "rice bran oil"
+   ]
+  },
+  {
+   "id": "cake-coconut",
+   "hsn": "2306",
+   "desc": "Oil-cake of coconut or copra",
+   "keywords": [
+    "coconut cake",
+    "copra cake",
+    "kopra cake",
+    "coconut oil cake",
+    "thengai punnaku",
+    "thengai poonaku",
+    "coconut punnaku",
+    "copra punnaku",
+    "coconut poonaku"
+   ],
+   "rate": 5,
+   "rateNote": "Oil-cake for cattle feed; rate depends on use (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "cake-generic",
+   "hsn": "2306",
+   "desc": "Oil-cake and other solid residues of vegetable oils",
+   "keywords": [
+    "punnaku",
+    "poonaku",
+    "oil cake",
+    "oilcake",
+    "cattle feed cake",
+    "cake feed"
+   ],
+   "rate": 5,
+   "rateNote": "Oil-cake for cattle feed; rate depends on use (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "2305",
+     "desc": "Oil-cake of ground-nut"
+    },
+    {
+     "hsn": "2304",
+     "desc": "Oil-cake of soya-bean"
+    }
+   ]
+  },
+  {
+   "id": "cake-groundnut",
+   "hsn": "2305",
+   "desc": "Oil-cake of ground-nut",
+   "keywords": [
+    "groundnut cake",
+    "ground nut cake",
+    "groundnut oil cake",
+    "groundnut punnaku",
+    "groundnut poonaku",
+    "kadalai punnaku",
+    "verkadalai punnaku",
+    "kadalai poonaku",
+    "peanut cake",
+    "gn cake",
+    "gn punnaku"
+   ],
+   "rate": 5,
+   "rateNote": "Oil-cake for cattle feed; rate depends on use (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "cake-sesame",
+   "hsn": "2306",
+   "desc": "Oil-cake of sesame and other seeds",
+   "keywords": [
+    "sesame cake",
+    "sesame oil cake",
+    "gingelly cake",
+    "ellu punnaku",
+    "ellu poonaku",
+    "sesame punnaku",
+    "gingelly punnaku",
+    "til cake",
+    "nallennai punnaku",
+    "nallennai poonaku"
+   ],
+   "rate": 5,
+   "rateNote": "Oil-cake for cattle feed; rate depends on use (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "camphor",
+   "hsn": "2914",
+   "desc": "Camphor (karpooram)",
+   "keywords": [
+    "camphor",
+    "karpooram",
+    "karpuram",
+    "karpura",
+    "kapoor",
+    "camphor tablet",
+    "camphor cubes",
+    "hawan samagri",
+    "arathi camphor",
+    "aarthi camphor"
+   ],
+   "rate": 12,
+   "rateNote": "Rate differs by grade (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "2906",
+     "desc": "Cyclic alcohols (menthol, borneol): sometimes quoted for camphor products"
+    }
+   ]
+  },
+  {
+   "id": "candy",
+   "hsn": "1704",
+   "desc": "Sugar confectionery without cocoa",
+   "keywords": [
+    "candy",
+    "sweet",
+    "mittai",
+    "mithai",
+    "chikki",
+    "kadalai mittai",
+    "peanut chikki",
+    "groundnut chikki",
+    "sesame chikki",
+    "ellu urundai",
+    "kadalai urundai",
+    "laddu",
+    "ladoo",
+    "toffee",
+    "lollipop",
+    "jelly",
+    "gum",
+    "chewing gum",
+    "mixture sweet",
+    "sugar candy sweet",
+    "sukku urundai",
+    "urundai",
+    "burfi",
+    "halwa",
+    "jilebi",
+    "jalebi",
+    "candy sweet",
+    "peppermint",
+    "pepper mint",
+    "orange candy",
+    "eclairs",
+    "nannari",
+    "nannari sarbath"
+   ],
+   "rate": 18,
+   "rateNote": "Confectionery; rate differs by item (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "sweet corn",
+    "sweet potato"
+   ],
+   "alt": [
+    {
+     "hsn": "2106",
+     "desc": "Food preparations not elsewhere specified (sweetmeats)"
+    },
+    {
+     "hsn": "1806",
+     "desc": "Chocolate"
+    }
+   ]
+  },
+  {
+   "id": "cattle-feed",
+   "hsn": "2309",
+   "desc": "Preparations used in animal feeding",
+   "keywords": [
+    "cattle feed",
+    "cow feed",
+    "animal feed",
+    "poultry feed",
+    "goat feed"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "chocolate",
+   "hsn": "1806",
+   "desc": "Chocolate and cocoa preparations",
+   "keywords": [
+    "chocolate",
+    "cocoa",
+    "cocoa powder",
+    "choco",
+    "dairy milk",
+    "bournvita",
+    "horlicks",
+    "boost",
+    "complan",
+    "malt drink",
+    "milo",
+    "health drink",
+    "drinking chocolate",
+    "choco spread"
+   ],
+   "rate": 18,
+   "rateNote": "Rate differs by item (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "coconut-fresh",
+   "hsn": "0801",
+   "desc": "Coconuts, fresh or dried; desiccated coconut",
+   "keywords": [
+    "coconut",
+    "thengai",
+    "fresh coconut",
+    "tender coconut",
+    "desiccated coconut",
+    "coconut powder"
+   ],
+   "rate": 0,
+   "rateNote": "Fresh coconut is nil rated (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil",
+    "ennai",
+    "cake",
+    "punnaku",
+    "poonaku",
+    "milk",
+    "water",
+    "soap",
+    "shampoo",
+    "copra"
+   ]
+  },
+  {
+   "id": "coffee",
+   "hsn": "0901",
+   "desc": "Coffee",
+   "keywords": [
+    "coffee",
+    "coffee powder",
+    "filter coffee",
+    "coffee beans",
+    "instant coffee",
+    "kaapi",
+    "kapi",
+    "chicory coffee",
+    "coffee decoction"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "coir",
+   "hsn": "5305",
+   "desc": "Coconut fibre (coir) and brooms",
+   "keywords": [
+    "coir",
+    "coconut fibre",
+    "coconut shell",
+    "broom",
+    "brush",
+    "thengai matta",
+    "coconut brush",
+    "scrub",
+    "scrubber",
+    "jute",
+    "jute bag",
+    "coir mat",
+    "coir rope"
+   ],
+   "rate": 5,
+   "rateNote": "Rate differs by item (confirm with CA)",
+   "base": "low",
+   "alt": [
+    {
+     "hsn": "9603",
+     "desc": "Brooms and brushes"
+    }
+   ]
+  },
+  {
+   "id": "detergent",
+   "hsn": "3402",
+   "desc": "Washing and cleaning preparations",
+   "keywords": [
+    "detergent",
+    "washing powder",
+    "surf",
+    "dish wash",
+    "dishwash",
+    "dish wash liquid",
+    "floor cleaner",
+    "toilet cleaner",
+    "phenyl",
+    "cleaner",
+    "liquid detergent",
+    "laundry",
+    "vim liquid",
+    "harpic",
+    "lizol",
+    "bleach"
+   ],
+   "rate": 18,
+   "rateNote": "Cleaning preparations 18% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "3808",
+     "desc": "Disinfectants (phenyl)"
+    }
+   ]
+  },
+  {
+   "id": "dryfruit-almond",
+   "hsn": "0802",
+   "desc": "Other nuts: almonds, walnuts, pistachios, hazelnuts",
+   "keywords": [
+    "almond",
+    "almonds",
+    "badam",
+    "walnut",
+    "pistachio",
+    "pista",
+    "hazelnut",
+    "macadamia",
+    "nuts",
+    "dry fruits",
+    "dry fruit",
+    "dryfruits"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "dryfruit-cashew",
+   "hsn": "0801",
+   "desc": "Brazil nuts, cashew nuts, dried coconut",
+   "keywords": [
+    "cashew",
+    "cashew nut",
+    "cashew nuts",
+    "mundhiri",
+    "munthiri",
+    "kaju"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "dryfruit-dates",
+   "hsn": "0804",
+   "desc": "Dates, figs, pineapples, avocados, guavas, mangoes",
+   "keywords": [
+    "dates",
+    "pericham pazham",
+    "perichampazham",
+    "dry dates",
+    "khajoor",
+    "kharjuram",
+    "fig",
+    "anjeer",
+    "dried fig",
+    "seedless dates"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "dryfruit-raisin",
+   "hsn": "0806",
+   "desc": "Grapes, fresh or dried (raisins)",
+   "keywords": [
+    "raisin",
+    "raisins",
+    "kismis",
+    "kishmish",
+    "dry grapes",
+    "ularntha thiratchai",
+    "black raisin",
+    "green raisin"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "flour-pulse",
+   "hsn": "1106",
+   "desc": "Flour of dried leguminous vegetables",
+   "keywords": [
+    "besan",
+    "gram flour",
+    "kadalai maavu",
+    "kadalai mavu",
+    "urad flour",
+    "ulundhu maavu",
+    "pulse flour",
+    "chickpea flour",
+    "moong flour",
+    "soya flour",
+    "sattu"
+   ],
+   "rate": 0,
+   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "flour-wheat",
+   "hsn": "1101",
+   "desc": "Wheat or meslin flour",
+   "keywords": [
+    "atta",
+    "wheat flour",
+    "godhumai maavu",
+    "godhumai mavu",
+    "whole wheat flour",
+    "maida",
+    "all purpose flour",
+    "gothumai maavu"
+   ],
+   "rate": 0,
+   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "ghee",
+   "hsn": "0405",
+   "desc": "Butter, ghee and other fats from milk",
+   "keywords": [
+    "ghee",
+    "cow ghee",
+    "buffalo ghee",
+    "nei",
+    "pure ghee",
+    "desi ghee",
+    "butter",
+    "vennai",
+    "venn"
+   ],
+   "rate": 12,
+   "rateNote": "Ghee 12% until Sep 2025, 5% from 22 Sep 2025 (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "ghee rice"
+   ]
+  },
+  {
+   "id": "honey",
+   "hsn": "0409",
+   "desc": "Natural honey",
+   "keywords": [
+    "honey",
+    "then",
+    "thaen",
+    "kaattu then",
+    "forest honey",
+    "wild honey"
+   ],
+   "rate": 5,
+   "rateNote": "Pre-packed and labelled honey 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "incense",
+   "hsn": "3307",
+   "desc": "Agarbatti and other odoriferous preparations that burn",
+   "keywords": [
+    "agarbatti",
+    "agarbathi",
+    "agarbathies",
+    "incense",
+    "incense sticks",
+    "dhoop",
+    "dhoopam",
+    "sambrani",
+    "sambirani",
+    "loban",
+    "cone",
+    "dhoop sticks",
+    "udhubathi",
+    "uthubathi",
+    "sandal sticks",
+    "joss"
+   ],
+   "rate": 5,
+   "rateNote": "Incense sticks 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "jaggery",
+   "hsn": "1701",
+   "desc": "Cane or palm jaggery and sugar",
+   "keywords": [
+    "jaggery",
+    "vellam",
+    "karupatti",
+    "karuppatti",
+    "palm jaggery",
+    "palm sugar",
+    "nattu sakkarai",
+    "naattu sakkarai",
+    "country sugar",
+    "cane jaggery",
+    "jaggery powder",
+    "vellam powder",
+    "sakkarai achu",
+    "achu vellam",
+    "pana vellam",
+    "panai vellam"
+   ],
+   "rate": 5,
+   "rateNote": "Unbranded jaggery is nil rated, pre-packed branded 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "kumkum",
+   "hsn": "3304",
+   "desc": "Beauty or make-up preparations: kumkum, sindoor, bindi",
+   "keywords": [
+    "kumkum",
+    "kumkumam",
+    "kunkuma",
+    "kungumam",
+    "sindoor",
+    "sindhoor",
+    "bindi",
+    "pottu",
+    "vibhuti",
+    "vibhuthi",
+    "thiruneeru",
+    "santhanam",
+    "sandal paste",
+    "chandan",
+    "sandalwood paste",
+    "chandanam",
+    "haldi kumkum",
+    "pooja powder",
+    "rangoli powder",
+    "kolam powder",
+    "kolam podi"
+   ],
+   "rate": 12,
+   "rateNote": "Rate differs by item; some pooja items nil or 5% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "3307",
+     "desc": "Odoriferous or pooja preparations"
+    },
+    {
+     "hsn": "3204",
+     "desc": "Colouring preparations (rangoli powder)"
+    }
+   ]
+  },
+  {
+   "id": "matches",
+   "hsn": "3605",
+   "desc": "Matches",
+   "keywords": [
+    "matches",
+    "match box",
+    "matchbox",
+    "theepetti",
+    "theeppetti",
+    "theeppetty",
+    "safety matches",
+    "match"
+   ],
+   "rate": 12,
+   "rateNote": "Matches 12%, from 22 Sep 2025 may be 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "match box game"
+   ]
+  },
+  {
+   "id": "millet",
+   "hsn": "1008",
+   "desc": "Buckwheat, millets and other cereals",
+   "keywords": [
+    "ragi",
+    "finger millet",
+    "kambu",
+    "pearl millet",
+    "bajra",
+    "cholam",
+    "jowar",
+    "sorghum",
+    "thinai",
+    "foxtail millet",
+    "samai",
+    "little millet",
+    "varagu",
+    "kodo millet",
+    "kuthiraivali",
+    "barnyard millet",
+    "millet",
+    "millets",
+    "maize",
+    "makka cholam",
+    "corn grain",
+    "kezhvaragu"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded nil, pre-packed branded 5% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "flour",
+    "maavu",
+    "rava",
+    "malt",
+    "mix",
+    "noodles",
+    "biscuit",
+    "laddu"
+   ]
+  },
+  {
+   "id": "namkeen",
+   "hsn": "2106",
+   "desc": "Food preparations not elsewhere specified (namkeen, mixture, snacks)",
+   "keywords": [
+    "mixture",
+    "namkeen",
+    "bhujia",
+    "chips",
+    "banana chips",
+    "potato chips",
+    "kara boondi",
+    "boondi",
+    "sev",
+    "snack",
+    "snacks",
+    "kara sev",
+    "thattai",
+    "ribbon pakoda",
+    "pakoda",
+    "chivda",
+    "chakkarai varatti",
+    "roasted snack",
+    "fryums",
+    "vadam",
+    "vathal",
+    "vadagam",
+    "vattal",
+    "kondattam",
+    "mixture snack",
+    "fried gram snack",
+    "instant mix",
+    "ready mix",
+    "idli mix",
+    "dosa mix",
+    "gulab jamun mix",
+    "payasam mix",
+    "halwa mix",
+    "rasam mix",
+    "vada mix",
+    "sambar mix"
+   ],
+   "rate": 12,
+   "rateNote": "Savoury snacks 12%; some 18% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "oil-castor",
+   "hsn": "1515",
+   "desc": "Castor oil and its fractions",
+   "keywords": [
+    "castor oil",
+    "amanakku ennai",
+    "aamanakku ennai",
+    "amanakku",
+    "aamanakku",
+    "amanakku oil"
+   ],
+   "rate": 12,
+   "rateNote": "Often 12% or 18%; depends on use (confirm with CA)",
+   "base": "high",
+   "alt": [
+    {
+     "hsn": "3004",
+     "desc": "Medicinal preparation, if sold as medicine"
+    }
+   ]
+  },
+  {
+   "id": "oil-coconut",
+   "hsn": "1513",
+   "desc": "Coconut (copra) oil and its fractions",
+   "keywords": [
+    "coconut oil",
+    "thengai ennai",
+    "thengai oil",
+    "virgin coconut oil",
+    "copra oil",
+    "kopra oil",
+    "coconut wood pressed",
+    "coconut chekku",
+    "coconut cold pressed",
+    "vco"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% in retail packs (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "cake",
+    "punnaku",
+    "poonaku",
+    "powder",
+    "milk",
+    "water",
+    "fresh"
+   ]
+  },
+  {
+   "id": "oil-generic",
+   "hsn": "1515",
+   "desc": "Edible vegetable oil (kind not clear from the name)",
+   "keywords": [
+    "oil",
+    "ennai",
+    "ennei",
+    "enna",
+    "oils"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "low"
+  },
+  {
+   "id": "oil-groundnut",
+   "hsn": "1508",
+   "desc": "Ground-nut oil and its fractions",
+   "keywords": [
+    "groundnut oil",
+    "ground nut oil",
+    "peanut oil",
+    "kadalai ennai",
+    "kadalai oil",
+    "verkadalai ennai",
+    "verkadalai oil",
+    "groundnut ennai",
+    "gn oil",
+    "groundnut wood pressed",
+    "groundnut chekku",
+    "groundnut cold pressed"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "cake",
+    "punnaku",
+    "poonaku"
+   ]
+  },
+  {
+   "id": "oil-hair",
+   "hsn": "3305",
+   "desc": "Hair oil",
+   "keywords": [
+    "hair oil",
+    "herbal hair oil",
+    "kesh oil",
+    "amla hair oil",
+    "bringaraj oil",
+    "thalai ennai",
+    "thalaiyenai"
+   ],
+   "rate": 18,
+   "rateNote": "Cosmetic; usually 18% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "1515",
+     "desc": "Fixed vegetable oil, if sold only as an oil"
+    }
+   ]
+  },
+  {
+   "id": "oil-lamp",
+   "hsn": "1518",
+   "desc": "Mixed vegetable oils for lamps / pooja (not edible)",
+   "keywords": [
+    "lamp oil",
+    "deepam oil",
+    "deepa oil",
+    "vilakku ennai",
+    "vilakku oil",
+    "panchadeepam",
+    "pancha deepam",
+    "pooja oil",
+    "pooja ennai",
+    "diya oil"
+   ],
+   "rate": 12,
+   "rateNote": "Not edible; rate differs from edible oil (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "1515",
+     "desc": "Other fixed vegetable oils"
+    }
+   ]
+  },
+  {
+   "id": "oil-mustard",
+   "hsn": "1514",
+   "desc": "Rape, colza or mustard oil and its fractions",
+   "keywords": [
+    "mustard oil",
+    "kadugu ennai",
+    "kadugu oil",
+    "rapeseed oil",
+    "rape seed oil",
+    "sarson oil"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "mustard seed",
+    "kadugu seed",
+    "kadugu "
+   ]
+  },
+  {
+   "id": "oil-neem",
+   "hsn": "1515",
+   "desc": "Neem and other fixed vegetable oils",
+   "keywords": [
+    "neem oil",
+    "vepennai",
+    "veppa ennai",
+    "veppennai",
+    "vepa ennai"
+   ],
+   "rate": 12,
+   "rateNote": "Depends on use (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "oil-olive",
+   "hsn": "1509",
+   "desc": "Olive oil and its fractions",
+   "keywords": [
+    "olive oil"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "oil-palm",
+   "hsn": "1511",
+   "desc": "Palm oil and its fractions",
+   "keywords": [
+    "palm oil",
+    "palmolein",
+    "pamolein",
+    "palm olein"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "palm jaggery",
+    "palm sugar"
+   ]
+  },
+  {
+   "id": "oil-ricebran",
+   "hsn": "1515",
+   "desc": "Rice bran oil and other fixed vegetable oils",
+   "keywords": [
+    "rice bran oil",
+    "ricebran oil",
+    "rice bran"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "bran feed",
+    "cattle"
+   ]
+  },
+  {
+   "id": "oil-sesame",
+   "hsn": "1515",
+   "desc": "Sesame (gingelly) oil and its fractions",
+   "keywords": [
+    "sesame oil",
+    "gingelly oil",
+    "gingelly",
+    "til oil",
+    "nallennai",
+    "nalla ennai",
+    "nallenai",
+    "ellu ennai",
+    "ellu oil",
+    "sesame wood pressed",
+    "sesame chekku",
+    "sesame cold pressed"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "sesame seed",
+    "sesame seeds",
+    "ellu seed",
+    "cake",
+    "punnaku",
+    "poonaku"
+   ]
+  },
+  {
+   "id": "oil-soya",
+   "hsn": "1507",
+   "desc": "Soya-bean oil and its fractions",
+   "keywords": [
+    "soya oil",
+    "soyabean oil",
+    "soybean oil",
+    "soya bean oil"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "oil-sunflower",
+   "hsn": "1512",
+   "desc": "Sunflower-seed, safflower or cotton-seed oil",
+   "keywords": [
+    "sunflower oil",
+    "sun flower oil",
+    "safflower oil",
+    "cotton seed oil",
+    "cottonseed oil"
+   ],
+   "rate": 5,
+   "rateNote": "Edible oil, usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "papad",
+   "hsn": "1905",
+   "desc": "Papad (appalam)",
+   "keywords": [
+    "papad",
+    "pappad",
+    "appalam",
+    "papadam",
+    "pappadam",
+    "appalams",
+    "poli",
+    "paapad"
+   ],
+   "rate": 0,
+   "rateNote": "Papad is nil rated (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "pickle",
+   "hsn": "2001",
+   "desc": "Vegetables, fruit prepared by vinegar or acetic acid (pickles)",
+   "keywords": [
+    "pickle",
+    "pickles",
+    "achar",
+    "oorugai",
+    "urugai",
+    "uurukai",
+    "thokku",
+    "mango pickle",
+    "lemon pickle",
+    "garlic pickle",
+    "lime pickle",
+    "tomato thokku",
+    "chutney",
+    "jam",
+    "jams",
+    "squash",
+    "fruit jam",
+    "mixed pickle",
+    "gongura",
+    "avakai"
+   ],
+   "rate": 12,
+   "rateNote": "Pickles 12%; confirm with CA",
+   "base": "medium",
+   "exclude": [
+    "powder",
+    "podi"
+   ],
+   "alt": [
+    {
+     "hsn": "2007",
+     "desc": "Jams, jellies, marmalades"
+    },
+    {
+     "hsn": "2103",
+     "desc": "Sauces, chutneys"
+    }
+   ]
+  },
+  {
+   "id": "poha",
+   "hsn": "1904",
+   "desc": "Prepared foods from cereals: flattened rice, puffed rice, cornflakes",
+   "keywords": [
+    "poha",
+    "aval",
+    "flattened rice",
+    "beaten rice",
+    "puffed rice",
+    "pori",
+    "murmura",
+    "corn flakes",
+    "cornflakes",
+    "rice flakes",
+    "kuthirai aval",
+    "red aval",
+    "sivappu aval",
+    "millet flakes",
+    "oats",
+    "muesli",
+    "cereal flakes"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5%, some 18% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "upma"
+   ]
+  },
+  {
+   "id": "pooja",
+   "hsn": "3307",
+   "desc": "Pooja and odoriferous preparations (rose water, attar, perfumed)",
+   "keywords": [
+    "pooja",
+    "puja",
+    "rose water",
+    "panneer",
+    "pannir",
+    "attar",
+    "perfume",
+    "perfumed",
+    "scent",
+    "essence",
+    "sandalwood oil",
+    "gangajal",
+    "ganga jal",
+    "kasturi",
+    "kasthuri manjal",
+    "pooja items",
+    "pooja samagri",
+    "pooja kit",
+    "samagri",
+    "pancha loha",
+    "dhoop kit"
+   ],
+   "rate": 12,
+   "rateNote": "Rate differs by item (confirm with CA)",
+   "base": "low",
+   "alt": [
+    {
+     "hsn": "5601",
+     "desc": "Wadding, cotton wicks"
+    }
+   ]
+  },
+  {
+   "id": "pulse-chana",
+   "hsn": "0713",
+   "desc": "Dried leguminous vegetables, shelled (pulses)",
+   "keywords": [
+    "chana dal",
+    "chana",
+    "kadalai paruppu",
+    "bengal gram",
+    "kondai kadalai",
+    "kabuli",
+    "chickpea",
+    "chick pea",
+    "channa",
+    "garbanzo",
+    "pottu kadalai",
+    "roasted gram",
+    "pottukadalai"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "flour",
+    "maavu",
+    "besan"
+   ]
+  },
+  {
+   "id": "pulse-moong",
+   "hsn": "0713",
+   "desc": "Dried leguminous vegetables, shelled (pulses)",
+   "keywords": [
+    "moong dal",
+    "moong",
+    "green gram",
+    "pasi paruppu",
+    "pasi payaru",
+    "pachai payaru",
+    "mung",
+    "mung dal",
+    "split moong"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "pulse-other",
+   "hsn": "0713",
+   "desc": "Dried leguminous vegetables, shelled (pulses)",
+   "keywords": [
+    "masoor dal",
+    "masoor",
+    "lentil",
+    "lentils",
+    "kollu",
+    "horse gram",
+    "rajma",
+    "kidney beans",
+    "peas",
+    "dried peas",
+    "green peas dried",
+    "mochai",
+    "avarai",
+    "thattai payaru",
+    "cowpea",
+    "karamani",
+    "lobia",
+    "paruppu",
+    "dal",
+    "dhal",
+    "payaru",
+    "pulses",
+    "legume"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "flour",
+    "vada",
+    "payasam",
+    "podi"
+   ]
+  },
+  {
+   "id": "pulse-toor",
+   "hsn": "0713",
+   "desc": "Dried leguminous vegetables, shelled (pulses)",
+   "keywords": [
+    "toor dal",
+    "thuvaram paruppu",
+    "tur dal",
+    "arhar",
+    "thuvaram",
+    "toor",
+    "pigeon pea"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "pulse-urad",
+   "hsn": "0713",
+   "desc": "Dried leguminous vegetables, shelled (pulses)",
+   "keywords": [
+    "urad dal",
+    "urad",
+    "black gram",
+    "ulutham paruppu",
+    "ulundu",
+    "ulunthu",
+    "ulundhu",
+    "ulundhu paruppu",
+    "urid",
+    "udad"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded pulses nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "rice",
+   "hsn": "1006",
+   "desc": "Rice",
+   "keywords": [
+    "rice",
+    "arisi",
+    "basmati",
+    "ponni",
+    "sona masoori",
+    "idli rice",
+    "raw rice",
+    "boiled rice",
+    "raw arisi",
+    "puzhungal arisi",
+    "pachai arisi",
+    "matta rice",
+    "brown rice",
+    "red rice",
+    "poha rice",
+    "parboiled"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded rice nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "flour",
+    "maavu",
+    "aval",
+    "poha",
+    "flakes",
+    "puffed",
+    "pori",
+    "bran",
+    "noodles",
+    "vermicelli",
+    "payasam",
+    "kanji",
+    "murukku",
+    "mix",
+    "podi"
+   ]
+  },
+  {
+   "id": "rice-flour",
+   "hsn": "1102",
+   "desc": "Cereal flours other than wheat (rice flour)",
+   "keywords": [
+    "rice flour",
+    "arisi maavu",
+    "arisi mavu",
+    "idiyappam flour",
+    "idiyappam maavu",
+    "puttu flour",
+    "puttu maavu",
+    "appam flour",
+    "appam maavu",
+    "corn flour",
+    "cornflour",
+    "maize flour",
+    "ragi flour",
+    "ragi maavu",
+    "kambu flour",
+    "cholam flour",
+    "millet flour",
+    "jowar flour",
+    "bajra flour",
+    "thinai maavu"
+   ],
+   "rate": 0,
+   "rateNote": "Flours: nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "sago",
+   "hsn": "1903",
+   "desc": "Tapioca and substitutes prepared from starch (sago, sabudana)",
+   "keywords": [
+    "sago",
+    "javvarisi",
+    "javarisi",
+    "sabudana",
+    "sabu dana",
+    "tapioca pearls",
+    "javvarisi maavu",
+    "saggubiyyam",
+    "maavu javvarisi"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "salt",
+   "hsn": "2501",
+   "desc": "Salt (including table salt)",
+   "keywords": [
+    "salt",
+    "uppu",
+    "iodised salt",
+    "iodized salt",
+    "rock salt",
+    "kal uppu",
+    "sendha namak",
+    "himalayan salt",
+    "black salt",
+    "sea salt",
+    "crystal salt",
+    "podi uppu",
+    "table salt"
+   ],
+   "rate": 0,
+   "rateNote": "Salt is nil rated; check pre-packed labelled (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "tea",
+    "coffee"
+   ]
+  },
+  {
+   "id": "seed-copra",
+   "hsn": "1203",
+   "desc": "Copra",
+   "keywords": [
+    "copra",
+    "kopra",
+    "kopparai",
+    "koparai",
+    "dry coconut",
+    "dried coconut",
+    "coconut copra",
+    "edible copra",
+    "ball copra"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "oil",
+    "cake",
+    "ennai",
+    "punnaku",
+    "poonaku"
+   ]
+  },
+  {
+   "id": "seed-groundnut",
+   "hsn": "1202",
+   "desc": "Ground-nuts, not roasted or cooked (in shell or shelled)",
+   "keywords": [
+    "groundnut",
+    "ground nut",
+    "peanut",
+    "verkadalai",
+    "kadalai kai",
+    "groundnut kernel",
+    "groundnut seed",
+    "groundnut seeds",
+    "groundnut shelled"
+   ],
+   "rate": 0,
+   "rateNote": "Unprocessed seed; often nil rated, pre-packed may be 5% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil",
+    "cake",
+    "punnaku",
+    "poonaku",
+    "ennai",
+    "butter",
+    "chikki",
+    "burfi",
+    "candy",
+    "mittai",
+    "roasted"
+   ]
+  },
+  {
+   "id": "seed-mustard",
+   "hsn": "1207",
+   "desc": "Mustard seeds, castor seeds and other oil seeds",
+   "keywords": [
+    "mustard seed",
+    "mustard seeds",
+    "kadugu",
+    "castor seed",
+    "castor seeds",
+    "aamanakku seed",
+    "amanakku vidhai",
+    "sunflower seed",
+    "sunflower seeds"
+   ],
+   "rate": 0,
+   "rateNote": "Unprocessed seed; often nil rated (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil",
+    "ennai"
+   ]
+  },
+  {
+   "id": "seed-sesame",
+   "hsn": "1207",
+   "desc": "Sesame seeds",
+   "keywords": [
+    "sesame seed",
+    "sesame seeds",
+    "sesame",
+    "gingelly seed",
+    "gingelly seeds",
+    "ellu",
+    "til",
+    "white sesame",
+    "black sesame",
+    "karuppu ellu",
+    "vellai ellu"
+   ],
+   "rate": 0,
+   "rateNote": "Unprocessed seed; often nil rated, pre-packed may be 5% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil",
+    "cake",
+    "punnaku",
+    "poonaku",
+    "ennai",
+    "chikki",
+    "candy",
+    "urundai",
+    "laddu"
+   ]
+  },
+  {
+   "id": "semolina",
+   "hsn": "1103",
+   "desc": "Cereal groats and meal (rava, sooji)",
+   "keywords": [
+    "rava",
+    "sooji",
+    "suji",
+    "semolina",
+    "rawa",
+    "wheat rava",
+    "bombay rava",
+    "samba rava",
+    "rice rava",
+    "idli rava",
+    "broken wheat",
+    "dalia",
+    "daliya",
+    "cracked wheat",
+    "godhumai rava"
+   ],
+   "rate": 0,
+   "rateNote": "Nil unbranded, 5% pre-packed branded (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "shampoo",
+   "hsn": "3305",
+   "desc": "Hair preparations: shampoo, hair powder",
+   "keywords": [
+    "shampoo",
+    "shikakai",
+    "shikakai powder",
+    "hair wash",
+    "conditioner",
+    "hair pack",
+    "hair powder",
+    "soap nut",
+    "poonthali",
+    "poonthali thool",
+    "reetha",
+    "aritha",
+    "herbal shampoo",
+    "hair dye",
+    "henna",
+    "mehendi",
+    "mehandi"
+   ],
+   "rate": 18,
+   "rateNote": "Cosmetics 18% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "skin",
+   "hsn": "3304",
+   "desc": "Beauty, make-up and skin-care preparations",
+   "keywords": [
+    "face pack",
+    "body scrub",
+    "face cream",
+    "cream",
+    "lotion",
+    "talc",
+    "talcum",
+    "body powder",
+    "nalangu maavu",
+    "nalangu mavu",
+    "bath powder",
+    "ubtan",
+    "ubtan powder",
+    "kadalai maavu bath",
+    "herbal powder",
+    "herbal face",
+    "lip balm",
+    "kajal",
+    "kohl",
+    "sunscreen",
+    "massage oil",
+    "body oil",
+    "bath oil",
+    "baby oil"
+   ],
+   "rate": 18,
+   "rateNote": "Cosmetics 18% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "3305",
+     "desc": "Hair preparations"
+    },
+    {
+     "hsn": "1515",
+     "desc": "Fixed vegetable oil, if sold only as an oil"
+    }
+   ]
+  },
+  {
+   "id": "soap",
+   "hsn": "3401",
+   "desc": "Soap and washing bars",
+   "keywords": [
+    "soap",
+    "soaps",
+    "bath soap",
+    "soap bar",
+    "herbal soap",
+    "handmade soap",
+    "kuppaimeni soap",
+    "neem soap",
+    "sandal soap",
+    "coconut soap",
+    "dish wash bar",
+    "washing bar",
+    "detergent bar",
+    "vim bar",
+    "rin bar",
+    "nirma bar"
+   ],
+   "rate": 18,
+   "rateNote": "Soap 18% (confirm with CA)",
+   "base": "medium",
+   "alt": [
+    {
+     "hsn": "3402",
+     "desc": "Washing and cleaning preparations"
+    }
+   ]
+  },
+  {
+   "id": "spice-cardamom",
+   "hsn": "0908",
+   "desc": "Nutmeg, mace and cardamoms",
+   "keywords": [
+    "cardamom",
+    "elakkai",
+    "elaichi",
+    "nutmeg",
+    "jathikai",
+    "mace",
+    "jathipathri"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "spice-cinnamon",
+   "hsn": "0906",
+   "desc": "Cinnamon and cinnamon-tree flowers",
+   "keywords": [
+    "cinnamon",
+    "pattai",
+    "patta",
+    "dalchini",
+    "lavangapattai",
+    "cassia"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "spice-clove",
+   "hsn": "0907",
+   "desc": "Cloves",
+   "keywords": [
+    "clove",
+    "cloves",
+    "kirambu",
+    "krambu",
+    "lavangam",
+    "laung"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "spice-coriander",
+   "hsn": "0909",
+   "desc": "Seeds of coriander, cumin, fennel, caraway, anise",
+   "keywords": [
+    "coriander",
+    "malli",
+    "dhania",
+    "dhaniya",
+    "cumin",
+    "jeera",
+    "jeeragam",
+    "seeragam",
+    "fennel",
+    "sombu",
+    "saunf",
+    "caraway",
+    "anise",
+    "ajwain",
+    "omam",
+    "omum",
+    "celery seed",
+    "kasa kasa",
+    "poppy seed",
+    "poppy seeds",
+    "khus khus"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "powder",
+    "masala",
+    "oil",
+    "leaf",
+    "leaves"
+   ],
+   "alt": [
+    {
+     "hsn": "1207",
+     "desc": "Poppy seeds, if classified as oil seeds"
+    }
+   ]
+  },
+  {
+   "id": "spice-masala",
+   "hsn": "0910",
+   "desc": "Mixtures of spices and masala",
+   "keywords": [
+    "masala",
+    "masala powder",
+    "sambar powder",
+    "sambhar powder",
+    "rasam powder",
+    "chilli powder",
+    "milagai thool",
+    "milagai podi",
+    "coriander powder",
+    "malli thool",
+    "turmeric powder",
+    "manjal thool",
+    "kulambu podi",
+    "kuzhambu podi",
+    "garam masala",
+    "chicken masala",
+    "fish masala",
+    "biryani masala",
+    "curry powder",
+    "idli podi",
+    "idly podi",
+    "podi",
+    "thool",
+    "spice powder",
+    "spices",
+    "pepper powder",
+    "jeera powder",
+    "chat masala",
+    "pav bhaji masala"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "face",
+    "hair",
+    "tooth",
+    "talc",
+    "body",
+    "baby",
+    "soap"
+   ]
+  },
+  {
+   "id": "spice-pepper",
+   "hsn": "0904",
+   "desc": "Pepper and dried chilli / capsicum",
+   "keywords": [
+    "pepper",
+    "black pepper",
+    "milagu",
+    "kurumilagu",
+    "white pepper",
+    "long pepper",
+    "thippili",
+    "dry chilli",
+    "dried chilli",
+    "red chilli",
+    "chilli",
+    "chillies",
+    "milagai",
+    "vara milagai",
+    "kashmiri chilli",
+    "guntur chilli",
+    "byadgi",
+    "chilli whole",
+    "chilli seeds"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "powder",
+    "masala",
+    "sauce",
+    "pickle",
+    "oil"
+   ]
+  },
+  {
+   "id": "spice-turmeric",
+   "hsn": "0910",
+   "desc": "Ginger, saffron, turmeric, fenugreek, thyme, bay leaves, curry",
+   "keywords": [
+    "turmeric",
+    "manjal",
+    "haldi",
+    "ginger",
+    "sukku",
+    "dry ginger",
+    "inji",
+    "fenugreek",
+    "vendhayam",
+    "venthayam",
+    "methi",
+    "saffron",
+    "kesar",
+    "bay leaf",
+    "bay leaves",
+    "curry leaf powder",
+    "spice mix"
+   ],
+   "rate": 5,
+   "rateNote": "Spices 5% pre-packed; unbranded nil (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "pickle",
+    "oil",
+    "tea"
+   ]
+  },
+  {
+   "id": "sugar",
+   "hsn": "1701",
+   "desc": "Cane or beet sugar",
+   "keywords": [
+    "sugar",
+    "sakkarai",
+    "sugar crystals",
+    "icing sugar",
+    "white sugar",
+    "brown sugar",
+    "sulphurless sugar",
+    "khandsari",
+    "mishri",
+    "kalkandu",
+    "kal kandu",
+    "rock sugar",
+    "candy sugar",
+    "sugar candy"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "sugarcane",
+    "chikki"
+   ]
+  },
+  {
+   "id": "tamarind",
+   "hsn": "0813",
+   "desc": "Dried fruit; tamarind",
+   "keywords": [
+    "tamarind",
+    "puli",
+    "pulinchi",
+    "imli",
+    "tamarind paste",
+    "puli paste"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "rice",
+    "sadam",
+    "thokku"
+   ]
+  },
+  {
+   "id": "tapioca",
+   "hsn": "0714",
+   "desc": "Manioc (tapioca, cassava), sweet potatoes, roots and tubers",
+   "keywords": [
+    "tapioca",
+    "cassava",
+    "maravalli kizhangu",
+    "kappa kizhangu",
+    "tapioca chips",
+    "sweet potato dried"
+   ],
+   "rate": 0,
+   "rateNote": "Fresh or dried roots nil rated (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "tea",
+   "hsn": "0902",
+   "desc": "Tea",
+   "keywords": [
+    "tea",
+    "tea powder",
+    "chai",
+    "tea dust",
+    "green tea",
+    "masala tea",
+    "tea leaves",
+    "chai patti",
+    "herbal tea"
+   ],
+   "rate": 5,
+   "rateNote": "Usually 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "cup",
+    "glass",
+    "spoon",
+    "strainer",
+    "tree"
+   ]
+  },
+  {
+   "id": "tin",
+   "hsn": "7310",
+   "desc": "Tanks, casks, drums, cans, boxes of iron or steel",
+   "keywords": [
+    "tin",
+    "tin can",
+    "empty tin",
+    "oil tin",
+    "metal can",
+    "steel can",
+    "15 kg tin",
+    "15 litre tin",
+    "tin container",
+    "iron tin",
+    "empty tin can",
+    "barrel",
+    "steel barrel",
+    "drum",
+    "steel drum",
+    "steel container"
+   ],
+   "rate": 18,
+   "rateNote": "Metal goods 18% (confirm with CA)",
+   "base": "medium",
+   "exclude": [
+    "oil",
+    "ghee",
+    "ennai"
+   ],
+   "alt": [
+    {
+     "hsn": "7612",
+     "desc": "Aluminium containers"
+    }
+   ],
+   "kind": "pack"
+  },
+  {
+   "id": "toothpaste",
+   "hsn": "3306",
+   "desc": "Oral hygiene preparations",
+   "keywords": [
+    "toothpaste",
+    "tooth paste",
+    "tooth powder",
+    "herbal tooth powder",
+    "vilvam",
+    "dental",
+    "mouth wash",
+    "neem toothpaste",
+    "datun",
+    "charcoal tooth powder"
+   ],
+   "rate": 18,
+   "rateNote": "Oral hygiene 18% (confirm with CA)",
+   "base": "medium"
+  },
+  {
+   "id": "vermicelli",
+   "hsn": "1902",
+   "desc": "Pasta, vermicelli, noodles",
+   "keywords": [
+    "vermicelli",
+    "semiya",
+    "sevai",
+    "noodles",
+    "pasta",
+    "macaroni",
+    "maggi",
+    "sevvai",
+    "instant noodles",
+    "rice noodles"
+   ],
+   "rate": 12,
+   "rateNote": "Rate differs for instant noodles (confirm with CA)",
+   "base": "high"
+  },
+  {
+   "id": "wheat",
+   "hsn": "1001",
+   "desc": "Wheat and meslin",
+   "keywords": [
+    "wheat",
+    "godhumai",
+    "gothumai",
+    "whole wheat",
+    "samba wheat",
+    "wheat grain"
+   ],
+   "rate": 0,
+   "rateNote": "Unbranded nil, pre-packed branded 5% (confirm with CA)",
+   "base": "high",
+   "exclude": [
+    "flour",
+    "maavu",
+    "atta",
+    "rava",
+    "bran",
+    "noodles",
+    "vermicelli",
+    "maida",
+    "dalia"
+   ]
+  },
+  {
+   "id": "wicks",
+   "hsn": "5601",
+   "desc": "Wadding, wicks of cotton",
+   "keywords": [
+    "cotton wick",
+    "cotton wicks",
+    "wick",
+    "wicks",
+    "vilakku thiri",
+    "thiri",
+    "pooja thiri",
+    "deepam thiri",
+    "kuthu vilakku thiri",
+    "pooja wicks",
+    "ghee wicks",
+    "lamp wicks",
+    "lamp wick"
+   ],
+   "rate": 12,
+   "rateNote": "Rate differs by item (confirm with CA)",
+   "base": "medium"
+  }
+ ]
+}

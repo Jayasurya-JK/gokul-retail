@@ -288,6 +288,10 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "transferToStore" => ok(crate::godown::transfer_to_store(c, &arg::<crate::godown::TransferInput>(a, 0, "input")?)?),
         "listGodownTransfers" => ok(crate::godown::list_godown_transfers(c, arg::<Option<i64>>(a, 0, "limit")?.unwrap_or(200))?),
         "getMillDaily" => ok(crate::godown::mill_daily(c, &arg::<String>(a, 0, "day")?)?),
+        "getGstrFacts" => ok(crate::gstr::gstr_facts(c, &arg::<String>(a, 0, "month")?)?),
+        "suggestHsn" => ok(crate::hsn::suggest_hsn(c, &arg::<Option<crate::hsn::SuggestOptions>>(a, 0, "options")?.unwrap_or_default())?),
+        "applyHsn" => ok(crate::hsn::apply_hsn(c, &arg::<Vec<crate::hsn::HsnUpdate>>(a, 0, "updates")?)?),
+        "previewHsnImport" => ok(crate::hsn::preview_hsn_import(c, &arg::<Vec<crate::hsn::ImportRow>>(a, 0, "rows")?)?),
         "getMillAnalysis" => ok(crate::analysis::get_mill_analysis(c, &arg::<crate::analysis::AnalysisQuery>(a, 0, "query")?)?),
 
         // ----- CrmApi -----
@@ -401,4 +405,5 @@ pub const METHODS: &[&str] = &[
     "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",
     "listGodownBarrels", "getGodownBarrel", "addGodownBarrels", "editGodownBarrel", "setGodownStatus", "recordStickReading", "recordOutsourcedOil",
     "listOutsourcedOil", "editOutsourcedOil", "deleteOutsourcedOil", "deleteStickReading", "editPressingBatch", "deletePressingBatch", "transferToStore", "listGodownTransfers", "getMillDaily", "getMillAnalysis",
+    "suggestHsn", "applyHsn", "previewHsnImport", "getGstrFacts",
 ];

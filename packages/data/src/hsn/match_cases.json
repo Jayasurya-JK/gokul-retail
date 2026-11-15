@@ -1,0 +1,583 @@
+{
+ "note": "Name to expected HSN and confidence for the HSN helper. Both the Rust core and the TypeScript mock must agree on every row (cargo test hsn; node packages/data/scripts/hsn-checks.mjs). null = no suggestion.",
+ "cases": [
+  {
+   "name": "Groundnut Oil 1 L",
+   "hsn": "1508",
+   "confidence": "high",
+   "matched": "groundnut oil",
+   "alt": []
+  },
+  {
+   "name": "Wood Pressed Groundnut Oil 1 Litre Pet Bottle",
+   "hsn": "1508",
+   "confidence": "high",
+   "matched": "groundnut oil",
+   "alt": []
+  },
+  {
+   "name": "Gingelly Oil (Loose)",
+   "hsn": "1515",
+   "confidence": "high",
+   "matched": "gingelly oil",
+   "alt": []
+  },
+  {
+   "name": "Sesame Oil 500 ml",
+   "hsn": "1515",
+   "confidence": "high",
+   "matched": "sesame oil",
+   "alt": []
+  },
+  {
+   "name": "Cold Pressed Coconut Oil 1 L",
+   "hsn": "1513",
+   "confidence": "high",
+   "matched": "coconut oil",
+   "alt": []
+  },
+  {
+   "name": "Virgin Coconut Oil 200 ml",
+   "hsn": "1513",
+   "confidence": "high",
+   "matched": "virgin coconut oil",
+   "alt": []
+  },
+  {
+   "name": "Mustard Oil 1 L",
+   "hsn": "1514",
+   "confidence": "high",
+   "matched": "mustard oil",
+   "alt": []
+  },
+  {
+   "name": "Castor Oil 100 ml",
+   "hsn": "1515",
+   "confidence": "high",
+   "matched": "castor oil",
+   "alt": [
+    "3004"
+   ]
+  },
+  {
+   "name": "Deepam Oil 1 L",
+   "hsn": "1518",
+   "confidence": "medium",
+   "matched": "deepam oil",
+   "alt": [
+    "1515"
+   ]
+  },
+  {
+   "name": "Neem Oil 200 ml",
+   "hsn": "1515",
+   "confidence": "medium",
+   "matched": "neem oil",
+   "alt": []
+  },
+  {
+   "name": "Sunflower Oil 1 L",
+   "hsn": "1512",
+   "confidence": "high",
+   "matched": "sunflower oil",
+   "alt": []
+  },
+  {
+   "name": "Palm Oil 15 L",
+   "hsn": "1511",
+   "confidence": "high",
+   "matched": "palm oil",
+   "alt": []
+  },
+  {
+   "name": "Groundnut Oil Cake (Loose)",
+   "hsn": "2305",
+   "confidence": "high",
+   "matched": "groundnut oil cake",
+   "alt": [
+    "2306"
+   ]
+  },
+  {
+   "name": "Coconut Oil Cake 1 kg",
+   "hsn": "2306",
+   "confidence": "high",
+   "matched": "coconut oil cake",
+   "alt": []
+  },
+  {
+   "name": "Gingelly Oil Cake 1 kg",
+   "hsn": "2306",
+   "confidence": "medium",
+   "matched": "oil cake",
+   "alt": [
+    "2305",
+    "2304"
+   ]
+  },
+  {
+   "name": "Punnaku 5 kg",
+   "hsn": "2306",
+   "confidence": "medium",
+   "matched": "punnaku",
+   "alt": [
+    "2305",
+    "2304"
+   ]
+  },
+  {
+   "name": "Ground Nut Cake",
+   "hsn": "2305",
+   "confidence": "high",
+   "matched": "ground nut cake",
+   "alt": [
+    "1905"
+   ]
+  },
+  {
+   "name": "Groundnut Kernel (Loose)",
+   "hsn": "1202",
+   "confidence": "medium",
+   "matched": "groundnut kernel",
+   "alt": []
+  },
+  {
+   "name": "Peanut Kernel 1 kg",
+   "hsn": "1202",
+   "confidence": "medium",
+   "matched": "peanut",
+   "alt": []
+  },
+  {
+   "name": "Sesame Seeds 500 g",
+   "hsn": "1207",
+   "confidence": "medium",
+   "matched": "sesame seeds",
+   "alt": []
+  },
+  {
+   "name": "White Gingelly Seed (Loose)",
+   "hsn": "1207",
+   "confidence": "medium",
+   "matched": "gingelly seed",
+   "alt": [
+    "1515"
+   ]
+  },
+  {
+   "name": "Copra 1 kg",
+   "hsn": "1203",
+   "confidence": "high",
+   "matched": "copra",
+   "alt": []
+  },
+  {
+   "name": "Dry Coconut Copra (Loose)",
+   "hsn": "1203",
+   "confidence": "high",
+   "matched": "coconut copra",
+   "alt": []
+  },
+  {
+   "name": "Karupatti 500 g",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "karupatti",
+   "alt": []
+  },
+  {
+   "name": "Palm Jaggery (Karupatti) 500 g",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "palm jaggery",
+   "alt": []
+  },
+  {
+   "name": "Vellam (Loose)",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "vellam",
+   "alt": []
+  },
+  {
+   "name": "Jaggery Powder 500 g",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "jaggery powder",
+   "alt": []
+  },
+  {
+   "name": "Sugar 1 kg",
+   "hsn": "1701",
+   "confidence": "high",
+   "matched": "sugar",
+   "alt": []
+  },
+  {
+   "name": "Cow Ghee 500 ml",
+   "hsn": "0405",
+   "confidence": "high",
+   "matched": "cow ghee",
+   "alt": []
+  },
+  {
+   "name": "Honey 250 g",
+   "hsn": "0409",
+   "confidence": "high",
+   "matched": "honey",
+   "alt": []
+  },
+  {
+   "name": "Black Pepper 100 g",
+   "hsn": "0904",
+   "confidence": "high",
+   "matched": "black pepper",
+   "alt": []
+  },
+  {
+   "name": "Turmeric Powder 100 g",
+   "hsn": "0910",
+   "confidence": "medium",
+   "matched": "turmeric powder",
+   "alt": []
+  },
+  {
+   "name": "Sambar Powder 200 g",
+   "hsn": "0910",
+   "confidence": "medium",
+   "matched": "sambar powder",
+   "alt": []
+  },
+  {
+   "name": "Chilli Powder 200 g",
+   "hsn": "0910",
+   "confidence": "medium",
+   "matched": "chilli powder",
+   "alt": []
+  },
+  {
+   "name": "Coriander Seed (Loose)",
+   "hsn": "0909",
+   "confidence": "high",
+   "matched": "coriander",
+   "alt": [
+    "1207"
+   ]
+  },
+  {
+   "name": "Cumin Seed (Loose)",
+   "hsn": "0909",
+   "confidence": "high",
+   "matched": "cumin",
+   "alt": [
+    "1207"
+   ]
+  },
+  {
+   "name": "Cardamom 50 g",
+   "hsn": "0908",
+   "confidence": "high",
+   "matched": "cardamom",
+   "alt": []
+  },
+  {
+   "name": "Toor Dal 1 kg",
+   "hsn": "0713",
+   "confidence": "high",
+   "matched": "toor dal",
+   "alt": []
+  },
+  {
+   "name": "Moong Dal (Loose)",
+   "hsn": "0713",
+   "confidence": "high",
+   "matched": "moong dal",
+   "alt": []
+  },
+  {
+   "name": "Urad Dal Split 1 kg",
+   "hsn": "0713",
+   "confidence": "high",
+   "matched": "urad dal",
+   "alt": []
+  },
+  {
+   "name": "Ponni Raw Rice 5 kg",
+   "hsn": "1006",
+   "confidence": "high",
+   "matched": "raw rice",
+   "alt": []
+  },
+  {
+   "name": "Idli Rice 1 kg",
+   "hsn": "1006",
+   "confidence": "high",
+   "matched": "idli rice",
+   "alt": []
+  },
+  {
+   "name": "Rice Flour 1 kg",
+   "hsn": "1102",
+   "confidence": "high",
+   "matched": "rice flour",
+   "alt": []
+  },
+  {
+   "name": "Wheat Atta 5 kg",
+   "hsn": "1101",
+   "confidence": "high",
+   "matched": "atta",
+   "alt": []
+  },
+  {
+   "name": "Maida 1 kg",
+   "hsn": "1101",
+   "confidence": "high",
+   "matched": "maida",
+   "alt": []
+  },
+  {
+   "name": "Rava (Sooji) 500 g",
+   "hsn": "1103",
+   "confidence": "high",
+   "matched": "sooji",
+   "alt": []
+  },
+  {
+   "name": "Besan 500 g",
+   "hsn": "1106",
+   "confidence": "high",
+   "matched": "besan",
+   "alt": []
+  },
+  {
+   "name": "Ragi Flour 1 kg",
+   "hsn": "1102",
+   "confidence": "high",
+   "matched": "ragi flour",
+   "alt": []
+  },
+  {
+   "name": "Ragi 1 kg",
+   "hsn": "1008",
+   "confidence": "medium",
+   "matched": "ragi",
+   "alt": []
+  },
+  {
+   "name": "Aval (Poha) 500 g",
+   "hsn": "1904",
+   "confidence": "medium",
+   "matched": "poha",
+   "alt": []
+  },
+  {
+   "name": "Sago (Javvarisi) 500 g",
+   "hsn": "1903",
+   "confidence": "high",
+   "matched": "javvarisi",
+   "alt": []
+  },
+  {
+   "name": "Rock Salt 1 kg",
+   "hsn": "2501",
+   "confidence": "high",
+   "matched": "rock salt",
+   "alt": []
+  },
+  {
+   "name": "Iodised Salt 1 kg",
+   "hsn": "2501",
+   "confidence": "high",
+   "matched": "iodised salt",
+   "alt": []
+  },
+  {
+   "name": "Tea Powder 250 g",
+   "hsn": "0902",
+   "confidence": "high",
+   "matched": "tea powder",
+   "alt": []
+  },
+  {
+   "name": "Filter Coffee Powder 200 g",
+   "hsn": "0901",
+   "confidence": "high",
+   "matched": "filter coffee",
+   "alt": []
+  },
+  {
+   "name": "Peanut Chikki 100 g",
+   "hsn": "1704",
+   "confidence": "medium",
+   "matched": "peanut chikki",
+   "alt": [
+    "2106",
+    "1806"
+   ]
+  },
+  {
+   "name": "Chocolate 50 g",
+   "hsn": "1806",
+   "confidence": "medium",
+   "matched": "chocolate",
+   "alt": []
+  },
+  {
+   "name": "Biscuits Marie 200 g",
+   "hsn": "1905",
+   "confidence": "medium",
+   "matched": "biscuits",
+   "alt": [
+    "2106"
+   ]
+  },
+  {
+   "name": "Appalam 200 g",
+   "hsn": "1905",
+   "confidence": "medium",
+   "matched": "appalam",
+   "alt": [
+    "2106"
+   ]
+  },
+  {
+   "name": "Mango Pickle 200 g",
+   "hsn": "2001",
+   "confidence": "medium",
+   "matched": "mango pickle",
+   "alt": [
+    "2007",
+    "2103"
+   ]
+  },
+  {
+   "name": "Agarbathi 1 pkt",
+   "hsn": "3307",
+   "confidence": "high",
+   "matched": "agarbathi",
+   "alt": []
+  },
+  {
+   "name": "Camphor 50 g",
+   "hsn": "2914",
+   "confidence": "medium",
+   "matched": "camphor",
+   "alt": [
+    "2906"
+   ]
+  },
+  {
+   "name": "Kumkum 50 g",
+   "hsn": "3304",
+   "confidence": "medium",
+   "matched": "kumkum",
+   "alt": [
+    "3307",
+    "3204"
+   ]
+  },
+  {
+   "name": "Matches 10 pcs",
+   "hsn": "3605",
+   "confidence": "high",
+   "matched": "matches",
+   "alt": []
+  },
+  {
+   "name": "Empty Bottle 1 L",
+   "hsn": "7010",
+   "confidence": "medium",
+   "matched": "empty bottle",
+   "alt": [
+    "3923"
+   ]
+  },
+  {
+   "name": "Plastic Bottle 500 ml",
+   "hsn": "3923",
+   "confidence": "medium",
+   "matched": "plastic bottle",
+   "alt": []
+  },
+  {
+   "name": "Empty Tin 15 L",
+   "hsn": "7310",
+   "confidence": "medium",
+   "matched": "empty tin",
+   "alt": [
+    "7612"
+   ]
+  },
+  {
+   "name": "Dish Wash Bar 300 g",
+   "hsn": "3401",
+   "confidence": "medium",
+   "matched": "dish wash bar",
+   "alt": [
+    "3402"
+   ]
+  },
+  {
+   "name": "Bath Soap Neem",
+   "hsn": "3401",
+   "confidence": "medium",
+   "matched": "bath soap",
+   "alt": [
+    "3402"
+   ]
+  },
+  {
+   "name": "Hair Oil Herbal 100 ml",
+   "hsn": "3305",
+   "confidence": "medium",
+   "matched": "hair oil",
+   "alt": [
+    "1515"
+   ]
+  },
+  {
+   "name": "Cotton Wicks 1 pkt",
+   "hsn": "5601",
+   "confidence": "medium",
+   "matched": "cotton wicks",
+   "alt": []
+  },
+  {
+   "name": "Vermicelli 180 g",
+   "hsn": "1902",
+   "confidence": "high",
+   "matched": "vermicelli",
+   "alt": []
+  },
+  {
+   "name": "Tamarind 1 kg",
+   "hsn": "0813",
+   "confidence": "medium",
+   "matched": "tamarind",
+   "alt": []
+  },
+  {
+   "name": "Dry Red Chilli 500 g",
+   "hsn": "0904",
+   "confidence": "high",
+   "matched": "red chilli",
+   "alt": []
+  },
+  {
+   "name": "Cashew Nut 250 g",
+   "hsn": "0801",
+   "confidence": "high",
+   "matched": "cashew nut",
+   "alt": []
+  },
+  {
+   "name": "Plain Item",
+   "hsn": null
+  },
+  {
+   "name": "Gift Hamper",
+   "hsn": null
+  }
+ ]
+}
