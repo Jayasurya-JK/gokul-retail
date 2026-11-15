@@ -945,11 +945,33 @@ try {
     Say ('Phase A took ' + [math]::Floor($phaseAElapsed.TotalMinutes) + ' min ' + $phaseAElapsed.Seconds + ' s.') 'Cyan'
 }
 
+$script:FallbackUsed = $false
+$script:FallbackBakOk = 0
 if (-not $phaseAOk) {
+    # FALLBACK: the live database could not be paused. POSBean's own backup files (*.bak) are
+    # complete, consistent copies and are NOT held open by SQL Server, so copy those instead,
+    # then carry on with Phase B. Nothing is stopped here.
     Say ''
-    Say 'Phase A did not finish. Phase B and the zip were NOT started. Billing has been restarted.' 'Red'
-    Say ('Partial files, if any, are in ' + $script:OutDir + '. Check run-log.txt.') 'Yellow'
-    exit 1
+    Say 'The live database could not be paused, so it was NOT copied. Billing is running.' 'Yellow'
+    Say 'Copying POSBean''s own backup files (*.bak) instead - these are full, clean copies of the database...' 'Cyan'
+    $script:FallbackUsed = $true
+    $VerifyResults.Clear()
+    $bakFiles = @($dbFiles | Where-Object { $_.Path.ToLower().EndsWith('.bak') })
+    foreach ($f in $bakFiles) {
+        $srcDir = Split-Path -Path $f.Path -Parent
+        $fileName = Split-Path -Path $f.Path -Leaf
+        $targetDir = $script:OutDir + '\database-files\' + $f.Drive + $srcDir.Substring(2)
+        $code = Invoke-Robo -Source $srcDir -Target $targetDir -Options @('/COPY:DAT', '/XJ') -FileName $fileName
+        $expect = [System.IO.Path]::Combine($targetDir, $fileName)
+        if ((Test-Path -LiteralPath $expect) -and ([int64](Get-Item -LiteralPath $expect).Length -eq [int64]$f.Size)) {
+            $script:FallbackBakOk++
+            [void]$VerifyResults.Add('OK             ' + $f.Path + '   ->   ' + $expect + '   (' + (MB $f.Size) + ' MB)')
+        } else {
+            [void]$VerifyResults.Add('NOT COPIED     ' + $f.Path + '   (robocopy code ' + $code + ')')
+        }
+    }
+    Say ('Backup files copied and verified: ' + $script:FallbackBakOk + ' of ' + $bakFiles.Count) 'Cyan'
+    Say 'Continuing with the rest of the copy (C: and D:). You can keep billing.' 'Cyan'
 }
 
 # ---------- PHASE B: POSBean may be running ----------
@@ -1117,7 +1139,22 @@ Say ''
 Say ('Nothing on this computer was deleted, formatted or changed except the new folder ' + $script:OutDir + '.') 'Green'
 Write-Host ''
 $bar = ''.PadRight(66, '#')
-if ($cntBad -eq 0 -and $cntOk -eq $dbFiles.Count) {
+if ($script:FallbackUsed) {
+    if ($script:FallbackBakOk -gt 0) {
+        Write-Host $bar -ForegroundColor Yellow
+        Write-Host '#   JOB DONE (USING POSBEAN BACKUP FILES).  YOU CAN CLOSE THIS.   #' -ForegroundColor Yellow
+        Write-Host '#   The live database was busy, but POSBean''s own full backups   #' -ForegroundColor Yellow
+        Write-Host '#   (.bak) were copied. Eject the disk and bring it back.        #' -ForegroundColor Yellow
+        Write-Host $bar -ForegroundColor Yellow
+        try { Add-Content -Path $script:LogFile -Value 'JOB DONE USING BAK BACKUPS (live DB not paused).' -Encoding ASCII } catch { }
+    } else {
+        Write-Host $bar -ForegroundColor Red
+        Write-Host '#   JOB NOT COMPLETE - no database copy was made.                #' -ForegroundColor Red
+        Write-Host '#   Take a PHOTO of this screen and send it before closing.      #' -ForegroundColor Red
+        Write-Host $bar -ForegroundColor Red
+        try { Add-Content -Path $script:LogFile -Value 'JOB NOT COMPLETE (no database copy).' -Encoding ASCII } catch { }
+    }
+} elseif ($cntBad -eq 0 -and $cntOk -eq $dbFiles.Count) {
     Write-Host $bar -ForegroundColor Green
     Write-Host '#                                                                #' -ForegroundColor Green
     Write-Host '#        JOB COMPLETE - ALL DATA COPIED.  YOU CAN CLOSE THIS.     #' -ForegroundColor Green
