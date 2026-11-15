@@ -282,6 +282,8 @@ export interface PrinterSettings {
   mode: 'escpos' | 'driver';
   printLogo: boolean;
   billPrinter: string;
+  /** Printer for A4 tax invoices (laser or inkjet, through the Windows driver); empty = the Windows default printer */
+  a4Printer?: string;
   labelPrinter: string;
   autoPrint: boolean;
   openDrawerOnCash: boolean;
@@ -517,6 +519,8 @@ export interface PrintOptions {
   change?: Paise;
   /** The Z report that was just closed */
   payload?: unknown;
+  /** 'a4' = a tax invoice (or credit note) on an A4 sheet through the Windows printer driver; omit for the bill printer's roll */
+  format?: 'a4' | 'thermal';
 }
 export interface PrinterStatus {
   configured: boolean;

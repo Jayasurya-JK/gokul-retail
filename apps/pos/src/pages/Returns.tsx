@@ -155,7 +155,7 @@ export function Returns() {
   const quote = useMemo(() => {
     if (!bill) return null;
     const list = Object.entries(picks).map(([i, qty]) => ({ lineIndex: Number(i), qty }));
-    return { list, ...quoteReturn(bill, list, settings?.roundToRupee ?? true) };
+    return { list, ...quoteReturn(bill, list, settings?.roundToRupee ?? true, bill.supplyType === 'inter') };
   }, [bill, picks, settings]);
   const count = quote?.list.length ?? 0;
   const creditBlock = !!bill && billHasCredit(bill);
@@ -201,8 +201,9 @@ export function Returns() {
 
   const draftNote: CreditNote | null = bill && quote && count > 0 ? {
     id: 'draft', number: 'DRAFT', at: new Date().toISOString(), billId: bill.id, billNumber: bill.number,
-    customerId: bill.customerId, customerName: bill.customerName, lines: quote.lines, totals: quote.totals,
+    customerId: bill.customerId, customerName: bill.customerName, lines: quote.lines.map((l, i) => ({ ...l, tax: quote.taxes[i] })), totals: quote.totals,
     reason: reason || 'Not chosen yet', refundMode: mode, by: user?.name ?? '',
+    billAt: bill.at, placeOfSupply: bill.placeOfSupply, supplyType: bill.supplyType, customerGstin: bill.customerGstin, customerAddress: bill.customerAddress,
   } : null;
 
   /* ---- keys ---- */
@@ -514,6 +515,7 @@ export function Returns() {
           <CreditNoteDialog
             open={dialog === 'done'} note={made} settings={settings} onClose={finish}
             onPrint={() => { if (made) void printWithToast('creditNote', made.id, {}, toast, `Printed ${made.number}`); }}
+            onPrintA4={() => { if (made) void printWithToast('creditNote', made.id, { format: 'a4' }, toast, `Printed ${made.number} on A4`); }}
             primary={{ label: made?.refundMode === 'exchange' ? 'New bill with credit' : 'Done', onClick: finish }}
           />
         </>

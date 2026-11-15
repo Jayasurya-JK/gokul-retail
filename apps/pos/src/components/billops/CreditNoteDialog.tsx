@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { ArrowRight, Printer } from 'lucide-react';
-import { formatQty, isDecimalUnit, type CreditNote, type Settings } from '@gokul/data';
-import { Badge, Button, Dialog, Money, ReceiptPreview } from '@gokul/ui';
-import { dateTimeOf, noteReceipt, refundLabel } from './helpers';
+import { formatQty, invoiceFromCreditNote, isDecimalUnit, placeText, supplierFromSettings, type CreditNote, type Settings } from '@gokul/data';
+import { Badge, Button, Dialog, Money, TaxInvoicePreview } from '@gokul/ui';
+import { dateTimeOf, refundLabel } from './helpers';
 
 /** Credit note: summary on the left, the 80mm paper on the right. */
-export function CreditNoteDialog({ open, note, settings, onClose, onPrint, primary }: {
+export function CreditNoteDialog({ open, note, settings, onClose, onPrint, onPrintA4, primary }: {
   open: boolean; note: CreditNote | null; settings: Settings; onClose: () => void; onPrint: () => void;
+  /** Print the credit note on an A4 sheet (the tax invoice paper) */
+  onPrintA4?: () => void;
   /** Extra primary action shown after a return, e.g. "Continue to new bill" */
   primary?: { label: string; onClick: () => void };
 }) {
@@ -25,6 +27,7 @@ export function CreditNoteDialog({ open, note, settings, onClose, onPrint, prima
       bodyClassName="p-0"
       footer={<>
         <Button onClick={onClose} kbd="Esc">Close</Button>
+        {onPrintA4 && <Button icon={<Printer size={15} />} onClick={onPrintA4}>Print on A4</Button>}
         <Button icon={<Printer size={15} />} onClick={onPrint} kbd="Ctrl+P" variant={primary ? 'secondary' : 'primary'}>Print credit note</Button>
         {primary && <Button variant="primary" data-autofocus icon={<ArrowRight size={15} />} onClick={primary.onClick} kbd="Enter">{primary.label}</Button>}
       </>}
@@ -56,17 +59,19 @@ export function CreditNoteDialog({ open, note, settings, onClose, onPrint, prima
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between"><dt className="text-muted">Taxable value</dt><dd><Money paise={t.taxable} /></dd></div>
             {t.slabs.map((s) => (
-              <div key={s.rate} className="flex justify-between text-muted"><dt>GST {s.rate}% reversed (CGST + SGST)</dt><dd><Money paise={s.cgst + s.sgst} /></dd></div>
+              <div key={s.rate} className="flex justify-between text-muted"><dt>GST {s.rate}% reversed ({s.igst ? 'IGST' : 'CGST + SGST'})</dt><dd><Money paise={s.cgst + s.sgst + (s.igst ?? 0)} /></dd></div>
             ))}
             {t.roundOff !== 0 && <div className="flex justify-between text-muted"><dt>Round off</dt><dd><Money paise={t.roundOff} sign /></dd></div>}
             <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Refund total</dt><dd><Money paise={t.grand} /></dd></div>
           </dl>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             <Badge tone="neutral">Reason: {note.reason}</Badge><Badge tone="neutral">By {note.by}</Badge>
+            {note.placeOfSupply && <Badge tone={note.supplyType === 'inter' ? 'warning' : 'neutral'}>{placeText(note.placeOfSupply)}{note.supplyType === 'inter' ? ' - IGST' : ''}</Badge>}
+            {note.customerGstin && <Badge tone="info">B2B {note.customerGstin}</Badge>}
           </div>
         </div>
         <div className="overflow-y-auto border-l border-line bg-surface-3 p-4">
-          <ReceiptPreview data={noteReceipt(note)} settings={settings} />
+          <TaxInvoicePreview layout="thermal" data={invoiceFromCreditNote(note, { supplier: supplierFromSettings(settings) })} />
         </div>
       </div>
     </Dialog>

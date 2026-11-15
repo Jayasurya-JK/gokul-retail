@@ -70,7 +70,7 @@ export const billHasCredit = (b: Bill) => b.payments.some((p) => p.mode === 'cre
  * Each returned line refunds its own (discounted) amount pro-rata, plus its share of any
  * bill-level discount, then GST is reversed with the same slab rules as a bill.
  */
-export function quoteReturn(bill: Bill, picks: ReturnPick[], roundToRupee = true, inter = false): { lines: BillLine[]; totals: BillTotals; taxes: LineTax[] } {
+export function quoteReturn(bill: Bill, picks: ReturnPick[], roundToRupee = true, inter = bill.supplyType === 'inter'): { lines: BillLine[]; totals: BillTotals; taxes: LineTax[] } {
   const lines: BillLine[] = [];
   for (const p of picks) {
     const l = bill.lines[p.lineIndex];

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Printer, ReceiptIndianRupee, Search } from 'lucide-react';
-import { billTitleFor, formatQty, formatRupees, printNumber, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
+import { Download, FileText, Printer, ReceiptIndianRupee, Search } from 'lucide-react';
+import { billTitleFor, formatQty, formatRupees, invoiceFromBill, needsFullInvoice, placeText, printNumber, supplierFromSettings, type PayMode, type SalesBill, type SalesFilterOptions, type SalesStatus, type Settings } from '@gokul/data';
 import {
-  Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, Tabs, TabPanel,
+  Badge, Button, DataTable, DateRangePicker, EmptyState, FilterBar, InvoiceDialog, Kbd, Money, PageHeader, ReceiptPreview, SearchInput, Select, TaxInvoicePreview, Tabs, TabPanel,
   dateRangePresets, useToast, type ColumnDef, type DateRange, useRefreshOnFocus
 } from '@gokul/ui';
 import { api } from '../store';
@@ -39,7 +39,9 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
   }, [billCustomer]);
   const toast = useToast();
   const [tab, setTab] = useState('details');
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const t = bill.totals;
+  const invoiceData = settings ? invoiceFromBill(bill, { supplier: supplierFromSettings(settings), numberFormat: cfg?.billFormat.numberFormat }) : null;
   return (
     <DetailPane width={390}>
       <div className="border-b border-line px-4 pb-3 pt-4">
@@ -55,8 +57,17 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
             <div className="text-xs text-muted">Bill total</div>
             <div className="text-2xl font-semibold num"><Money paise={t.grand} /></div>
           </div>
+          <div className="flex gap-1.5">
+          <Button size="sm" icon={<FileText size={14} />} disabled={!invoiceData} onClick={() => setInvoiceOpen(true)}>Tax invoice</Button>
           <Button size="sm" icon={<Printer size={14} />} onClick={() => void api.printDocument('bill', bill.id, { duplicate: true }).then((r) => toast.show(r.ok ? { tone: 'success', title: 'Reprint sent', detail: `${bill.number} printed as DUPLICATE COPY.` } : { tone: 'error', title: `Printing failed: ${r.message}` }))}>Reprint</Button>
+          </div>
         </div>
+        {bill.placeOfSupply && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {bill.customerGstin && <Badge tone="info">B2B {bill.customerGstin}</Badge>}
+            <Badge tone={bill.supplyType === 'inter' ? 'warning' : 'success'}>{placeText(bill.placeOfSupply)}{bill.supplyType === 'inter' ? ' - IGST' : ' - local'}</Badge>
+          </div>
+        )}
         {bill.reason && (
           <div className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-sm">
             <span className="font-medium text-ink">{bill.status === 'cancelled' ? 'Cancelled' : 'Returned'}:</span>{' '}
@@ -116,7 +127,8 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
           </div>
         </TabPanel>
         <TabPanel value="receipt" className="min-h-0 flex-1 overflow-auto bg-surface-3 px-4 py-5 outline-none">
-          {settings && (
+          {settings && needsFullInvoice(bill) && invoiceData && <TaxInvoicePreview layout="thermal" data={invoiceData} />}
+          {settings && !needsFullInvoice(bill) && (
             <ReceiptPreview
               settings={settings} shop={cfg}
               data={{
@@ -130,6 +142,10 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
           )}
         </TabPanel>
       </Tabs>
+      <InvoiceDialog
+        open={invoiceOpen} data={invoiceData} onClose={() => setInvoiceOpen(false)}
+        onPrint={(layout) => void api.printDocument('bill', bill.id, { duplicate: true, format: layout === 'a4' ? 'a4' : undefined }).then((r) => toast.show(r.ok ? { tone: 'success', title: 'Sent to the printer', detail: r.message } : { tone: 'error', title: `Printing failed: ${r.message}` }))}
+      />
     </DetailPane>
   );
 }

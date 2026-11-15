@@ -41,17 +41,33 @@ pub fn print(printer: &str, output: Option<&std::path::Path>, doc_name: &str, it
         SetBkMode(dc, 1); // transparent
 
         let page_w = GetDeviceCaps(dc, 8 /* HORZRES */).max(100);
+        let page_h = GetDeviceCaps(dc, 10 /* VERTRES */).max(100);
         let cols = paper.cols() as i32;
         let cw = (page_w / cols).max(4); // pixels per character cell
+        // A sheet of paper has pages: tighter lines than a roll, and a new page when the next line would run off the bottom.
+        let sheet = paper == Paper::A4;
+        let (font_h, lh) = if sheet { (cw * 9 / 5, cw * 2) } else { (cw * 2, cw * 2 + cw / 2) };
         let mk = |scale: i32, bold: bool| {
             let face = wide("Consolas");
-            CreateFontW(-(cw * 2 * scale), cw * scale, 0, 0, if bold { 700 } else { 400 }, 0, 0, 0, 0, 0, 0, 4, 49, face.as_ptr())
+            CreateFontW(-(font_h * scale), cw * scale, 0, 0, if bold { 700 } else { 400 }, 0, 0, 0, 0, 0, 0, 4, 49, face.as_ptr())
         };
         let fonts = [mk(1, false), mk(1, true), mk(2, false), mk(2, true)];
         let mut y = 0i32;
-        let lh = cw * 2 + cw / 2;
         let mut cur = 99usize;
         for it in items {
+            if sheet {
+                let need = match it {
+                    Item::Line { big, .. } => if *big { lh * 2 } else { lh },
+                    _ => lh * 4,
+                };
+                if y > 0 && y + need > page_h {
+                    EndPage(dc);
+                    StartPage(dc);
+                    SetBkMode(dc, 1);
+                    y = 0;
+                    cur = 99;
+                }
+            }
             match it {
                 Item::Line { text, bold, big } => {
                     let idx = (*big as usize) * 2 + *bold as usize;

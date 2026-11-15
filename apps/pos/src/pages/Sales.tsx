@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, ChevronLeft, ChevronRight, CornerUpLeft, Lock, Printer, ReceiptIndianRupee, Search, X } from 'lucide-react';
-import { formatQty, isDecimalUnit, type Bill, type BillDetail, type CreditNote, type PayMode } from '@gokul/data';
+import { Ban, ChevronLeft, ChevronRight, CornerUpLeft, FileText, Lock, Printer, ReceiptIndianRupee, Search, X } from 'lucide-react';
+import { formatQty, invoiceFromBill, invoiceFromCreditNote, isDecimalUnit, needsFullInvoice, supplierFromSettings, type Bill, type BillDetail, type CreditNote, type InvoiceData, type PayMode } from '@gokul/data';
 import { printWithToast } from '../printing';
 import { useScanHandler } from '../scanner';
 import { useReceiptConfig } from '../receiptConfig';
-import { Badge, Button, EmptyState, IconButton, Input, Kbd, Money, PosLayout, ReceiptPreview, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
+import { Badge, Button, EmptyState, IconButton, InvoiceDialog, Input, Kbd, Money, PosLayout, ReceiptPreview, TaxInvoicePreview, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 import { BillDetailPane } from '../components/billops/BillDetailPane';
 import { CancelBillDialog } from '../components/billops/CancelBillDialog';
 import { CreditNoteDialog } from '../components/billops/CreditNoteDialog';
-import { billReceipt, dayKey, dayLabel, dateTimeOf, modeLabel, noteReceipt, payLabel, refundLabel, shiftDay, timeOf } from '../components/billops/helpers';
+import { billReceipt, dayKey, dayLabel, dateTimeOf, modeLabel, payLabel, refundLabel, shiftDay, timeOf } from '../components/billops/helpers';
 
 type Dialog = null | 'cancel' | 'note';
 /** The list shows bills (default) or the credit notes of the day (the Returns tile) */
@@ -68,6 +68,9 @@ export function Sales() {
   const [version, setVersion] = useState(0);
   useRefreshOnFocus(() => setVersion((v) => v + 1));
   const [dialog, setDialog] = useState<Dialog>(null);
+  /** The tax invoice / credit note as it prints, with the choice of an A4 sheet or the roll */
+  const [invoice, setInvoice] = useState<InvoiceData | null>(null);
+  const [invoiceFor, setInvoiceFor] = useState<{ kind: 'bill' | 'creditNote'; id: string } | null>(null);
   const [note, setNote] = useState<CreditNote | null>(null);
   const [notes, setNotes] = useState<CreditNote[]>([]);
   const [view, setView] = useState<View>('bills');
@@ -143,6 +146,8 @@ export function Sales() {
   const refocus = useCallback(() => requestAnimationFrame(() => searchRef.current?.focus()), []);
   useEffect(() => { refocus(); }, [refocus]);
 
+  const invoiceCtx = useMemo(() => ({ supplier: supplierFromSettings(settings ?? { shopName: '', address: '', gstin: '', phone: '', counter: '', billPrefix: '', receiptFooter: '', printer: '', roundToRupee: true }), numberFormat: receiptCfg?.billFormat.numberFormat }), [settings, receiptCfg]);
+  const openInvoice = useCallback((target: { kind: 'bill' | 'creditNote'; id: string }, data: InvoiceData) => { setInvoiceFor(target); setInvoice(data); }, []);
   const reprint = useCallback(async () => {
     if (!detail || detail.bill.status === 'cancelled') { toast.show({ tone: 'info', title: 'Cancelled bills cannot be printed' }); return; }
     await api.recordReprint(detail.bill.id, user?.name ?? '');
@@ -380,6 +385,7 @@ export function Sales() {
                   <NotePane note={selNote} />
                   <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2 px-5 py-2.5">
                     <Button variant="primary" icon={<Printer size={15} />} kbd="Enter" onClick={printNote}>Print credit note</Button>
+                    <Button icon={<FileText size={15} />} onClick={() => openInvoice({ kind: 'creditNote', id: selNote.id }, invoiceFromCreditNote(selNote, invoiceCtx))}>Credit note on A4</Button>
                     <Button icon={<ReceiptIndianRupee size={15} />} onClick={() => openBillOfNote(selNote)}>Open bill {selNote.billNumber}</Button>
                     <div className="flex-1" />
                     <ReceiptToggle on={showReceipt} onToggle={() => setShowReceipt((v) => !v)} />
@@ -393,6 +399,7 @@ export function Sales() {
                 <BillDetailPane detail={detail} onOpenNote={(n) => { setNote(n); setDialog('note'); }} />
                 <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2 px-5 py-2.5">
                   <Button variant="primary" icon={<Printer size={15} />} kbd="Ctrl+P" disabled={cancelled} onClick={() => void reprint()}>Reprint bill</Button>
+                  <Button icon={<FileText size={15} />} disabled={cancelled} onClick={() => openInvoice({ kind: 'bill', id: detail.bill.id }, invoiceFromBill(detail.bill, invoiceCtx))}>Tax invoice</Button>
                   <Button icon={<CornerUpLeft size={15} />} kbd="F10" disabled={cancelled} onClick={startReturn}>Return items</Button>
                   <ReceiptToggle on={showReceipt} onToggle={() => setShowReceipt((v) => !v)} />
                   <div className="flex-1" />
@@ -411,19 +418,26 @@ export function Sales() {
               {/* The whole receipt scrolls inside this panel; the torn bottom edge stays after the last line. */}
               <div className="min-h-0 flex-1 overflow-y-auto pb-4">
                 {showingNotes
-                  ? selNote && <ReceiptPreview data={noteReceipt(selNote)} settings={settings} shop={receiptCfg} />
-                  : detail && <ReceiptPreview data={{ ...billReceipt(detail, receiptCfg), ...walletBits }} settings={settings} shop={receiptCfg} />}
+                  ? selNote && <TaxInvoicePreview layout="thermal" data={invoiceFromCreditNote(selNote, invoiceCtx)} />
+                  : detail && (needsFullInvoice(detail.bill)
+                    ? <TaxInvoicePreview layout="thermal" data={invoiceFromBill(detail.bill, invoiceCtx)} />
+                    : <ReceiptPreview data={{ ...billReceipt(detail, receiptCfg), ...walletBits }} settings={settings} shop={receiptCfg} />)}
               </div>
             </aside>
           )}
         </section>
       </div>
 
+      <InvoiceDialog
+        open={!!invoice} data={invoice} onClose={() => setInvoice(null)}
+        onPrint={(layout) => { if (invoiceFor) void printWithToast(invoiceFor.kind, invoiceFor.id, { duplicate: true, format: layout === 'a4' ? 'a4' : undefined }, toast, `Printed ${invoice?.number ?? ''}`); }}
+      />
       <CancelBillDialog open={dialog === 'cancel'} detail={detail} onClose={closeDialog} onConfirm={doCancel} />
       {settings && (
         <CreditNoteDialog
           open={dialog === 'note'} note={note} settings={settings} onClose={closeDialog}
           onPrint={() => { if (note) void printWithToast('creditNote', note.id, { duplicate: true }, toast, `Printed ${note.number}`); }}
+          onPrintA4={() => { if (note) void printWithToast('creditNote', note.id, { duplicate: true, format: 'a4' }, toast, `Printed ${note.number} on A4`); }}
         />
       )}
     </PosLayout>

@@ -29,6 +29,10 @@ impl Style {
         self.align = Align::Center;
         self
     }
+    pub const fn align_right(mut self) -> Style {
+        self.align = Align::Right;
+        self
+    }
 }
 
 #[derive(Debug, Clone)]

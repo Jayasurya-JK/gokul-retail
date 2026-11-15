@@ -9,6 +9,8 @@ pub enum Paper {
     Mm80,
     /// 58 mm roll: 32 columns in font A.
     Mm58,
+    /// A4 sheet through the Windows driver (laser or inkjet): 96 columns of monospace text, several pages when needed.
+    A4,
 }
 
 impl Paper {
@@ -16,6 +18,7 @@ impl Paper {
         match self {
             Paper::Mm80 => 48,
             Paper::Mm58 => 32,
+            Paper::A4 => 96,
         }
     }
     /// Printable width in dots (203 dpi).
@@ -23,10 +26,14 @@ impl Paper {
         match self {
             Paper::Mm80 => 576,
             Paper::Mm58 => 384,
+            Paper::A4 => 960,
         }
     }
     pub fn from_setting(s: &str) -> Paper {
-        if s.trim().starts_with("58") {
+        let s = s.trim().to_lowercase();
+        if s.starts_with("a4") {
+            Paper::A4
+        } else if s.starts_with("58") {
             Paper::Mm58
         } else {
             Paper::Mm80

@@ -28,6 +28,8 @@ pub enum Mode {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub printer: String,
+    /// Printer for A4 tax invoices (a laser or inkjet through the Windows driver); empty = the Windows default printer.
+    pub a4_printer: String,
     pub mode: Mode,
     pub paper: Paper,
     pub copies: u8,
@@ -101,6 +103,7 @@ pub fn load_config(conn: &Connection) -> Result<Config> {
     let footer = if text(&f["footer"]).is_empty() { s.receipt_footer.clone() } else { text(&f["footer"]) };
     Ok(Config {
         printer,
+        a4_printer: text(&p["a4Printer"]),
         mode: if p["mode"].as_str() == Some("driver") { Mode::Driver } else { Mode::Escpos },
         paper: Paper::from_setting(f["paper"].as_str().unwrap_or("80mm")),
         copies: f["copies"].as_i64().unwrap_or(1).clamp(1, 3) as u8,
@@ -298,52 +301,14 @@ fn gst_table(d: &mut Doc, c: &Config, slabs: &[GstSlab]) {
     }
 }
 
-/// Lines, totals and GST table, shared by the bill and the credit note.
-fn body(d: &mut Doc, c: &Config, conn: &Connection, lines: &[BillLine], t: &BillTotals, refund: bool) -> Result<i64> {
-    let sign = if refund { "-" } else { "" };
-    d.pair_styled("Item", "Amount", BOLD);
-    let mut saved = 0i64;
-    for l in lines {
-        let (hsn, mrp): (String, i64) = conn
-            .query_row("SELECT hsn, mrp FROM items WHERE id=?1", [&l.item_id], |r| Ok((r.get(0)?, r.get(1)?)))
-            .optional()?
-            .unwrap_or_default();
-        if mrp > l.rate && l.qty > 0 {
-            saved += (mrp - l.rate) * l.qty / 1000;
-        }
-        d.text(l.name.clone(), BOLD);
-        let gst = if l.gst_rate > 0.0 { format!(" ({}%)", l.gst_rate) } else { String::new() };
-        let hs = if c.show_hsn && !hsn.is_empty() { format!(" HSN {hsn}") } else { String::new() };
-        d.pair(format!("  {} {} x {}{gst}{hs}", qty(l.qty), l.unit, money(l.rate)), format!("{sign}{}", money(l.amount)));
-        if l.discount > 0 {
-            d.pair("  Discount", format!("-{}", money(l.discount)));
-        }
-    }
-    d.rule();
-    d.pair(format!("Items {}", t.item_count), format!("Qty {}", qty(t.qty_count)));
-    d.pair("Sub total", format!("{sign}{}", money(t.gross)));
-    if t.discount > 0 {
-        d.pair("Discount", format!("-{}", money(t.discount)));
-    }
-    if t.round_off != 0 {
-        d.pair("Round off", format!("{}{}", if t.round_off > 0 { "+" } else { "-" }, money(t.round_off.abs())));
-    }
-    d.push(Op::Rule('='));
-    d.pair_styled(if refund { "REFUND" } else { "TOTAL" }, format!("Rs {sign}{}", money(t.grand)), Style::NORMAL.bold().big());
-    d.push(Op::Rule('='));
-    if !c.composition && c.show_gst_summary && !t.slabs.is_empty() {
-        gst_table(d, c, &t.slabs);
-        d.rule();
-    }
-    Ok(saved)
-}
-
 // ---------------------------------------------------------------- documents
 
 pub struct Printable {
     pub doc: Doc,
     pub title: String,
     pub has_cash: bool,
+    /// Set for a document that is not drawn on the bill printer's roll (an A4 tax invoice); None = the configured thermal paper.
+    pub paper: Option<Paper>,
 }
 
 fn upi_uri(c: &Config, amount: i64, note: &str) -> String {
@@ -414,9 +379,27 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
             .sum(),
         None => 0,
     };
-    let supply_only = c.composition || (b.totals.gst == 0 && b.lines.iter().all(|l| l.gst_rate == 0.0));
-    let word = if supply_only { "BILL OF SUPPLY" } else if !b2b_gstin.is_empty() { "TAX INVOICE (B2B)" } else { "TAX INVOICE" };
     let cols = c.paper.cols();
+    // A registered buyer (B2B), and a consumer bill of Rs 50,000 or more (confirm with CA), get the full tax invoice: every Rule 46
+    // particular. Every other bill keeps the familiar counter-bill look below.
+    if !b2b_gstin.is_empty() || b.totals.grand >= crate::invoice::B2C_DETAILS_FROM {
+        let mut t = crate::invoice::from_bill(c, &b, duplicate, change);
+        if let Some((_, _, business, _, phone, addr)) = &cust {
+            if !business.is_empty() {
+                t.recipient_name = business.clone();
+            }
+            if t.recipient_address.is_empty() {
+                t.recipient_address = addr.clone();
+            }
+            t.recipient_phone = phone.clone();
+        }
+        let has_cash = b.payments.iter().any(|p| p.mode == "cash" && p.amount > 0);
+        let mut d = crate::invoice::render_thermal(c, &t, cols);
+        finish(&mut d, c, true);
+        return Ok(Printable { doc: d, title: format!("Invoice {}", b.number), has_cash, paper: None });
+    }
+    let supply_only = crate::invoice::is_bill_of_supply(c.composition, &b.lines, &b.totals);
+    let word = if supply_only { "BILL OF SUPPLY" } else { "TAX INVOICE" };
     let mut d = Doc::new();
     header(&mut d, c);
     d.rule();
@@ -427,6 +410,10 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
     }
     if duplicate {
         stamp(&mut d, "DUPLICATE COPY");
+    }
+    if b.extras.supply_type == "inter" && !supply_only {
+        // an inter-state consumer bill names the state of supply (IGST)
+        d.line(format!("Place of supply : {} (IGST)", match crate::gst::state_name(&b.extras.place_of_supply) { Some(n) => format!("{n} ({})", b.extras.place_of_supply), None => b.extras.place_of_supply.clone() }));
     }
     d.rule();
     // customer block (a named customer only; walk-in sales print none)
@@ -624,51 +611,59 @@ pub fn bill_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool, c
     }
     let has_cash = b.payments.iter().any(|p| p.mode == "cash" && p.amount > 0);
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: format!("Bill {}", b.number), has_cash })
+    Ok(Printable { doc: d, title: format!("Bill {}", b.number), has_cash, paper: None })
 }
 
+/// A credit note, compliant (number series, date, the invoice it is against with its date, place of supply, recipient GSTIN, HSN and the
+/// tax reversed per rate; IGST for an inter-state sale). `a4` = on an A4 sheet through the Windows driver, else on the bill roll.
 pub fn credit_note_doc(conn: &Connection, c: &Config, id: &str, duplicate: bool) -> Result<Printable> {
-    let notes = billops::list_credit_notes(conn, 1000)?;
-    let Some(n) = notes.into_iter().find(|n| n.id == id || n.number == id) else { return invalid("This credit note was not found.") };
-    let mut d = Doc::new();
-    header(&mut d, c);
-    d.rule();
-    d.text("CREDIT NOTE", TITLE);
-    if duplicate {
-        stamp(&mut d, "DUPLICATE COPY");
-    }
-    d.rule();
-    let (date, time) = when(&n.at);
-    d.pair(format!("No: {}", n.number), date);
-    d.pair(format!("By: {}", n.by), time);
-    d.line(format!("Against bill {}", n.bill_number));
-    if n.customer_name != "Walk-in" && !n.customer_name.is_empty() {
-        d.line(format!("Customer: {}", n.customer_name));
-    }
-    if !n.reason.is_empty() {
-        d.line(format!("Reason: {}", n.reason));
-    }
-    d.rule();
-    body(&mut d, c, conn, &n.lines, &n.totals, true)?;
-    d.pair(
-        "Refund by",
-        match n.refund_mode.as_str() {
-            "cash" => "CASH",
-            "upi" => "UPI",
-            "credit_note" => "CREDIT NOTE",
-            "exchange" => "EXCHANGE CREDIT",
-            _ => "OTHER",
-        },
-    );
-    d.rule();
-    if !c.footer.is_empty() {
-        d.text(c.footer.clone(), Style::NORMAL.center());
-    }
-    d.push(Op::Barcode(n.number.clone()));
-    d.text(n.number.clone(), Style::NORMAL.center());
+    let n = find_credit_note(conn, id)?;
+    let mut t = crate::invoice::from_credit_note(c, &n, duplicate);
+    fill_recipient(conn, &mut t, n.customer_id.as_deref())?;
+    let mut d = crate::invoice::render_thermal(c, &t, c.paper.cols());
     let has_cash = n.refund_mode == "cash";
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: format!("Credit note {}", n.number), has_cash })
+    Ok(Printable { doc: d, title: format!("Credit note {}", n.number), has_cash, paper: None })
+}
+
+pub fn credit_note_a4_doc(conn: &Connection, c: &Config, id: &str, duplicate: bool) -> Result<Printable> {
+    let n = find_credit_note(conn, id)?;
+    let mut t = crate::invoice::from_credit_note(c, &n, duplicate);
+    fill_recipient(conn, &mut t, n.customer_id.as_deref())?;
+    Ok(Printable { doc: crate::invoice::render_a4(c, &t), title: format!("Credit note {}", n.number), has_cash: false, paper: Some(Paper::A4) })
+}
+
+/// The bill as an A4 tax invoice (or bill of supply): any bill, not only a B2B one.
+pub fn bill_a4_doc(conn: &Connection, c: &Config, bill_id: &str, duplicate: bool) -> Result<Printable> {
+    let Some(b) = bills::get_bill(conn, bill_id)? else { return invalid("This bill was not found.") };
+    let mut t = crate::invoice::from_bill(c, &b, duplicate, 0);
+    fill_recipient(conn, &mut t, b.customer_id.as_deref())?;
+    Ok(Printable { doc: crate::invoice::render_a4(c, &t), title: format!("Invoice {}", b.number), has_cash: false, paper: Some(Paper::A4) })
+}
+
+fn find_credit_note(conn: &Connection, id: &str) -> Result<CreditNote> {
+    let notes = billops::list_credit_notes(conn, 1000)?;
+    match notes.into_iter().find(|n| n.id == id || n.number == id) {
+        Some(n) => Ok(n),
+        None => invalid("This credit note was not found."),
+    }
+}
+
+/// Business name and phone from the customer record (the GSTIN, state and address are already on the bill as they were that day).
+fn fill_recipient(conn: &Connection, t: &mut crate::invoice::TaxDoc, customer_id: Option<&str>) -> Result<()> {
+    let Some(id) = customer_id else { return Ok(()) };
+    let row: Option<(String, String, String, String)> =
+        conn.query_row("SELECT business,phone,address,name FROM customers WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).optional()?;
+    if let Some((business, phone, addr, _)) = row {
+        if t.is_b2b() && !business.is_empty() {
+            t.recipient_name = business;
+        }
+        if t.recipient_address.is_empty() {
+            t.recipient_address = addr;
+        }
+        t.recipient_phone = phone;
+    }
+    Ok(())
 }
 
 fn summary_lines(d: &mut Doc, c: &Config, s: &ShiftSummary) {
@@ -730,7 +725,7 @@ pub fn x_report_doc(conn: &Connection, c: &Config) -> Result<Printable> {
     d.pair(format!("Printed {date}"), time);
     summary_lines(&mut d, c, &s);
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: "X report".into(), has_cash: false })
+    Ok(Printable { doc: d, title: "X report".into(), has_cash: false, paper: None })
 }
 
 pub fn z_report_doc(c: &Config, z: &ZReport, duplicate: bool) -> Result<Printable> {
@@ -757,7 +752,7 @@ pub fn z_report_doc(c: &Config, z: &ZReport, duplicate: bool) -> Result<Printabl
     d.push(Op::Blank(1));
     d.line("Manager sign: ___________________");
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: format!("Z report {}", z.number), has_cash: false })
+    Ok(Printable { doc: d, title: format!("Z report {}", z.number), has_cash: false, paper: None })
 }
 
 pub fn expense_doc(conn: &Connection, c: &Config, id: &str) -> Result<Printable> {
@@ -798,7 +793,7 @@ pub fn expense_doc(conn: &Connection, c: &Config, id: &str) -> Result<Printable>
     d.push(Op::Blank(1));
     d.line("Receiver sign: __________________");
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: format!("Expense {number}"), has_cash: false })
+    Ok(Printable { doc: d, title: format!("Expense {number}"), has_cash: false, paper: None })
 }
 
 pub fn receipt_doc(conn: &Connection, c: &Config, receipt: &str) -> Result<Printable> {
@@ -841,7 +836,7 @@ pub fn receipt_doc(conn: &Connection, c: &Config, receipt: &str) -> Result<Print
     }
     let has_cash = mode == "cash";
     finish(&mut d, c, true);
-    Ok(Printable { doc: d, title: format!("Receipt {no}"), has_cash })
+    Ok(Printable { doc: d, title: format!("Receipt {no}"), has_cash, paper: None })
 }
 
 /// A sample bill with the awkward cases (long names, discount, big amounts, QR, barcode) for the Settings "Print test bill".
@@ -868,7 +863,7 @@ pub fn test_doc(c: &Config) -> Printable {
     d.push(Op::Barcode("TEST123456".into()));
     d.text("TEST123456", Style::NORMAL.center());
     finish(&mut d, c, true);
-    Printable { doc: d, title: "Test print".into(), has_cash: false }
+    Printable { doc: d, title: "Test print".into(), has_cash: false, paper: None }
 }
 
 // ---------------------------------------------------------------- sending
@@ -899,6 +894,9 @@ pub fn render_bytes(p: &Printable, c: &Config, drawer: bool) -> Vec<u8> {
 
 /// Sends a built document to the chosen printer in the chosen mode. `Err` text finishes "Printing failed: ...".
 pub fn send(p: &Printable, c: &Config, drawer: bool) -> std::result::Result<(), String> {
+    if p.paper == Some(Paper::A4) {
+        return send_a4(p, c);
+    }
     match c.mode {
         Mode::Escpos => gokul_print::send_raw(&c.printer, &p.title, &render_bytes(p, c, drawer)),
         Mode::Driver => {
@@ -915,6 +913,24 @@ pub fn send(p: &Printable, c: &Config, drawer: bool) -> std::result::Result<(), 
             Ok(())
         }
     }
+}
+
+/// An A4 invoice always goes through the Windows driver (a laser or inkjet does not speak ESC/POS): the A4 printer from Settings,
+/// else the Windows default printer. "FILE:<path>" writes a PDF (Microsoft Print to PDF) without asking, like the roll printer.
+fn send_a4(p: &Printable, c: &Config) -> std::result::Result<(), String> {
+    let chosen = if !c.a4_printer.trim().is_empty() {
+        c.a4_printer.clone()
+    } else {
+        gokul_print::list_printers().into_iter().find(|x| x.is_default).map(|x| x.name).unwrap_or_default()
+    };
+    if chosen.trim().is_empty() {
+        return Err("no A4 printer is chosen. Pick one in Gokul Office, Settings, Printers".into());
+    }
+    let items = gokul_print::layout(&p.doc, Paper::A4);
+    let logo = if c.print_logo { gokul_print::logo::cached(c.logo_png.as_deref(), 200) } else { None };
+    let out = chosen.strip_prefix("FILE:").map(std::path::Path::new);
+    let target = if out.is_some() { "Microsoft Print to PDF" } else { chosen.as_str() };
+    gokul_print::gdi::print(target, out, &p.title, &items, Paper::A4, logo.as_deref())
 }
 
 fn result(ok: bool, message: impl Into<String>) -> Value {
@@ -940,9 +956,19 @@ pub fn print_document(db: &Db, kind: &str, id: &str, opts: &Value) -> Value {
                     let drawer = cash && c.drawer_on_cash;
                     return Ok((c, None, drawer));
                 }
-                bill_doc(conn, &c, id, duplicate, opts["change"].as_i64().unwrap_or(0))?
+                if opts["format"].as_str() == Some("a4") {
+                    bill_a4_doc(conn, &c, id, duplicate)?
+                } else {
+                    bill_doc(conn, &c, id, duplicate, opts["change"].as_i64().unwrap_or(0))?
+                }
             }
-            "creditNote" => credit_note_doc(conn, &c, id, duplicate)?,
+            "creditNote" => {
+                if opts["format"].as_str() == Some("a4") {
+                    credit_note_a4_doc(conn, &c, id, duplicate)?
+                } else {
+                    credit_note_doc(conn, &c, id, duplicate)?
+                }
+            }
             "xreport" => x_report_doc(conn, &c)?,
             "zreport" => {
                 let z: ZReport = serde_json::from_value(opts["payload"].clone()).map_err(|_| crate::error::ApiError::Invalid("The Z report to print is missing.".into()))?;

@@ -305,6 +305,11 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
         </div>
         <Button className="mt-2" icon={<Printer size={14} />} onClick={async () => setBillRes(await api.testPrint('bill', v.billPrinter, { paper, mode: v.mode, printLogo: v.printLogo, compat: v.compat }))}>Print test bill</Button>
         <TestResult r={billRes} />
+        <div className="mt-3 border-t border-line pt-3">
+          <Select label="A4 invoice printer (laser or inkjet)" value={v.a4Printer ?? ''} onChange={(e) => up('a4Printer', e.target.value)}
+            options={[{ value: '', label: 'Windows default printer' }, ...v.detected.filter((d) => d.kind !== 'label').map((d) => ({ value: d.name, label: d.name }))]} />
+          <p className="mt-1.5 text-xs text-muted">Used for the A4 tax invoice and credit note (Gokul Office, Sales, Tax invoice; POS, Sales, Tax invoice). Always prints through the Windows driver.</p>
+        </div>
       </Card>
 
       <Card title="Barcode label printer" actions={<Badge tone={labelCur ? (labelCur.ready ? 'success' : 'danger') : 'warning'}>{labelCur ? (labelCur.ready ? 'Ready' : labelCur.note || 'Not ready') : v.labelPrinter ? 'Not installed' : 'Not chosen'}</Badge>}>

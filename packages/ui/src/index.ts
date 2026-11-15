@@ -8,6 +8,8 @@ export * from './components/Tabs';
 export * from './components/DataTable';
 export * from './components/DateRangePicker';
 export * from './components/ReceiptPreview';
+export * from './components/TaxInvoicePreview';
+export * from './components/InvoiceDialog';
 export * from './layouts/PosLayout';
 export * from './layouts/OfficeLayout';
 export * from './components/ManagerPinDialog';

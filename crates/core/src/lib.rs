@@ -15,6 +15,7 @@ pub mod error;
 pub mod expenses;
 pub mod godown;
 pub mod gst;
+pub mod invoice;
 pub mod labels;
 pub mod live_setup;
 pub mod loyalty;
