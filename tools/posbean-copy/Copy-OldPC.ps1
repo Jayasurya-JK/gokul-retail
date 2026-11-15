@@ -317,7 +317,7 @@ function Invoke-Robo {
         [void]$list.Add('/XD')
         foreach ($x in $ExcludeDirs) { [void]$list.Add($x) }
     }
-    & robocopy.exe @($list.ToArray())
+    & robocopy.exe @($list.ToArray()) | Out-Host
     return [int]$LASTEXITCODE
 }
 
