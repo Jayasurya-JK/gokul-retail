@@ -1124,6 +1124,7 @@ export function createCrmMock(store: MockStore): CrmApi {
       store.settings.stateCode = stateCode;
       store.settings.gstin = bundle.shop.gstin;
       store.settings.phone = bundle.shop.phone;
+      store.settings.address = [bundle.shop.address, bundle.shop.city, bundle.shop.pincode].map((x) => x.trim()).filter(Boolean).join(', ');
       store.settings.receiptFooter = bundle.billFormat.footer;
       store.settings.printer = bundle.printers.billPrinter;
       store.settings.roundToRupee = bundle.tax.roundToRupee;
