@@ -35,7 +35,13 @@ $ErrorActionPreference = 'Continue'
 $DbExtensions = @('.mdf', '.ldf', '.ndf', '.bak', '.mdb', '.accdb', '.fdb', '.gdb', '.db', '.sqlite', '.db3', '.dbf', '.sdf', '.ibd', '.frm')
 # Extra live-file types excluded from the Phase B copies only
 $LiveExcludeExt = @('*.mdf', '*.ldf', '*.ndf', '*.mdb', '*.accdb', '*.fdb', '*.gdb', '*.ldb', '*.laccdb', '*.bak', '*.db', '*.sqlite', '*.db3', '*.dbf', '*.sdf', '*.ibd', '*.frm')
-$ServiceRegex = 'SQL|Firebird|MySQL'
+$ServiceRegex = 'SQL|Firebird|MySQL|MariaDB|postgres'
+# Database engines that are stopped (plus their running dependents, dependents first)
+$EngineRegex = '^MSSQL\$|^MSSQLSERVER$|^MySQL|^MariaDB|^postgresql|^FirebirdServer|^FirebirdGuardian'
+# Engines whose whole data directory is copied (these keep files with no extension)
+$EngineDirRegex = '^MySQL|^MariaDB|^postgresql'
+# Helper services that are never stopped
+$LeaveRunningRegex = 'SQLWriter|SQLBrowser|CEIP|TELEMETRY|VSS'
 $ProgramRegex = 'POSBean|POS|SQL|Firebird|MySQL|Access'
 $PosBeanRegex = 'POSBean'
 $StopTimeoutSec = 90
@@ -48,6 +54,10 @@ $script:Inv = New-Object System.Collections.ArrayList
 $StoppedServices = New-Object System.Collections.ArrayList
 $Problems = New-Object System.Collections.ArrayList
 $VerifyResults = New-Object System.Collections.ArrayList
+$EngineVerify = New-Object System.Collections.ArrayList
+$StopPlan = New-Object System.Collections.ArrayList
+$LeftRunning = New-Object System.Collections.ArrayList
+$EngineDirs = New-Object System.Collections.ArrayList
 
 # ---------- helpers ----------
 
@@ -111,6 +121,59 @@ function Get-FolderBytes {
 
 function Get-PosBeanProcs {
     return @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match $PosBeanRegex })
+}
+
+# Adds a running service to the stop plan AFTER its running dependents,
+# so dependents are stopped first and the engine last.
+function Add-StopItem {
+    param([string]$Name)
+    if ($StopPlan -contains $Name) { return }
+    if ($LeftRunning -contains $Name) { return }
+    if ($Name -match $LeaveRunningRegex) { [void]$LeftRunning.Add($Name); return }
+    $sc = $null
+    try { $sc = Get-Service -Name $Name -ErrorAction Stop } catch { $sc = $null }
+    if ($sc) {
+        foreach ($dep in @($sc.DependentServices)) {
+            if ($dep.Status -eq 'Running') { Add-StopItem -Name $dep.Name }
+        }
+    }
+    [void]$StopPlan.Add($Name)
+}
+
+# Finds the data directory of a MySQL, MariaDB or PostgreSQL service. Returns '' if not found.
+# Reads only the service command line and the my.ini config file, never database contents.
+function Get-EngineDataDir {
+    param([string]$ServiceName, [string]$PathName)
+    $found = ''
+    if ($ServiceName -match '^MySQL|^MariaDB') {
+        $m = [regex]::Match($PathName, '--datadir="([^"]+)"')
+        if ($m.Success) { $found = $m.Groups[1].Value }
+        if ($found -eq '') {
+            $ini = ''
+            $mi = [regex]::Match($PathName, '--defaults-file="([^"]+)"')
+            if (-not $mi.Success) { $mi = [regex]::Match($PathName, '--defaults-file=(\S+)') }
+            if ($mi.Success) { $ini = $mi.Groups[1].Value }
+            if ($ini -ne '' -and (Test-Path -LiteralPath $ini)) {
+                foreach ($line in @(Get-Content -LiteralPath $ini -ErrorAction SilentlyContinue)) {
+                    $lm = [regex]::Match($line, '^\s*datadir\s*=\s*(.+?)\s*$', 'IgnoreCase')
+                    if ($lm.Success) { $found = $lm.Groups[1].Value; break }
+                }
+            }
+        }
+        if ($found -eq '' -and (Test-Path -LiteralPath 'C:\ProgramData\MySQL')) {
+            foreach ($sub in @(Get-ChildItem -LiteralPath 'C:\ProgramData\MySQL' -Directory -ErrorAction SilentlyContinue)) {
+                $cand = Join-Path $sub.FullName 'Data'
+                if (Test-Path -LiteralPath $cand) { $found = $cand; break }
+            }
+        }
+    } elseif ($ServiceName -match '^postgresql') {
+        $m = [regex]::Match($PathName, '-D\s+"([^"]+)"')
+        if (-not $m.Success) { $m = [regex]::Match($PathName, '-D\s+(\S+)') }
+        if ($m.Success) { $found = $m.Groups[1].Value }
+    }
+    $found = $found.Trim().Trim('"').Replace('/', '\').TrimEnd('\')
+    if ($found -ne '' -and (Test-Path -LiteralPath $found)) { return $found }
+    return ''
 }
 
 # Checks a drive letter for use as the destination. Returns Ok, Disk and Message.
@@ -479,6 +542,35 @@ foreach ($f in $dbFiles) {
     Add-Inv ('  ' + $f.Path + '  |  ' + (MB $f.Size) + ' MB  |  last written ' + $f.LastWrite.ToString('yyyy-MM-dd HH:mm'))
 }
 
+# Stop plan: running engines, with their running dependents first
+$engineRoots = @($services | Where-Object { $_.State -eq 'Running' -and $_.Name -match $EngineRegex })
+foreach ($root in $engineRoots) { Add-StopItem -Name $root.Name }
+foreach ($s in $services) {
+    if ($s.State -eq 'Running' -and -not ($StopPlan -contains $s.Name) -and -not ($LeftRunning -contains $s.Name)) {
+        [void]$LeftRunning.Add($s.Name)
+    }
+}
+
+# Engine data directories (MySQL/MariaDB/PostgreSQL keep extension-less files)
+foreach ($s in $services) {
+    if ($s.Name -notmatch $EngineDirRegex) { continue }
+    $edir = Get-EngineDataDir -ServiceName $s.Name -PathName ([string]$s.PathName)
+    if ($edir -ne '') { [void]$EngineDirs.Add([PSCustomObject]@{ Service = $s.Name; Dir = $edir }) }
+}
+
+Add-Inv ''
+Add-Inv 'SERVICE STOP PLAN (dependents first; stopped with Stop-Service, never -Force)'
+if ($StopPlan.Count -eq 0) { Add-Inv '  (no database engine is running)' }
+foreach ($n in $StopPlan) { Add-Inv ('  stop: ' + $n) }
+Add-Inv ''
+Add-Inv 'LEFT RUNNING (helper services, or not database engines)'
+if ($LeftRunning.Count -eq 0) { Add-Inv '  (none)' }
+foreach ($n in $LeftRunning) { Add-Inv ('  ' + $n) }
+Add-Inv ''
+Add-Inv 'ENGINE DATA DIRECTORIES (copied whole in Phase A, excluded from Phase B)'
+if ($EngineDirs.Count -eq 0) { Add-Inv '  (none found)' }
+foreach ($e in $EngineDirs) { Add-Inv ('  ' + $e.Service + '  ->  ' + $e.Dir) }
+
 $inventoryPath = Join-Path $script:OutDir 'inventory.txt'
 Set-Content -Path $inventoryPath -Value $script:Inv -Encoding ASCII
 
@@ -521,7 +613,7 @@ Say ('   at 30 MB/s (USB 2): about ' + (Get-MinText -Bytes $dbBytes -MBps 30) + 
 Say ('Phase B (POSBean may run) copies the D: drive, POSBean folder and Desktop/Documents: about ' + (GB ($dUsedBytes + $posBytes + $userBytes)) + ' GB.')
 Say ('   at 30 MB/s (USB 2): about ' + (Get-MinText -Bytes ($dUsedBytes + $posBytes + $userBytes) -MBps 30) + '   at 100 MB/s (USB 3): about ' + (Get-MinText -Bytes ($dUsedBytes + $posBytes + $userBytes) -MBps 100))
 
-$runningSvc = @($services | Where-Object { $_.State -eq 'Running' })
+# (the stop plan and engine directories were built in the inventory step above)
 
 # ---------- WHAT-IF: print the plan and stop here ----------
 
@@ -543,17 +635,21 @@ if ($WhatIf) {
     Say ('2. Inventory: written to ' + $inventoryPath + ' (done).')
     Say '3. PHASE A (POSBean closed):'
     Say '     - Ask the user to close POSBean normally and type DONE. Never kill POSBean.'
-    if ($runningSvc.Count -eq 0) {
+    if ($StopPlan.Count -eq 0) {
         Say '     - No database services are running. Nothing to stop.'
     } else {
-        Say '     - Stop these services with Stop-Service (no -Force), wait up to 90 s each:'
-        foreach ($s in $runningSvc) { Say ('          - ' + $s.Name + ' (' + $s.DisplayName + ')') }
+        Say '     - Stop these services with Stop-Service (no -Force), dependents first, up to 90 s each:'
+        foreach ($n in $StopPlan) { Say ('          - ' + $n) }
     }
+    if ($LeftRunning.Count -gt 0) { Say ('     - Left running: ' + ($LeftRunning -join ', ')) }
+    Say '     - Engine data directories copied whole while the engine is stopped:'
+    if ($EngineDirs.Count -eq 0) { Say '          (none found)' }
+    foreach ($e in $EngineDirs) { Say ('          - ' + $e.Service + ' -> ' + $e.Dir) }
     Say ('     - Copy ALL ' + $dbFiles.Count + ' database file(s), ' + (GB $dbBytes) + ' GB, into ' + $plannedBackup + '\database-files\<drive>\<original path>, then verify sizes.')
     Say '     - Restart the services in a finally block, then print: BILLING CAN START AGAIN NOW.'
     Say '4. PHASE B (POSBean may run again):'
     if ($dDisk) {
-        Say ('     - Copy the whole D: drive to ' + $plannedBackup + '\D-drive, excluding database file extensions.')
+        Say ('     - Copy the whole D: drive to ' + $plannedBackup + '\D-drive, excluding database file extensions and engine data directories.')
     } else {
         Say '     - No D: drive on this PC: skipped.'
     }
@@ -598,19 +694,24 @@ try {
     }
     Say 'POSBean is closed.' 'Green'
 
-    # A2: stop database services cleanly (no -Force)
-    if ($runningSvc.Count -eq 0) {
+    # A2: stop the database engines cleanly (no -Force), dependents first
+    if ($StopPlan.Count -eq 0) {
         Say 'No database services are running. Nothing to stop.'
     } else {
-        foreach ($s in $runningSvc) {
+        foreach ($name in @($StopPlan)) {
             try {
-                Stop-Service -Name $s.Name -ErrorAction Stop
-                [void]$StoppedServices.Add($s.Name)
-                $svcObj = Get-Service -Name $s.Name -ErrorAction Stop
+                $live = Get-Service -Name $name -ErrorAction Stop
+                if ($live.Status -ne 'Running') {
+                    Say ('Already stopped: ' + $name)
+                    continue
+                }
+                Stop-Service -Name $name -ErrorAction Stop
+                [void]$StoppedServices.Add($name)
+                $svcObj = Get-Service -Name $name -ErrorAction Stop
                 $svcObj.WaitForStatus('Stopped', (New-TimeSpan -Seconds $StopTimeoutSec))
-                Say ('Stopped ' + $s.Name)
+                Say ('Stopped ' + $name)
             } catch {
-                Problem ('Service ' + $s.Name + ' did not stop cleanly within ' + $StopTimeoutSec + ' s: ' + $_.Exception.Message)
+                Problem ('Service ' + $name + ' did not stop cleanly within ' + $StopTimeoutSec + ' s: ' + $_.Exception.Message)
                 $phaseAOk = $false
                 break
             }
@@ -618,6 +719,21 @@ try {
     }
 
     if ($phaseAOk) {
+        # A3a: engine data directories, copied whole while the engine is stopped
+        foreach ($e in $EngineDirs) {
+            $safeSvc = $e.Service -replace '[^A-Za-z0-9._-]', '_'
+            $edTarget = $script:OutDir + '\database-files\engine-data\' + $safeSvc
+            $code = Invoke-Robo -Source $e.Dir -Target $edTarget -Options @('/E', '/COPY:DAT', '/XJ')
+            [void](Test-RoboCode -Code $code -What ('Engine data ' + $e.Dir))
+            $srcBytes = Get-FolderBytes -Path $e.Dir
+            $dstBytes = Get-FolderBytes -Path $edTarget
+            if ([int64]$srcBytes -eq [int64]$dstBytes) {
+                [void]$EngineVerify.Add('OK             ' + $e.Dir + '   ->   ' + $edTarget + '   (' + (MB $srcBytes) + ' MB, ' + $dstBytes + ' bytes)')
+            } else {
+                [void]$EngineVerify.Add('SIZE MISMATCH  ' + $e.Dir + '   copy has ' + $dstBytes + ' bytes, source has ' + $srcBytes + ' bytes')
+            }
+        }
+
         # A3: copy ALL database files (any drive, including D:)
         Say ''
         Say 'Copying all database files into database-files\ ...' 'Cyan'
@@ -655,7 +771,10 @@ try {
     $phaseAOk = $false
 } finally {
     # A5: ALWAYS restart what was stopped
-    foreach ($name in @($StoppedServices)) {
+    # Restart in REVERSE stop order: the main engine first, then its dependents
+    $restartOrder = @($StoppedServices)
+    [array]::Reverse($restartOrder)
+    foreach ($name in $restartOrder) {
         try {
             $svc2 = Get-Service -Name $name -ErrorAction Stop
             if ($svc2.Status -ne 'Running') { Start-Service -Name $name -ErrorAction Stop }
@@ -691,7 +810,9 @@ Say '==================== PHASE B: copy the rest (POSBean may be running) ======
 Say 'STEP 4 of 8 - Copy the whole D: drive (database files excluded: they were live)' 'Cyan'
 if ($dDisk) {
     $dTarget = Join-Path $script:OutDir 'D-drive'
-    $code = Invoke-Robo -Source 'D:\' -Target $dTarget -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs @('$RECYCLE.BIN', 'System Volume Information')
+    $excDirs = @('$RECYCLE.BIN', 'System Volume Information')
+    foreach ($e in $EngineDirs) { $excDirs += $e.Dir }
+    $code = Invoke-Robo -Source 'D:\' -Target $dTarget -Options @('/E', '/COPY:DAT', '/DCOPY:T', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $excDirs
     [void](Test-RoboCode -Code $code -What 'D: copy')
 } else {
     Say 'No D: drive on this PC. Skipping the D: copy.'
@@ -705,7 +826,9 @@ foreach ($pf in $posbeanFolders) {
     $leaf = Split-Path -Path $pf -Leaf
     $safeLeaf = $leaf -replace '[^A-Za-z0-9._-]', '_'
     $pbTarget = $script:OutDir + '\posbean-program\' + $pbIndex + '-' + $safeLeaf
-    $code = Invoke-Robo -Source $pf -Target $pbTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt
+    $pbExc = @()
+    foreach ($e in $EngineDirs) { $pbExc += $e.Dir }
+    $code = Invoke-Robo -Source $pf -Target $pbTarget -Options @('/E', '/COPY:DAT', '/XJ') -ExcludeFiles $LiveExcludeExt -ExcludeDirs $pbExc
     [void](Test-RoboCode -Code $code -What ('POSBean program folder ' + $pf))
 }
 if ($posbeanFolders.Count -eq 0) {
@@ -744,13 +867,17 @@ $totalBytes = 0.0
 if ($all.Sum) { $totalBytes = [double]$all.Sum }
 
 $cntOk = @($VerifyResults | Where-Object { $_ -like 'OK*' }).Count
-$cntBad = @($VerifyResults).Count - $cntOk
+$cntBad = @($VerifyResults).Count - $cntOk + @($EngineVerify | Where-Object { $_ -notlike 'OK*' }).Count
 
 $verifyLines = New-Object System.Collections.ArrayList
 [void]$verifyLines.Add('VERIFY - ' + (Get-Date -Format 'yyyy-MM-dd HH:mm'))
 [void]$verifyLines.Add('')
 [void]$verifyLines.Add('Database files (clean copies in database-files\):')
 foreach ($v in $VerifyResults) { [void]$verifyLines.Add($v) }
+[void]$verifyLines.Add('')
+[void]$verifyLines.Add('Engine data directories (whole-directory copies, Phase A):')
+if ($EngineVerify.Count -eq 0) { [void]$verifyLines.Add('  (none)') }
+foreach ($v in $EngineVerify) { [void]$verifyLines.Add($v) }
 [void]$verifyLines.Add('')
 [void]$verifyLines.Add('Database files in inventory: ' + $dbFiles.Count + '   OK: ' + $cntOk + '   not OK: ' + $cntBad)
 [void]$verifyLines.Add('Files in the backup folder: ' + $totalFiles + '   total size: ' + (GB $totalBytes) + ' GB')
