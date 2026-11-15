@@ -68,6 +68,45 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
   );
 }
 
+type Slab = BillTotals['slabs'][number];
+
+/** Tax breakup under the money rows: a labelled header, one row per GST rate, Cess only when some slab has it, and a total when there is more than one rate. */
+function TaxBox({ slabs, inter }: { slabs: Slab[]; inter: boolean }) {
+  const hasCess = slabs.some((s) => (s.cess ?? 0) > 0);
+  const cols: { label: string; get: (s: Slab) => number }[] = [
+    ...(inter ? [{ label: 'IGST', get: (s: Slab) => s.igst ?? 0 }] : [{ label: 'CGST', get: (s: Slab) => s.cgst }, { label: 'SGST', get: (s: Slab) => s.sgst }]),
+    ...(hasCess ? [{ label: 'Cess', get: (s: Slab) => s.cess ?? 0 }] : []),
+  ];
+  const gridStyle = { gridTemplateColumns: `36px minmax(0,1fr) repeat(${cols.length}, minmax(0,1fr))` };
+  const totalTax = slabs.reduce((n, s) => n + s.cgst + s.sgst + (s.igst ?? 0) + (s.cess ?? 0), 0);
+  return (
+    <div className="my-1.5 rounded-md border border-line bg-surface-2 px-2 py-1">
+      {slabs.length === 0 ? <div className="py-0.5 text-xs text-subtle">No tax yet</div> : (
+        <>
+          <div className="grid items-center gap-x-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-subtle" style={gridStyle}>
+            <span>GST</span>
+            <span className="min-w-0 text-right">Taxable</span>
+            {cols.map((c) => <span key={c.label} className="min-w-0 text-right">{c.label}</span>)}
+          </div>
+          {slabs.map((s) => (
+            <div key={s.rate} className="num grid items-center gap-x-1.5 text-[11px] leading-4" style={gridStyle}>
+              <span className="font-semibold text-ink">{s.rate}%</span>
+              <span className="min-w-0 text-right text-muted">{formatPaise(s.taxable)}</span>
+              {cols.map((c) => <span key={c.label} className="min-w-0 text-right text-ink">{formatPaise(c.get(s))}</span>)}
+            </div>
+          ))}
+          {slabs.length > 1 && (
+            <div className="num mt-0.5 flex items-center justify-between border-t border-line pt-0.5 text-[11px] leading-4">
+              <span className="text-muted">Total tax</span>
+              <b className="text-ink">{formatRupees(totalTax)}</b>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, staff, onStaff, supply, shopState, onPlace }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
@@ -144,11 +183,12 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
           </span>
         )}
         <button
-          type="button" tabIndex={-1} onClick={onPlace} title="Place of supply (click to change)"
+          type="button" tabIndex={-1} onClick={onPlace}
+          title={supply.inter ? 'Place of supply (click to change)' : `Same state as the shop: ${stateName(shopState) ?? shopState} (click to change)`}
           className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
             supply.inter ? 'bg-warning-soft text-warning hover:bg-warning/20' : 'bg-success-soft text-success hover:bg-success/20')}
         >
-          {supply.inter ? `Inter-state · ${stateName(supply.place) ?? supply.place} (${supply.place}) · IGST` : `Local · ${stateName(shopState) ?? shopState} (${shopState})`}
+          {supply.inter ? `Other state (${stateName(supply.place) ?? supply.place}) · IGST` : 'Same state · CGST + SGST'}
         </button>
       </div>
 
@@ -210,17 +250,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
           />
         )}
         {delivery.charge > 0 && <GridRow label="Delivery charge" hint="F2" amount={<Money paise={delivery.charge} />} />}
-        <div className="my-1.5 rounded-md border border-line bg-surface-2 px-2 py-1">
-          {totals.slabs.length === 0 && <div className="py-0.5 text-xs text-subtle">No tax yet</div>}
-          {totals.slabs.map((s) => (
-            <div key={s.rate} className="grid grid-cols-[34px_1fr_1fr_1fr] gap-x-1.5 text-[11px] leading-4 num">
-              <span className="font-semibold text-ink">{s.rate}%</span>
-              <span className="text-right text-muted">{formatPaise(s.taxable)}</span>
-              <span className="text-right text-ink"><span className="text-subtle">C </span>{formatPaise(s.cgst)}</span>
-              <span className="text-right text-ink"><span className="text-subtle">S </span>{formatPaise(s.sgst)}</span>
-            </div>
-          ))}
-        </div>
+        <TaxBox slabs={totals.slabs} inter={supply.inter} />
         {totals.roundOff !== 0 && <GridRow label="Round off" tone="muted" amount={<Money paise={totals.roundOff} sign decimals />} />}
 
         {exchange && (
