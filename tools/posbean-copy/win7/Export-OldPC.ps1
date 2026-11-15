@@ -927,7 +927,14 @@ try {
     foreach ($name in $restartOrder) {
         try {
             $svc2 = Get-Service -Name $name -ErrorAction Stop
+            # If it is still shutting down, wait for it to finish stopping before starting it again.
+            if ([string]$svc2.Status -eq 'StopPending') {
+                Say ('Waiting for ' + $name + ' to finish stopping before restarting it...') 'Yellow'
+                try { $svc2.WaitForStatus('Stopped', (New-TimeSpan -Seconds 300)) } catch { }
+                $svc2.Refresh()
+            }
             if ($svc2.Status -ne 'Running') { Start-Service -Name $name -ErrorAction Stop }
+            try { $svc2.WaitForStatus('Running', (New-TimeSpan -Seconds 120)) } catch { }
             $svc3 = Get-Service -Name $name -ErrorAction Stop
             Say ('Service ' + $name + ' status now: ' + $svc3.Status)
             if ($svc3.Status -ne 'Running') { $allRestarted = $false }
