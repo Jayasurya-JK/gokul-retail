@@ -830,11 +830,17 @@ $allRestarted = $true
 
 try {
     # A1: POSBean must be closed by the user. Never killed.
-    $pbNow = Get-PosBeanProcs
+    # Always ask, even if no POSBean process is detected (its .exe name may not contain "POSBean").
+    Say 'Finish or cancel the current bill, then CLOSE POSBean normally (File, Exit, or the window close button).' 'Yellow'
+    $ack = ''
+    while ($ack -ne 'DONE') {
+        $ack = ([string](Read-Host 'When POSBean is fully closed, type DONE and press Enter')).Trim().ToUpper()
+    }
+    $pbNow = @(Get-PosBeanProcs)
     while ($pbNow.Count -gt 0) {
         Say 'POSBean is still open. Please close POSBean normally (File, Exit, or the window close button).' 'Yellow'
         [void](Read-Host 'Close POSBean, then type DONE and press Enter')
-        $pbNow = Get-PosBeanProcs
+        $pbNow = @(Get-PosBeanProcs)
         if ($pbNow.Count -gt 0) { Say 'POSBean is still running. Close it normally, then type DONE again.' 'Yellow' }
     }
     Say 'POSBean is closed.' 'Green'
