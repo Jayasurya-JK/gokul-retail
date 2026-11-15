@@ -1111,6 +1111,29 @@ if ($cntBad -gt 0) {
 # ---------- STEP 7: zip (two zips, next to the folder) ----------
 
 Say ''
+Say 'STEP 6b - Export Windows settings (registry) - read only, nothing is changed' 'Cyan'
+$regDir = Join-Path $script:OutDir 'registry'
+try { New-Item -ItemType Directory -Path $regDir -Force | Out-Null } catch { }
+$regKeys = @(
+    @('HKLM\SOFTWARE', 'HKLM-SOFTWARE.reg'),
+    @('HKCU\Software', 'HKCU-Software.reg'),
+    @('HKLM\SYSTEM\CurrentControlSet\Services', 'HKLM-Services.reg')
+)
+foreach ($rk in $regKeys) {
+    $outReg = Join-Path $regDir $rk[1]
+    Say ('Exporting ' + $rk[0] + ' ...')
+    & reg.exe export $rk[0] $outReg /y | Out-Host
+    if (Test-Path -LiteralPath $outReg) { Say ('  saved ' + $rk[1] + ' (' + (MB (Get-Item -LiteralPath $outReg).Length) + ' MB)') 'Green' }
+    else { Problem ('Registry export failed for ' + $rk[0]) }
+}
+try {
+    Get-WmiObject -Class Win32_Service | Select-Object Name, DisplayName, State, StartMode, PathName | Out-File -FilePath (Join-Path $regDir 'services.txt') -Encoding ASCII -Width 400
+} catch { }
+try {
+    $env:COMPUTERNAME | Out-File -FilePath (Join-Path $regDir 'computer-name.txt') -Encoding ASCII
+    & ipconfig.exe /all | Out-File -FilePath (Join-Path $regDir 'network.txt') -Encoding ASCII
+} catch { }
+
 Say 'STEP 7 - Zip (only when the destination is C:\GokulExport)' 'Cyan'
 if ($destIsExport) {
     $restItems = @()
