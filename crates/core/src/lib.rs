@@ -33,6 +33,7 @@ pub mod reports;
 pub mod seed_demo; // DEMO DATA: remove this line (and the file) when the demo shop is no longer wanted
 pub mod shift;
 pub mod store;
+pub mod sync;
 pub mod types;
 
 pub use db::Db;

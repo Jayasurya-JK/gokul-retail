@@ -28,6 +28,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (17, include_str!("../migrations/017_record_corrections.sql")),
     (18, include_str!("../migrations/018_gst_rates_cess.sql")),
     (19, include_str!("../migrations/019_place_of_supply_igst.sql")),
+    (20, include_str!("../migrations/020_sync_outbox.sql")),
 ];
 
 /// The schema version this build brings every database up to.

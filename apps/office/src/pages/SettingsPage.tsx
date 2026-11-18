@@ -5,6 +5,7 @@ import type { SettingsBundle } from '@gokul/data';
 import { PageHeader, Tabs, TabPanel, useToast } from '@gokul/ui';
 import { api } from '../store';
 import { SaveBar } from '../components/crm/SaveBar';
+import { SyncCard } from '../components/crm/SyncCard';
 import { BackupTab, BillFormatTab, ExpensesTab, LoyaltyTab, MillTab, PrintersTab, SecurityTab, ShopTab, TaxTab } from '../components/crm/SettingsTabs';
 
 type Section = keyof SettingsBundle;
@@ -68,6 +69,7 @@ export function SettingsPage() {
               v={draft.backup} set={(n) => patch('backup', n)}
               onChanged={(b) => { setSaved((s) => (s ? { ...s, backup: { ...s.backup, history: b.history } } : s)); setDraft((d) => (d ? { ...d, backup: { ...d.backup, history: b.history } } : d)); }}
             />
+            <div className="mt-4 grid grid-cols-2 gap-4"><SyncCard /></div>
           </TabPanel>
         </div>
       </Tabs>

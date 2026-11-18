@@ -34,6 +34,8 @@ fn open_backend() -> Backend {
             }
             // Scheduled backups run on their own thread and connection; billing never waits for them.
             gokul_core::backup::spawn_scheduler(db.path().to_path_buf());
+            // Cloud sync: does nothing unless sync is switched on in Settings (one app sends at a time, see sync::worker).
+            gokul_core::sync::worker::spawn_worker(db.path().to_path_buf());
             Backend { db: Arc::new(db), session: Arc::new(Session::pos()) }
         }
         Err(e) => {

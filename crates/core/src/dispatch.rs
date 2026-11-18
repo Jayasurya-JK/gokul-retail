@@ -5,7 +5,7 @@
 use crate::error::{invalid, ApiError, Result};
 use crate::types::*;
 use crate::authz::{self, Session};
-use crate::{bills, billops, catalog, crm, dash, expenses, mill, posreports, purchasing, reports, shift, store, Db};
+use crate::{bills, billops, catalog, crm, dash, expenses, mill, posreports, purchasing, reports, shift, store, sync, Db};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -327,6 +327,10 @@ pub fn dispatch(db: &Db, method: &str, args: Vec<Value>) -> Result<Value> {
         "getSettingsBundle" => ok(crm::get_settings_bundle(c)?),
         "saveSettingsBundle" => ok(crm::save_settings_bundle(c, &arg::<Value>(a, 0, "next")?)?),
         "backupNow" => ok(crm::backup_now(c)?),
+        "syncStatus" => ok(sync::status(c)?),
+        "syncSetConfig" => ok(sync::set_config(c, arg(a, 0, "config")?)?),
+        "syncNow" => ok(sync::request_now(c)?),
+        "syncUploadEverything" => ok(sync::request_upload_all(c)?),
         "backupStatus" => ok(crate::backup::status(c)?),
         "logout" => Ok(Value::Null), // the session lives outside the database; see dispatch_session
         "restoreBackup" => ok(crm::restore_backup(c, &arg::<String>(a, 0, "id")?)?),
@@ -400,6 +404,7 @@ pub const METHODS: &[&str] = &[
     "listSalesBills", "salesFilterOptions", "listCustomerRows", "getCustomerProfile", "saveCustomer", "setCustomerCredit", "getCustomerWallet", "listPointsHistory", "pointsOverview", "listPointsCustomers", "getPointsLedger", "pointsExpiring", "setLoyaltyGoLive", "pointsReport", "listReceivables", "getStatement",
     "recordCollection", "logReminder", "listRoles", "saveRoles", "listUserAccounts", "saveUserAccount", "resetUserPin", "getSettingsBundle",
     "saveSettingsBundle", "testPrint", "printDocument", "printerStatus", "backupNow", "restoreBackup", "runReport", "backupStatus", "logout",
+    "syncStatus", "syncSetConfig", "syncNow", "syncUploadEverything",
     "listExpenseCategories", "saveExpenseCategories", "listExpenses", "addExpense", "editExpense", "voidExpense", "logVoidedLine",
     "getMillSheet", "saveMillSheet", "closeMillSheet", "getMillDay", "saveMillDay", "closeMillDay", "recordJobWork", "listJobWork", "listMillSheets", "getUiPref", "setUiPref", "printLabels", "labelPreview", "getHardware",
     "listStaff", "addStaff", "salesReport", "paymodeReport", "staffReport", "stockReport",

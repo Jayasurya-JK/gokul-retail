@@ -12,6 +12,7 @@ import { createPosReportsMock } from './areas/posreports';
 import { createProductionMock } from './areas/production';
 import { createHsnMock } from './areas/hsn';
 import { createGstrMock } from './areas/gstr';
+import { createSyncMock } from './areas/sync';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
 import { cashDiscount, computeBill, computeTotalsWithDelivery } from './money';
 import { enabledRates, supplyFor } from './gst';
@@ -213,6 +214,7 @@ export function createMockApi(): Api {
     ...createProductionMock(store),
     ...createHsnMock(store),
     ...createGstrMock(store),
+    ...createSyncMock(),
     ...createPosReportsMock(store),
     ...createReportsMock(store),
   };

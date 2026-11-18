@@ -19,6 +19,7 @@ export * from './areas/posreports';
 export * from './areas/production';
 export * from './areas/hsn';
 export type { GstrApi } from './areas/gstr';
+export * from './areas/sync';
 export * from './gstr';
 export * from './xlsx';
 export type * from './areas/analysis';

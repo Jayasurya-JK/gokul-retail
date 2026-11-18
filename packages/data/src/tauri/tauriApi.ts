@@ -8,6 +8,7 @@ import type {
   BillDetail, BillSearch, CancelRequest, CreditNote, ReturnRequest,
 } from '../areas/billops';
 import type { CashEntry, CashEntryInput, DayStatus, DenomCounts, ShiftSummary, ZReport } from '../areas/shift';
+import type { SyncConfigInput, SyncStatus } from '../areas/sync';
 import type {
   AdjustmentInput, AdjustmentResult, CountedBrand, CountedCategory, ItemDetail, ItemInput, ItemIssues, ItemPage, ItemPageQuery, NameResult, SaveItemResult,
   StockAdjustment, StockTakeCount, StockTakeLine, StockTakeResult,
@@ -73,6 +74,7 @@ export const REAL_METHODS = [
   'listGodownBarrels', 'getGodownBarrel', 'addGodownBarrels', 'editGodownBarrel', 'setGodownStatus', 'recordStickReading', 'recordOutsourcedOil',
   'listOutsourcedOil', 'editOutsourcedOil', 'deleteOutsourcedOil', 'deleteStickReading', 'transferToStore', 'listGodownTransfers', 'getMillDaily', 'getMillAnalysis',
   'suggestHsn', 'applyHsn', 'previewHsnImport', 'getGstrFacts',
+  'syncStatus', 'syncSetConfig', 'syncNow', 'syncUploadEverything',
 ] as const;
 
 /** Production norms (editable settings). Not part of the shared `Api` screens use yet; the Rust side serves it. */
@@ -257,6 +259,12 @@ export function createTauriApi(): Api {
 
     // ----- GstrApi -----
     getGstrFacts: (month: string) => call<GstrFacts>('getGstrFacts', month),
+
+    // ----- SyncApi -----
+    syncStatus: () => call<SyncStatus>('syncStatus'),
+    syncSetConfig: (input: SyncConfigInput) => call<SyncStatus>('syncSetConfig', input),
+    syncNow: () => call<SyncStatus>('syncNow'),
+    syncUploadEverything: () => call<SyncStatus>('syncUploadEverything'),
 
     // ----- ProductionApi -----
     listGodownBarrels: () => call<GodownBarrel[]>('listGodownBarrels'),

@@ -152,6 +152,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
         "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => Perm("canManageUsers"),
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => Perm("canChangeSettings"),
+        "syncStatus" | "syncSetConfig" | "syncNow" | "syncUploadEverything" => Perm("canChangeSettings"),
         "runReport" | "getGstrFacts" | "pointsOverview" | "pointsReport" | "pointsExpiring" => Perm("canSeeReports"),
         "adjustPoints" | "bulkAdjustPoints" => PermAndPin { perm: "canEditPrices", action_what: "change customer points" },
         "setLoyaltyGoLive" => Owner,
@@ -176,6 +177,7 @@ fn describe(method: &str) -> &'static str {
     match method {
         "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "applyHsn" => "change items",
         "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory" => "change categories",
+        "syncStatus" | "syncSetConfig" | "syncNow" | "syncUploadEverything" => "change cloud sync",
         "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => "change brands",
         "createGrn" | "saveSupplier" | "recordSupplierPayment" => "record purchases and supplier payments",
         "saveSeedNorms" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => "record production",
