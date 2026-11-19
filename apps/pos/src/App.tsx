@@ -1,7 +1,8 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { PosStatusContext, ToastProvider, TooltipProvider, WindowControlsProvider, useDesktopGuards } from '@gokul/ui';
 import { windowController } from '@gokul/data';
-import { useSession } from './store';
+import { api, billingStores, useSession } from './store';
+import type { CloseGuard } from '@gokul/ui';
 import { Login } from './pages/Login';
 import { Billing } from './pages/Billing';
 import { DayOpen } from './pages/DayOpen';
@@ -15,6 +16,24 @@ import { ScanRouter } from './scanner';
 import { PaymodeReportPage, SalesReportPage, StaffReportPage, StockPage } from './pages/Reports';
 import { StatusBar } from './components/StatusBar';
 
+/** Closing the window from the top strip: a bill with items is held first, so nothing on the counter is lost. */
+const closeGuard: CloseGuard = {
+  pendingItems: () => Object.values(billingStores).reduce((n, st) => n + st.getState().lines.length, 0),
+  holdAll: async () => {
+    for (const st of Object.values(billingStores)) {
+      const b = st.getState();
+      if (!b.lines.length) continue;
+      await api.holdBill({
+        customerId: b.customer?.id, customerName: b.customer?.name, lines: b.lines, billDiscount: b.billDiscount, payments: [],
+        staff: b.staff || undefined, deliveryAddress: b.delivery.address || undefined, deliveryLocality: b.delivery.locality || undefined,
+        deliveryCharge: b.delivery.charge || undefined, wholesale: b.wholesale || undefined, cashDiscBps: b.cashDiscBps || undefined,
+        placeOfSupply: b.placeOfSupply || undefined,
+      });
+      b.clear();
+    }
+  },
+};
+
 function Guard({ children }: { children: JSX.Element }) {
   const user = useSession((s) => s.user);
   return user ? children : <Navigate to="/login" replace />;
@@ -23,7 +42,7 @@ function Guard({ children }: { children: JSX.Element }) {
 export function App() {
   useDesktopGuards();
   return (
-    <WindowControlsProvider controller={windowController}>
+    <WindowControlsProvider controller={windowController} closeGuard={closeGuard}>
     <TooltipProvider>
       <ToastProvider>
         <PosStatusContext.Provider value={<StatusBar />}>
