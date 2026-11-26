@@ -78,7 +78,7 @@ export function PosLayout({ topBar, side, keys, children, sideWidth }: {
   const status = useContext(PosStatusContext);
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg text-ink">
-      <header className="flex h-16 shrink-0 items-center gap-1 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">{topBar}</header>
+      <header className="flex h-12 shrink-0 items-center gap-1 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]">{topBar}</header>
       <div className="flex min-h-0 flex-1">
         <main className="flex min-w-0 flex-1 flex-col">{children}</main>
         {side && (
