@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ScanBarcode, XCircle } from 'lucide-react';
 import {
@@ -438,6 +439,14 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keyRef.current = (e) => {
     if (e.key === 'Escape' && e.defaultPrevented) return; // a dialog already used Esc to close itself
+    // F-keys work even while a qty / rate / discount box is open: save what is typed there, then run the key
+    // (flushSync so the key acts on the saved lines, not the ones from before the edit).
+    if (/^F\d{1,2}$/.test(e.key) && e.key !== 'F4' && editRef.current && !dialog && !saving && !pinAsk) {
+      e.preventDefault();
+      flushSync(() => commitEdit(false));
+      keyRef.current(e);
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === 'l') { e.preventDefault(); lock(); return; }
     if (dialog || edit || saving || pinAsk) return;
     // Safety net: if focus ever ended up on the page background (a closed dialog gave it back to nothing), the first

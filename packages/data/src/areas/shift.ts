@@ -35,7 +35,8 @@ export interface CashEntry {
   id: string; at: string; kind: CashKind; reason: string; amount: Paise; note: string; by: string;
 }
 export const CASH_REASONS: Record<CashKind, string[]> = {
-  out: ['Tea and snacks', 'Transport', 'Supplier payment', 'Staff advance', 'Courier and freight', 'Shop expense', 'Owner withdrawal', 'Other'],
+  // 'Supplier payment' hidden from the cash-out list: use Paid to supplier instead, 26 Nov 2026. Old entries keep their reason text.
+  out: ['Tea and snacks', 'Transport', 'Staff advance', 'Courier and freight', 'Shop expense', 'Owner withdrawal', 'Other'],
   in: ['Change added', 'Owner deposit', 'Bank withdrawal', 'Other'],
 };
 export interface CashEntryInput { kind: CashKind; reason: string; amount: Paise; note: string; by: string; /** needed for cash out unless the role may open the drawer */ managerPin?: string }

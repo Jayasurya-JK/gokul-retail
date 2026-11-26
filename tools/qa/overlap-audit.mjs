@@ -1,6 +1,6 @@
 // Overlap, overflow and contrast audit for Gokul POS (5180) and Gokul Office (5181).
 // Usage: node tools/qa/overlap-audit.mjs [--out docs/qa/overlap-audit.md] [--json file] [--shots docs/qa/shots/after] [--apps pos,office] [--vp 1280,1366]
-// Needs both vite previews running. Opens every route (except /home, which the wip/home-v3 branch is rebuilding) at 1280x720, 1366x768, 1536x864, 1920x1080; POS also with
+// Needs both vite previews running. Opens every route (POS includes /home) at 1280x720, 1366x768, 1536x864, 1920x1080; POS also with
 // no bill, an open bill and a held bill. Finds: (1) content overflowing its box or clipped without an ellipsis, labels cut by an ellipsis,
 // (2) sibling boxes that intersect, (3) anything outside the viewport sideways, (4) text contrast below the thresholds.
 // Thresholds: grey (neutral) text that staff read (labels, tabs, headings, table headings, buttons, numbers) >= 7:1,
@@ -19,7 +19,7 @@ const APPS = arg('apps', 'pos,office').split(',');
 const VIEWPORTS = [[1280, 720], [1366, 768], [1536, 864], [1920, 1080]].filter((v) => arg('vp', '').split(',').filter(Boolean).length === 0 || arg('vp', '').split(',').includes(String(v[0])));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const POS_ROUTES = ['/billing', '/pos1', '/reports/sales', '/reports/paymode', '/reports/stock', '/reports/staff', '/day-open', '/sales', '/customers', '/returns', '/cash', '/day-close', '/lock'];
+const POS_ROUTES = ['/home', '/billing','/pos1', '/reports/sales', '/reports/paymode', '/reports/stock', '/reports/staff', '/day-open', '/sales', '/customers', '/returns', '/cash', '/day-close', '/lock'];
 const OFFICE_ROUTES = ['/', '/items', '/items/new', '/items/hsn', '/categories', '/labels', '/stock', '/purchases', '/suppliers', '/production', '/production-insights', '/mill-daily', '/sales', '/customers', '/loyalty-points', '/collections', '/expenses', '/reports', '/gst', '/users', '/settings'];
 
 /** Runs inside the page. Returns raw findings. */

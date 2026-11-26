@@ -61,7 +61,8 @@ export function BillGrid({ lines, selected, edit, loose, stock, onSelect, onDraf
       }}
       onBlur={() => onCommit(false)}
       onKeyDown={(e) => {
-        e.stopPropagation();
+        // F-keys (F6 hold, F3 pay...) pass through to the screen's shortcuts; every other key stays in the box.
+        if (!/^F\d{1,2}$/.test(e.key)) e.stopPropagation();
         if (e.key === 'Enter') { e.preventDefault(); onCommit(false); }
         else if (e.key === 'Tab') { e.preventDefault(); onCommit(true); }
         else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }

@@ -69,7 +69,8 @@ export function Expenses() {
     setData(l);
     setSuppliers(sups);
     setSupPick((p) => (p ? sups.find((x) => x.profile.id === p.profile.id) ?? p : p));
-    setCats(c.filter((x) => x.active));
+    // 'Supplier cash' category hidden: use Paid to supplier instead, 26 Nov 2026. The category and old rows stay in the data.
+    setCats(c.filter((x) => x.active && x.id !== 'supplier_cash'));
     setCashIn(entries.filter((e) => e.kind === 'in').reduce((s, e) => s + e.amount, 0));
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
