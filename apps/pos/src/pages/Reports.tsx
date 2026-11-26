@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, BarChart3, ChevronRight, CreditCard, Download, Pack
 import {
   formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type SalesReportRow, type Staff, type StaffReportRow, type StockRow,
 } from '@gokul/data';
-import { Badge, Button, ColResizer, DateRangePicker, EmptyState, Money, PosLayout, ROW_COLS, cn, parseTracks, useResizableColumns, useRefreshOnFocus, useCachedLoad, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
+import { Badge, Button, ColResizer, DateRangePicker, EmptyState, Money, PosLayout, ROW_COLS, Select, cn, parseTracks, useResizableColumns, useRefreshOnFocus, useCachedLoad, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -69,7 +69,6 @@ function Total({ label, children, tone }: { label: string; children: ReactNode; 
   );
 }
 
-const selectCls = 'h-8 rounded-control border border-line-strong bg-surface px-2 text-sm text-ink hover:border-subtle focus:border-primary focus:ring-2 focus:ring-primary/25';
 
 function RangeControls({ range, setRange, canPick }: { range: DateRange; setRange: (r: DateRange) => void; canPick: boolean }) {
   if (!canPick) return <Badge tone="neutral">Today</Badge>;
@@ -78,10 +77,10 @@ function RangeControls({ range, setRange, canPick }: { range: DateRange; setRang
 
 function StaffSelect({ staff, value, onChange }: { staff: Staff[]; value: string; onChange: (v: string) => void }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={selectCls} aria-label="Staff">
-      <option value="">All staff</option>
-      {staff.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
-    </select>
+    <Select
+      value={value} onChange={(e) => onChange(e.target.value)} className="min-w-[132px]" aria-label="Staff"
+      options={[{ value: '', label: 'All staff' }, ...staff.map((s) => ({ value: s.name, label: s.name }))]}
+    />
   );
 }
 
@@ -330,7 +329,7 @@ type ModeKey = 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points' | 'sodex
 /** Each pay mode keeps one calm colour everywhere on this screen, so one look shows how a bill was paid. */
 const ALL_MODES: { key: ModeKey; label: string; on: boolean }[] = [
   { key: 'cash', label: 'Cash', on: true },
-  { key: 'upi', label: 'BharatQR / UPI', on: true },
+  { key: 'upi', label: 'UPI', on: true },
   { key: 'card', label: 'Card', on: true },
   { key: 'credit', label: 'Credit', on: true },
   { key: 'points', label: 'Cust. points', on: true },
@@ -529,9 +528,10 @@ export function StockPage() {
         <>
           <SearchBox value={query} onChange={setQuery} placeholder="Name, barcode, brand or supplier" inputRef={boxRef} />
           <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">Group by
-            <select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setClosed(new Set()); }} className={selectCls} aria-label="Group by">
-              {GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-            </select>
+            <Select
+              value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setClosed(new Set()); }} className="min-w-[132px]" aria-label="Group by"
+              options={GROUPS.map((g) => ({ value: g.id, label: g.label }))}
+            />
           </label>
           <div className="flex min-w-0 items-center gap-1 overflow-hidden">{QUICK.map((q) => <button key={q.id} onClick={() => setFilter(q.id)} className={chip(filter === q.id)} tabIndex={-1}>{q.label}</button>)}</div>
         </>

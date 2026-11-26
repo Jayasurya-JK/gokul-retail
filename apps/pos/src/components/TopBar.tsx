@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Printer, ReceiptIndianRupee, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
-import { Kbd, Logo, OverflowRow, Tooltip, darkenForWhite, type OverflowItem, WindowButtons, clockTime, cn, useWindowControls } from '@gokul/ui';
-import { billingStores, useSession } from '../store';
+import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, KeyRound, Lock, LogOut, Moon, Package, Printer, ReceiptIndianRupee, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
+import { pinRuleProblem } from '@gokul/data';
+import { Kbd, Logo, OverflowRow, PinChangeDialog, Tooltip, useToast, darkenForWhite, type OverflowItem, WindowButtons, clockTime, cn, useWindowControls } from '@gokul/ui';
+import { api, billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
 import { DropMenu, type MenuEntry } from './BillToolbar';
@@ -50,6 +51,8 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
   const [now, setNow] = useState(new Date());
   const [keys, setKeys] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const toast = useToast();
   const win = useWindowControls();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -156,7 +159,7 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
             <ChevronDown size={12} className="text-chrome-muted" />
           </button>
           {menu && (
-            <div className="g-overlay absolute right-0 top-[calc(100%+6px)] z-[60] w-[248px] overflow-hidden rounded-card border border-line bg-surface text-ink shadow-overlay">
+            <div className="g-overlay g-popover absolute right-0 top-[calc(100%+8px)] z-[70] w-[248px] overflow-hidden bg-surface text-ink">
               <div className="border-b border-line bg-surface-2 px-3 py-2.5 text-xs text-muted">
                 <div className="flex items-center gap-1.5 font-semibold text-ink"><UserRound size={13} /> {user?.name}<span className="font-normal capitalize text-muted">· {user?.role}</span></div>
                 <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? clockTime(opened) : '--'} ({hrs}h {pad(mins)}m)</div>
@@ -167,6 +170,7 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
                   <MenuItem icon={<Minimize size={15} />} label="Minimize" onClick={() => { setMenu(false); win.minimize(); }} />
                 </>
               )}
+              <MenuItem icon={<KeyRound size={15} />} label="Change my PIN" onClick={() => { setMenu(false); setPinOpen(true); }} />
               <MenuItem icon={<ArrowLeftRight size={15} />} label="Switch user" onClick={out} />
               <MenuItem icon={<LogOut size={15} />} label="Sign out" onClick={out} danger />
             </div>
@@ -224,6 +228,14 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
       />}
 
       <ShortcutsSheet open={keys} onClose={() => setKeys(false)} />
+      <PinChangeDialog
+        open={pinOpen} title="Change my PIN" description={user?.name} askOld rule={pinRuleProblem} onClose={() => setPinOpen(false)}
+        onSubmit={async (oldPin, newPin) => {
+          try { await api.changeMyPin(user!.id, oldPin, newPin); } catch (e) { return e instanceof Error ? e.message : 'Could not change the PIN.'; }
+          toast.show({ tone: 'success', title: 'Your PIN is changed', detail: 'Use the new PIN from the next sign-in.' });
+          return null;
+        }}
+      />
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../unsaved';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, CircleAlert, ShoppingCart, Trash2 } from 'lucide-react';
@@ -62,8 +63,8 @@ function ItemCell({ row, rowIndex, onText, onPick, onNav, onFocusRow }: {
       />
       {open && rect && results.length > 0 && createPortal(
         <ul
-          style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(380, rect.width), zIndex: 90 }}
-          className="g-overlay max-h-72 overflow-auto rounded-control border border-line bg-surface p-1 shadow-pop"
+          style={{ position: 'fixed', left: rect.left, top: rect.bottom + 8, width: Math.max(380, rect.width), zIndex: 90 }}
+          className="g-overlay g-popover max-h-72 overflow-auto bg-surface p-1"
         >
           {results.map((p, i) => (
             <li
@@ -154,6 +155,7 @@ export function PurchaseEntry({ suppliers, onCancel, onSaved }: { suppliers: Sup
   const paidP = payNow ? Math.min(parsePaise(paidText ?? '') ?? (paidText === null ? totals.total : 0), totals.total) : 0;
   const dueP = totals.total - paidP;
   const dirty = rows.some((r) => r.item) || invoiceNo.trim() !== '';
+  useUnsavedChanges(dirty);
 
   const addRowIfLast = (i: number) => { if (i === rows.length - 1) setRows((xs) => [...xs, newRow(seq.current++)]); };
 

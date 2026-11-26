@@ -27,7 +27,7 @@ export function ManagerPinDialog({ open, title = 'Manager approval', message, co
 
   const submit = async () => {
     if (busyRef.current) return;
-    if (pin.length < 4) { setError('Enter the 4-digit PIN'); return; }
+    if (pin.length < 4) { setError('Enter the PIN (4 to 6 digits)'); return; }
     busyRef.current = true; setBusy(true);
     const err = await onSubmit(pin);
     busyRef.current = false; setBusy(false);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, Pencil, Plus, ShieldCheck } from 'lucide-react';
-import type { Role, RoleDef, UserAccount, UserInput } from '@gokul/data';
-import { Badge, Button, DataTable, Dialog, Drawer, EmptyState, IconButton, Input, PageHeader, Select, Switch, Tabs, TabPanel, useToast, type ColumnDef, type Tone, useRefreshOnFocus } from '@gokul/ui';
+import { pinRuleProblem, type Role, type RoleDef, type UserAccount, type UserInput } from '@gokul/data';
+import { Badge, Button, DataTable, Drawer, EmptyState, IconButton, Input, PageHeader, PinChangeDialog, Select, Switch, Tabs, TabPanel, useToast, type ColumnDef, type Tone, useRefreshOnFocus } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { RolesMatrix } from '../components/crm/RolesMatrix';
 import { SaveBar } from '../components/crm/SaveBar';
@@ -10,30 +10,33 @@ import { Avatar, ago } from '../components/crm/common';
 const roleTone: Record<Role, Tone> = { owner: 'primary', admin: 'primary', manager: 'info', staff: 'info', cashier: 'neutral' };
 const roleName: Record<Role, string> = { owner: 'Owner', admin: 'Admin', manager: 'Manager', staff: 'Staff', cashier: 'Cashier' };
 
-interface UserDraft { name: string; role: Role; phone: string; pin: string; active: boolean }
+interface UserDraft { name: string; role: Role; phone: string; pin: string; pin2: string; active: boolean }
 
 function UserSheet({ open, user, roles, onClose, onSave }: {
   open: boolean; user: UserAccount | null; roles: RoleDef[]; onClose: () => void; onSave: (i: UserInput) => Promise<void>;
 }) {
-  const [d, setD] = useState<UserDraft>({ name: '', role: 'cashier', phone: '', pin: '', active: true });
+  const [d, setD] = useState<UserDraft>({ name: '', role: 'cashier', phone: '', pin: '', pin2: '', active: true });
   const [touched, setTouched] = useState(false);
   useEffect(() => {
-    if (open) { setD(user ? { name: user.name, role: user.role, phone: user.phone, pin: '', active: user.active } : { name: '', role: 'cashier', phone: '', pin: '', active: true }); setTouched(false); }
+    if (open) { setD(user ? { name: user.name, role: user.role, phone: user.phone, pin: '', pin2: '', active: user.active } : { name: '', role: 'cashier', phone: '', pin: '', pin2: '', active: true }); setTouched(false); }
   }, [open, user]);
   const e: Partial<Record<keyof UserDraft, string>> = {};
   if (!d.name.trim()) e.name = 'Enter the staff name';
-  if (!user && !/^\d{4}$/.test(d.pin)) e.pin = 'PIN must be 4 digits';
-  if (user && d.pin && !/^\d{4}$/.test(d.pin)) e.pin = 'PIN must be 4 digits';
+  if (!user) {
+    const problem = pinRuleProblem(d.pin);
+    if (problem) e.pin = problem;
+    else if (d.pin !== d.pin2) e.pin2 = 'The two PINs are not the same';
+  }
   const role = roles.find((r) => r.id === d.role);
   const submit = async () => {
     setTouched(true);
     if (Object.keys(e).length) return;
-    await onSave({ id: user?.id, name: d.name, role: d.role, phone: d.phone, active: d.active, pin: d.pin || undefined });
+    await onSave({ id: user?.id, name: d.name, role: d.role, phone: d.phone, active: d.active, pin: user ? undefined : d.pin });
   };
   return (
     <Drawer
       open={open} onOpenChange={(o) => !o && onClose()} width={420} title={user ? 'Edit user' : 'New user'}
-      description={user ? user.name : 'Staff sign in at the counter with a 4 digit PIN.'}
+      description={user ? user.name : 'Choose a PIN for them (4 to 6 digits), typed twice.'}
       footer={<><Button variant="ghost" onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" onClick={submit} kbd="Ctrl+S">Save user</Button></>}
     >
       <div className="flex flex-col gap-4" onKeyDown={(ev) => { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') { ev.preventDefault(); void submit(); } }}>
@@ -46,11 +49,19 @@ function UserSheet({ open, user, roles, onClose, onSave }: {
           {role && <p className="mt-1.5 text-xs text-muted">{role.description} {role.id !== 'owner' && role.id !== 'admin' && `Discount up to ${role.discountLimitPct}% without a PIN.`}</p>}
         </div>
         <Input label="Phone (optional)" value={d.phone} onChange={(ev) => setD({ ...d, phone: ev.target.value.replace(/[^\d ]/g, '').slice(0, 11) })} className="num" />
-        <Input
-          label={user ? 'New PIN' : 'PIN'} value={d.pin} inputMode="numeric" type="password" autoComplete="new-password"
-          onChange={(ev) => setD({ ...d, pin: ev.target.value.replace(/\D/g, '').slice(0, 4) })} error={touched ? e.pin : undefined}
-          hint={user ? 'Leave blank to keep the current PIN.' : 'Share it with the staff member in person. Use Reset PIN later if it is forgotten.'} className="num tracking-[0.4em]"
-        />
+        {!user && (
+          <>
+            <Input
+              label="PIN" value={d.pin} inputMode="numeric" type="password" autoComplete="new-password"
+              onChange={(ev) => setD({ ...d, pin: ev.target.value.replace(/\D/g, '').slice(0, 6) })} error={touched ? e.pin : undefined}
+              hint="4 to 6 digits. Not 1111, 1234 or a PIN another user has." className="num tracking-[0.4em]"
+            />
+            <Input
+              label="Type the PIN again" value={d.pin2} inputMode="numeric" type="password" autoComplete="new-password"
+              onChange={(ev) => setD({ ...d, pin2: ev.target.value.replace(/\D/g, '').slice(0, 6) })} error={touched ? e.pin2 : undefined} className="num tracking-[0.4em]"
+            />
+          </>
+        )}
         <div className="flex items-center justify-between rounded-card border border-line bg-surface-2 px-3 py-2.5">
           <div><div className="text-sm font-medium text-ink">Active</div><div className="text-xs text-muted">Inactive users cannot sign in. Their old bills stay.</div></div>
           <Switch checked={d.active} onCheckedChange={(v) => setD({ ...d, active: v })} />
@@ -68,7 +79,7 @@ export function Users() {
   const [saved, setSaved] = useState<RoleDef[]>([]);
   const [draft, setDraft] = useState<RoleDef[]>([]);
   const [sheet, setSheet] = useState<{ open: boolean; user: UserAccount | null }>({ open: false, user: null });
-  const [reset, setReset] = useState<{ user: UserAccount; pin: string | null } | null>(null);
+  const [setPin, setSetPin] = useState<UserAccount | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -132,7 +143,7 @@ export function Users() {
         const r = c.row.original;
         return (
           <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <Button size="sm" icon={<KeyRound size={13} />} onClick={() => setReset({ user: r, pin: null })}>Reset PIN</Button>
+            <Button size="sm" icon={<KeyRound size={13} />} onClick={() => setSetPin(r)}>Set PIN</Button>
             <IconButton size="sm" label="Edit user" onClick={() => setSheet({ open: true, user: r })}><Pencil size={14} /></IconButton>
           </span>
         );
@@ -170,26 +181,15 @@ export function Users() {
         }}
       />
 
-      <Dialog
-        open={!!reset} onOpenChange={(o) => !o && setReset(null)} size="sm"
-        title={reset?.pin ? 'New PIN created' : 'Reset PIN'}
-        description={reset?.user.name}
-        footer={reset?.pin ? <Button variant="primary" onClick={() => setReset(null)} kbd="Enter">Done</Button> : (
-          <>
-            <Button variant="ghost" onClick={() => setReset(null)} kbd="Esc">Cancel</Button>
-            <Button variant="primary" data-autofocus onClick={async () => { const r = await api.resetUserPin(reset!.user.id); setReset({ user: reset!.user, pin: r.pin }); await refreshUsers(); }}>Create new PIN</Button>
-          </>
-        )}
-      >
-        {reset?.pin ? (
-          <div className="text-center">
-            <div className="text-sm text-muted">Tell {reset.user.name.split(' ')[0]} this PIN in person. It is shown only once.</div>
-            <div className="mt-3 rounded-card bg-surface-2 py-4 text-3xl font-semibold tracking-[0.5em] text-ink num selectable">{reset.pin}</div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">The old PIN stops working straight away. A new 4 digit PIN will be created and shown here once.</p>
-        )}
-      </Dialog>
+      <PinChangeDialog
+        open={!!setPin} title="Set PIN" description={setPin?.name} rule={pinRuleProblem} onClose={() => setSetPin(null)}
+        onSubmit={async (_old, pin) => {
+          try { await api.setUserPin(setPin!.id, pin); } catch (err) { return err instanceof Error ? err.message : 'Could not save the PIN.'; }
+          await refreshUsers();
+          toast.show({ tone: 'success', title: `PIN saved for ${setPin!.name}`, detail: 'Tell them in person. It is not shown again.' });
+          return null;
+        }}
+      />
     </>
   );
 }

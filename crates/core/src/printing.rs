@@ -58,7 +58,7 @@ pub struct Config {
     pub tagline: String,
     pub whatsapp: String,
     pub footer_tamil: String,
-    /// Bill heading by payment mode: "Cash Bill", "BHARATQR Bill" ...
+    /// Bill heading by payment mode: "Cash Bill", "UPI Bill" ...
     pub title_cash: String,
     pub title_upi: String,
     pub title_card: String,
@@ -131,7 +131,7 @@ pub fn load_config(conn: &Connection) -> Result<Config> {
         whatsapp: text(&shop["whatsapp"]),
         footer_tamil: text(&f["footerTamil"]),
         title_cash: or(text(&f["titleCash"]), "Cash Bill"),
-        title_upi: or(text(&f["titleUpi"]), "BHARATQR Bill"),
+        title_upi: or(text(&f["titleUpi"]).replace("BHARATQR Bill", "UPI Bill"), "UPI Bill"), // an older saved heading is shown as UPI
         title_card: or(text(&f["titleCard"]), "Card Bill"),
         title_credit: or(text(&f["titleCredit"]), "Credit Bill"),
         title_other: or(text(&f["titleOther"]), "Bill"),

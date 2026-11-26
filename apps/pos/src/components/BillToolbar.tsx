@@ -37,7 +37,7 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
         <TBtn label={label} icon={icon} active={active || open} onClick={() => setOpen((o) => !o)} trailing={<ChevronDown size={12} className="text-white" />} />
       )}
       {open && (
-        <div className={cn("g-overlay absolute top-[calc(100%+4px)] z-[60] w-64 overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay", variant === "tab" ? "left-0" : "right-0")}>
+        <div className={cn("g-overlay g-popover absolute top-[calc(100%+8px)] z-[70] w-64 overflow-hidden bg-surface py-1 text-ink", variant === "tab" ? "left-0" : "right-0")}>
           {heading && <div className="border-b border-line bg-surface-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{heading}</div>}
           {items.map((m) => (
             <div key={m.label}>

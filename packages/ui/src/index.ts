@@ -13,6 +13,7 @@ export * from './components/InvoiceDialog';
 export * from './layouts/PosLayout';
 export * from './layouts/OfficeLayout';
 export * from './components/ManagerPinDialog';
+export * from './components/PinChangeDialog';
 export * from './components/useCountdown';
 export * from './components/Logo';
 export * from './clock';

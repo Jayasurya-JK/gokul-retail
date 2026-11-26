@@ -2,9 +2,41 @@
 
 use gokul_core::{Db, Session};
 use serde_json::Value;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+/// Whether a form on screen has unsaved edits (the screens tell us through `set_unsaved`), and whether the one
+/// "Discard changes?" question has already been asked for the close in progress.
+#[derive(Default)]
+struct Unsaved {
+    dirty: AtomicBool,
+    asked: AtomicBool,
+}
+
+/// Safety net for every way out: once Office has been asked to close, the process is gone within 3 seconds even if
+/// something (the web view tearing down, a background thread) would otherwise keep it alive. All shop data is written
+/// in whole SQLite transactions, so ending the process can never leave a half-saved bill.
+fn arm_exit_watchdog() {
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(3));
+        std::process::exit(0);
+    });
+}
+
+#[tauri::command]
+fn set_unsaved(state: tauri::State<'_, Unsaved>, dirty: bool) {
+    state.dirty.store(dirty, Ordering::SeqCst);
+    state.asked.store(false, Ordering::SeqCst); // "Keep editing" re-arms the question for the next close
+}
+
+/// Closes Office now (after "Discard and close", or from the window buttons when nothing is unsaved).
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    arm_exit_watchdog();
+    app.exit(0);
+}
 
 /// The shared database (`%APPDATA%\GokulRetail\gokul.db`, same file for POS and Office) and the signed-in user of this
 /// app. The session lives here, in Rust: screens cannot say who they are.
@@ -60,7 +92,21 @@ Close any other Gokul window and start again. If this keeps happening, restore t
 fn main() {
     tauri::Builder::default()
         .manage(open_backend())
-        .invoke_handler(tauri::generate_handler![gokul_call])
+        .manage(Unsaved::default())
+        .invoke_handler(tauri::generate_handler![gokul_call, set_unsaved, quit_app])
+        .on_window_event(|window, event| {
+            // Cross, Alt+F4 and the operating system asking us to close all arrive here, in Rust, so closing never
+            // depends on the screens being healthy. Unsaved edits get one question; a second close request, or the
+            // answer "Discard", ends the app.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let st = window.state::<Unsaved>();
+                if st.dirty.load(Ordering::SeqCst) && !st.asked.swap(true, Ordering::SeqCst) && window.emit("gokul-confirm-close", ()).is_ok() {
+                    api.prevent_close();
+                    return;
+                }
+                arm_exit_watchdog();
+            }
+        })
         .setup(|app| {
             // Safety net: the window starts hidden and the UI shows it once mounted. If that never happens
             // (for example a JavaScript error on start), show it anyway after 3 s so the app is never invisible.
@@ -76,6 +122,11 @@ fn main() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Gokul");
+        .build(tauri::generate_context!())
+        .expect("error while building Gokul")
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                arm_exit_watchdog();
+            }
+        });
 }

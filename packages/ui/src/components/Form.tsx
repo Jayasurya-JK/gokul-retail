@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useMemo, useRef, useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useId, useMemo, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 import * as RCheckbox from '@radix-ui/react-checkbox';
 import * as RSwitch from '@radix-ui/react-switch';
 import { Check, ChevronDown, Search } from 'lucide-react';
@@ -84,18 +84,89 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
   return input;
 });
 
-export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
+export interface SelectProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size' | 'onChange' | 'value'> {
   label?: ReactNode;
   options: { value: string; label: string }[];
+  value?: string;
+  /** Same shape as a native select's change event, so `(e) => e.target.value` keeps working. */
+  onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
   size?: 'sm' | 'md';
 }
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select({ label, options, size = 'md', className, ...rest }, ref) {
+/** A drop-down list drawn by the app (a floating card), not the operating system's own select popup. */
+export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select({ label, options, value, onChange, size = 'md', className, disabled, onKeyDown, ...rest }, ref) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const [up, setUp] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const typed = useRef({ text: '', at: 0 });
+  const idx = Math.max(0, options.findIndex((o) => o.value === value));
+  const selected = options.find((o) => o.value === value);
+  const openList = () => {
+    if (disabled) return;
+    const r = wrap.current?.getBoundingClientRect();
+    setUp(!!r && r.bottom + Math.min(260, options.length * 32 + 12) > window.innerHeight && r.top > window.innerHeight - r.bottom);
+    setHi(idx); setOpen(true);
+  };
+  const pick = (o: { value: string }) => { setOpen(false); if (o.value !== value) onChange?.({ target: { value: o.value }, currentTarget: { value: o.value } }); };
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e: MouseEvent) => { if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  useEffect(() => { if (open) listRef.current?.children[hi]?.scrollIntoView({ block: 'nearest' }); }, [open, hi]);
+
+  const keys = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    onKeyDown?.(e);
+    if (e.defaultPrevented) return;
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openList(); }
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(h + 1, options.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+    else if (e.key === 'Home') { e.preventDefault(); setHi(0); }
+    else if (e.key === 'End') { e.preventDefault(); setHi(options.length - 1); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (options[hi]) pick(options[hi]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+    else if (e.key === 'Tab') setOpen(false);
+    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const t = typed.current; const now = Date.now();
+      t.text = now - t.at > 700 ? e.key.toLowerCase() : t.text + e.key.toLowerCase(); t.at = now;
+      const at = options.findIndex((o) => o.label.toLowerCase().includes(`: ${t.text}`) || o.label.toLowerCase().startsWith(t.text));
+      if (at >= 0) setHi(at);
+    }
+  };
+
   const control = (
-    <div className="relative">
-      <select ref={ref} className={cn(fieldBase, 'appearance-none pl-2.5 pr-8 text-sm', size === 'sm' ? 'h-7' : 'h-8', className)} {...rest}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+    <div ref={wrap} className="relative">
+      <button
+        ref={ref} type="button" role="combobox" aria-haspopup="listbox" aria-expanded={open} disabled={disabled}
+        onClick={() => (open ? setOpen(false) : openList())} onKeyDown={keys}
+        className={cn(fieldBase, 'flex items-center pl-2.5 pr-8 text-left text-sm', size === 'sm' ? 'h-7' : 'h-8', className)}
+        {...rest}
+      >
+        <span className="min-w-0 flex-1 truncate">{selected?.label ?? ''}</span>
+      </button>
       <ChevronDown size={15} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-subtle" />
+      {open && (
+        <ul
+          ref={listRef} role="listbox"
+          className={cn('g-overlay g-popover absolute left-0 z-[70] max-h-60 min-w-full w-max max-w-[360px] overflow-auto bg-surface p-1', up ? 'bottom-full mb-2' : 'top-full mt-2')}
+        >
+          {options.map((o, i) => (
+            <li
+              key={o.value} role="option" aria-selected={o.value === value}
+              onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+              className={cn('flex cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-ink', i === hi && 'bg-primary-soft')}
+            >
+              <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
+              {o.value === value && <Check size={14} className="shrink-0 text-primary" />}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
   return label ? <Field label={label}>{control}</Field> : control;
@@ -170,7 +241,7 @@ export function Combobox({ options, value, onChange, placeholder, label }: {
         }}
       />
       {open && (
-        <ul id={id} role="listbox" className="g-overlay absolute left-0 right-0 top-full z-40 mt-1 max-h-60 overflow-auto rounded-control border border-line bg-surface p-1 shadow-pop">
+        <ul id={id} role="listbox" className="g-overlay g-popover absolute left-0 right-0 top-full z-[70] mt-2 max-h-60 overflow-auto bg-surface p-1">
           {filtered.length === 0 && <li className="px-2.5 py-2 text-sm text-subtle">No matches</li>}
           {filtered.map((o, i) => (
             <li

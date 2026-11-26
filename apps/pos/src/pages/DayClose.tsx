@@ -11,7 +11,9 @@ import { DenomCounter } from '../components/DenomCounter';
 import { ReportPreview } from '../components/ReportPreview';
 
 type Dlg = null | 'xreport' | 'pin' | 'zreport';
-const PIN_LEN = 4;
+/** A PIN is 4 to 6 digits (chosen by the person), so nothing is checked until Enter, or at the 6th digit. */
+const PIN_MIN = 4;
+const PIN_MAX = 6;
 
 const DAYCLOSE_KEYS: KeyRows = [
   ['Next count row', ['Enter']],
@@ -319,22 +321,22 @@ function PinDialog({ open, diff, counted, expected, onClose, onApprove, onLocked
           : `${diff < 0 ? 'Short' : 'Excess'} by ${formatRupees(Math.abs(diff), { decimals: false })}. Expected ${formatRupees(expected, { decimals: false })}, counted ${formatRupees(counted, { decimals: false })}.`}
       </div>
       <div className={cn('flex justify-center gap-3', error && 'animate-[shake_0.35s]')}>
-        {Array.from({ length: PIN_LEN }, (_, i) => (
+        {Array.from({ length: Math.max(PIN_MIN, pin.length) }, (_, i) => (
           <span key={i} className={cn('h-4 w-4 rounded-full border-2 transition-colors', i < pin.length ? (error ? 'border-danger bg-danger' : 'border-primary bg-primary') : 'border-line-strong')} />
         ))}
       </div>
       <input
-        data-autofocus type="password" inputMode="numeric" autoComplete="off" value={pin} maxLength={PIN_LEN} aria-label="Manager PIN"
+        data-autofocus type="password" inputMode="numeric" autoComplete="off" value={pin} maxLength={PIN_MAX} aria-label="Manager PIN"
         onChange={(e) => {
-          const v = e.target.value.replace(/\D/g, '').slice(0, PIN_LEN);
+          const v = e.target.value.replace(/\D/g, '').slice(0, PIN_MAX);
           setPin(v);
-          if (v.length === PIN_LEN) window.setTimeout(() => void submit(v), 80);
+          if (v.length === PIN_MAX) window.setTimeout(() => void submit(v), 80);
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter' && pin.length === PIN_LEN) { e.preventDefault(); void submit(pin); } }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && pin.length >= PIN_MIN) { e.preventDefault(); void submit(pin); } }}
         className="sr-only"
       />
       <div className="mt-3 min-h-4 text-center text-xs font-medium text-danger">{error ?? ''}</div>
-      <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-subtle"><Kbd>0-9</Kbd> type the PIN, it checks by itself</div>
+      <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-subtle"><Kbd>0-9</Kbd> type the PIN, then press <Kbd>Enter</Kbd></div>
     </Dialog>
   );
 }

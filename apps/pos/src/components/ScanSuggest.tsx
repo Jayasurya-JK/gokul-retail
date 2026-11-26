@@ -20,7 +20,7 @@ export function ScanSuggest({ list, hi, q, qty, left, onHover, onPick }: {
     <div
       role="listbox" aria-label="Matching items"
       onMouseDown={(e) => e.preventDefault()}
-      className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-line-strong bg-surface shadow-[0_18px_48px_-12px_rgba(15,23,42,0.35)]"
+      className="absolute inset-x-0 top-full z-30 mt-2 g-popover overflow-hidden bg-surface"
     >
       <div className="flex h-8 items-center gap-2 border-b border-line bg-table-head px-3 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink">
         <span>{list.length === 0 ? 'No match' : `${list.length} ${list.length === 1 ? 'match' : 'matches'}`}</span>

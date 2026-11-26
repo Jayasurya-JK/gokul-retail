@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '../../unsaved';
 import { useEffect, useMemo, useState } from 'react';
 import { Check, RotateCcw } from 'lucide-react';
 import { isTauri, recentAverage, recentBatches, saveSeedNorms, type PressingBatch, type SeedProfile } from '@gokul/data';
@@ -58,6 +59,7 @@ export function NormsEditor({ profiles, batches, onSaved }: { profiles: SeedProf
   useEffect(() => { setRows(saved.rows); setWaste(saved.waste); setError(''); }, [saved]);
 
   const dirty = JSON.stringify(rows) !== JSON.stringify(saved.rows) || waste !== saved.waste;
+  useUnsavedChanges(dirty);
   const set = (seed: string, k: keyof Row, v: string) => { setRows((r) => ({ ...r, [seed]: { ...r[seed], [k]: v } })); setError(''); };
   /** Fills the seed-per-litre norm with the owner's own recent average; saving is still a separate, deliberate step. */
   const applyAverage = (seed: string, kgPerL: number) => set(seed, 'kgPerL', kgPerL.toFixed(2));

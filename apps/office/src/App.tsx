@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { TriangleAlert } from 'lucide-react';
-import { windowController, type BackupStatus } from '@gokul/data';
-import { OfficeLayout, StatusDot, ToastProvider, TooltipProvider, WindowControlsProvider, useDesktopGuards } from '@gokul/ui';
+import { pinRuleProblem, windowController, type BackupStatus } from '@gokul/data';
+import { OfficeLayout, PinChangeDialog, StatusDot, ToastProvider, TooltipProvider, WindowControlsProvider, useDesktopGuards, useToast } from '@gokul/ui';
 import { nav } from './nav';
+import { CloseGuardHost } from './unsaved';
 import { api, useSession } from './store';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -66,6 +67,8 @@ function Shell() {
   const signOut = useSession((s) => s.signOut);
   const loc = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
+  const [pinOpen, setPinOpen] = useState(false);
   const [shop, setShop] = useState<{ shopName: string; counter: string } | null>(null);
   useEffect(() => { if (user) api.getSettings().then(setShop).catch(() => undefined); }, [user, loc.pathname]);
   if (!user) return <Navigate to="/login" replace />;
@@ -74,6 +77,7 @@ function Shell() {
       nav={nav} activePath={loc.pathname} onNavigate={navigate}
       user={{ name: user.name, role: user.role, initials: user.initials }}
       onLogout={() => { signOut(); navigate('/login'); }}
+      onChangePin={() => setPinOpen(true)}
       statusLeft={<><span className="flex items-center gap-1.5"><StatusDot tone="success" /> Database connected</span><BackupStatusText /></>}
       statusRight={<span>{shop ? `${shop.shopName} - ${shop.counter}` : ''}</span>}
     >
@@ -102,6 +106,15 @@ function Shell() {
         <Route path="/gst" element={<GstReturns />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <PinChangeDialog
+        open={pinOpen} title="Change my PIN" description={user.name} askOld rule={pinRuleProblem} onClose={() => setPinOpen(false)}
+        onSubmit={async (oldPin, newPin) => {
+          try { await api.changeMyPin(user.id, oldPin, newPin); } catch (e) { return e instanceof Error ? e.message : 'Could not change the PIN.'; }
+          toast.show({ tone: 'success', title: 'Your PIN is changed', detail: 'Use the new PIN from the next sign-in.' });
+          return null;
+        }}
+      />
+      <CloseGuardHost />
     </OfficeLayout>
   );
 }

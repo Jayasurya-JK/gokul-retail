@@ -153,7 +153,7 @@ export function BillGrid({ lines, selected, edit, loose, stock, onSelect, onDraf
       {menu && (
         <div
           role="menu" onMouseDown={(e) => e.stopPropagation()}
-          className="fixed z-[80] w-48 rounded-lg border border-line bg-surface p-1 text-sm shadow-pop"
+          className="g-popover fixed z-[80] w-48 bg-surface p-1 text-sm"
           style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 170) }}
         >
           <MenuItem icon={<Pencil size={14} />} label="Edit quantity" onClick={() => { onEdit(menu.i, 'qty'); setMenu(null); }} />

@@ -33,6 +33,8 @@ input[type='number']::-webkit-inner-spin-button { display: none; }
 @keyframes g-toast { from { opacity: 0; transform: translateX(-10px) } to { opacity: 1; transform: none } }
 /* Dropdowns, popovers, tooltips and the dialog backdrop: a quick fade */
 .g-overlay { animation: g-fade 90ms ease-out; }
+/* Every drop-down menu and list is a floating card: 1px light border, soft strong shadow, 12px corners */
+.g-popover { border: 1px solid rgb(var(--line)); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); }
 .g-overlay[data-state='closed'] { animation: g-fade-out 100ms ease-in forwards; }
 /* Dialogs: opacity only, no transform and no will-change, so the text is never left on a blurry, half-pixel layer */
 .g-dialog { animation: g-fade 110ms ease-out; }

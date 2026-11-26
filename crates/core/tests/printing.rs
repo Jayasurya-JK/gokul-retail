@@ -231,7 +231,7 @@ fn gokul_sample_bills_cash_and_upi() {
             assert!(text.contains("Cash Bill") && text.contains("Customer Name : Murugan") && text.contains("Cust ID : c1") && text.contains("Contact No : 98400 11111") && text.contains("Points : 4.60") || text.contains("Points : "), "{text}");
             assert!(text.contains("வாகை மரச்செக்கு எண்ணெய்") || !text.contains("[ picture"), "{text}");
         } else if name == "upi" {
-            assert!(text.contains("BHARATQR Bill") && !text.contains("Customer Name"), "{text}");
+            assert!(text.contains("UPI Bill") && !text.contains("Customer Name"), "{text}");
         }
         assert!(text.contains("WhatsApp : 9445099191") && text.contains("Natural Product !"), "{text}");
         std::fs::write(shots().join(format!("print-gokul-{name}.txt")), &text).unwrap();

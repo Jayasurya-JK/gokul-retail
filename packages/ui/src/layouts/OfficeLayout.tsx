@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronsLeft, ChevronsRight, CornerDownLeft, LogOut, Maximize, Minimize2, Minimize, Moon, Search, Sun } from 'lucide-react';
+import { ChevronDown, ChevronsLeft, ChevronsRight, CornerDownLeft, KeyRound, LogOut, Maximize, Minimize2, Minimize, Moon, Search, Sun } from 'lucide-react';
 import { cn } from '../cn';
 import { Kbd } from '../components/Display';
 import { Dialog, Tooltip } from '../components/Overlay';
@@ -22,9 +22,9 @@ function useTheme() {
   return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))] as const;
 }
 
-export function OfficeLayout({ nav, activePath, onNavigate, user, children, statusLeft, statusRight, onLogout }: {
+export function OfficeLayout({ nav, activePath, onNavigate, user, children, statusLeft, statusRight, onLogout, onChangePin }: {
   nav: NavGroup[]; activePath: string; onNavigate: (path: string) => void; user: OfficeUser; children: ReactNode;
-  statusLeft?: ReactNode; statusRight?: ReactNode; onLogout?: () => void;
+  statusLeft?: ReactNode; statusRight?: ReactNode; onLogout?: () => void; onChangePin?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -87,7 +87,7 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
               <ChevronDown size={13} className="text-chrome-muted" />
             </button>
             {menu && (
-              <div role="menu" className="g-overlay absolute right-0 top-[calc(100%+6px)] z-[60] w-[240px] overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay">
+              <div role="menu" className="g-overlay g-popover absolute right-0 top-[calc(100%+8px)] z-[70] w-[240px] overflow-hidden bg-surface py-1 text-ink">
                 {win.available && (
                   <>
                     <button role="menuitem" onClick={() => { setMenu(false); win.toggleFullscreen(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
@@ -99,6 +99,11 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
                     </button>
                     <div className="my-1 h-px bg-line" />
                   </>
+                )}
+                {onChangePin && (
+                  <button role="menuitem" onClick={() => { setMenu(false); onChangePin(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2">
+                    <KeyRound size={15} /><span className="flex-1">Change my PIN</span>
+                  </button>
                 )}
                 <button role="menuitem" onClick={() => { setMenu(false); onLogout?.(); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-danger hover:bg-danger-soft">
                   <LogOut size={15} /><span className="flex-1">Sign out</span>

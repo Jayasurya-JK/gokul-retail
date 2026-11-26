@@ -152,7 +152,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "createAdjustment" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 0, pin_key: Some("managerPin") },
         "postStockTake" => PermPin { perm: "canManageStock", action: "stock_adjust", pin_arg: 2, pin_key: None },
         "recordCollection" | "logReminder" => Perm("canCollectCredit"),
-        "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => Perm("canManageUsers"),
+        "saveRoles" | "listUserAccounts" | "saveUserAccount" | "setUserPin" => Perm("canManageUsers"),
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => Perm("canChangeSettings"),
         "syncStatus" | "syncSetConfig" | "syncNow" | "syncUploadEverything" => Perm("canChangeSettings"),
         "runReport" | "getGstrFacts" | "pointsOverview" | "pointsReport" | "pointsExpiring" => Perm("canSeeReports"),
@@ -187,7 +187,8 @@ fn describe(method: &str) -> &'static str {
         "createAdjustment" | "postStockTake" => "adjust stock",
         "recordCollection" | "logReminder" => "collect credit",
         "setCustomerCredit" => "allow credit for a customer",
-        "saveRoles" | "listUserAccounts" | "saveUserAccount" | "resetUserPin" => "manage users",
+        "saveRoles" | "listUserAccounts" | "saveUserAccount" | "setUserPin" => "manage users",
+        "changeMyPin" => "change your PIN",
         "saveSettingsBundle" | "backupNow" | "restoreBackup" => "change settings or backups",
         "runReport" | "getGstrFacts" | "pointsOverview" | "pointsReport" | "pointsExpiring" => "see reports",
         "adjustPoints" | "bulkAdjustPoints" => "change customer points",
@@ -265,6 +266,13 @@ fn stamp_identity(actor: &Actor, method: &str, args: &mut Vec<Value>) {
             args[1] = name;
         }
         "openDay" | "closeDay" => set_field(args, 0, "userId", id),
+        "changeMyPin" => {
+            // always the signed-in user's own PIN, whatever the screen sent
+            if args.is_empty() {
+                args.push(Value::Null);
+            }
+            args[0] = id;
+        }
         "currentShift" => {
             if args.is_empty() {
                 args.push(Value::Null);

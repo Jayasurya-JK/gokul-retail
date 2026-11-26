@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { Button } from '@gokul/ui';
+import { useUnsavedChanges } from '../../unsaved';
 
 /** Bottom bar shown while a form has unsaved changes. Ctrl+S saves, Esc-free discard keeps keyboard flow simple. */
 export function SaveBar({ dirty, busy, onSave, onDiscard, message }: { dirty: boolean; busy?: boolean; onSave: () => void; onDiscard: () => void; message?: string }) {
+  useUnsavedChanges(dirty);
   useEffect(() => {
     if (!dirty) return;
     const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); onSave(); } };

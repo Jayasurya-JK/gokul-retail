@@ -3,6 +3,7 @@ import type { Bill, Customer, Paise, PayMode, Role, UnitCode } from '../types';
 import { rng } from '../seed';
 import { defaultRateEntries, enabledRates, gstinCheckChar, gstinProblem, mergeRateEntries, rateOk, stateCodeForName, stateName } from '../gst';
 import { finalizeSeedBills } from './taxlines';
+import { pinRuleProblem } from '../auth';
 
 /** A 14-character GSTIN stem plus its real check character */
 const withCheckChar = (g14: string): string => g14 + (gstinCheckChar(g14) ?? '0');
@@ -176,7 +177,7 @@ export const permissionDefs: { key: PermissionKey; label: string; hint: string; 
   { key: 'canSeeReports', label: 'See reports', hint: 'Sales, GST, stock and profit reports', group: 'Back office' },
   { key: 'canManageItems', label: 'Add and edit items', hint: 'Item master, categories, labels', group: 'Back office' },
   { key: 'canManageStock', label: 'Stock and purchases', hint: 'GRN, adjustments, production', group: 'Back office' },
-  { key: 'canManageUsers', label: 'Manage users and roles', hint: 'Create users, reset PINs', group: 'Back office' },
+  { key: 'canManageUsers', label: 'Manage users and roles', hint: 'Create users, set PINs', group: 'Back office' },
   { key: 'canChangeSettings', label: 'Change settings', hint: 'Shop, tax, printers, backup', group: 'Back office' },
   { key: 'canEditRecords', label: 'Edit or delete saved records', hint: 'Correct or remove a saved pressing batch or godown entry', group: 'Back office' },
 ];
@@ -212,7 +213,7 @@ export interface UserInput {
   role: Role;
   phone: string;
   active: boolean;
-  /** New PIN, 4 digits. Required for a new user. */
+  /** PIN chosen by a person, 4 to 6 digits. Required for a new user. */
   pin?: string;
 }
 
@@ -581,7 +582,10 @@ export interface CrmApi {
   saveRoles(roles: RoleDef[]): Promise<RoleDef[]>;
   listUserAccounts(): Promise<UserAccount[]>;
   saveUserAccount(input: UserInput): Promise<UserAccount>;
-  resetUserPin(userId: string): Promise<{ pin: string }>;
+  /** The owner (users permission) chooses a PIN for a user. The PIN is never shown again. */
+  setUserPin(userId: string, pin: string): Promise<void>;
+  /** The signed-in user changes their own PIN (old PIN first). */
+  changeMyPin(userId: string, oldPin: string, newPin: string): Promise<void>;
   /* settings */
   getSettingsBundle(): Promise<SettingsBundle>;
   saveSettingsBundle(next: SettingsBundle): Promise<SettingsBundle>;
@@ -682,7 +686,7 @@ function seedSettings(store: MockStore): SettingsBundle {
     billFormat: {
       header: 'Cold pressed oils, made in front of you', footer: s.receiptFooter, showSavings: true, showHsn: true,
       showGstSummary: true, showQr: false, upiId: '', language: 'en', copies: 1, paper: '80mm',
-      footerTamil: '', titleCash: 'Cash Bill', titleUpi: 'BHARATQR Bill', titleCard: 'Card Bill', titleCredit: 'Credit Bill', titleOther: 'Bill', tamilNames: false, numberFormat: 'yy/nnnnn',
+      footerTamil: '', titleCash: 'Cash Bill', titleUpi: 'UPI Bill', titleCard: 'Card Bill', titleCredit: 'Credit Bill', titleOther: 'Bill', tamilNames: false, numberFormat: 'yy/nnnnn',
     },
     printers: {
       mode: 'escpos', printLogo: true, billPrinter: s.printer, labelPrinter: 'TSC TE244', autoPrint: true, openDrawerOnCash: true, cutter: true,
@@ -864,6 +868,7 @@ export function createCrmMock(store: MockStore): CrmApi {
   /* ---------- users ---------- */
   const accountState = new Map<string, { active: boolean; phone: string; pinChangedAt: string }>();
   store.users.forEach((u, i) => accountState.set(u.id, { active: true, phone: `9${4200 + i * 211} ${10000 + i * 7331}`.slice(0, 11), pinChangedAt: daysAgo(20 + i * 17) }));
+  const pinInUse = (pin: string, exceptId?: string) => store.users.some((x) => x.id !== exceptId && accountState.get(x.id)?.active !== false && x.pin === pin);
   const accountOf = (u: (typeof store.users)[number]): UserAccount => {
     const st = accountState.get(u.id)!;
     return {
@@ -1075,6 +1080,11 @@ export function createCrmMock(store: MockStore): CrmApi {
     listUserAccounts: () => delay(store.users.map(accountOf)),
     saveUserAccount: (input) => {
       let u = input.id ? store.users.find((x) => x.id === input.id) : undefined;
+      if (!input.name.trim()) return Promise.reject(new Error("Enter the user's name."));
+      if (input.pin) {
+        const problem = pinRuleProblem(input.pin) ?? (pinInUse(input.pin, u?.id) ? 'Another user already has this PIN. Choose a different one.' : null);
+        if (problem) return Promise.reject(new Error(problem));
+      } else if (!u) return Promise.reject(new Error('Choose a PIN (4 to 6 digits) for the new user.'));
       if (u) {
         u.name = input.name.trim(); u.role = input.role;
         if (input.pin) { u.pin = input.pin; accountState.get(u.id)!.pinChangedAt = new Date().toISOString(); }
@@ -1082,7 +1092,7 @@ export function createCrmMock(store: MockStore): CrmApi {
         seq += 1;
         const parts = input.name.trim().split(/\s+/);
         u = {
-          id: `u${seq}`, name: input.name.trim(), role: input.role, pin: input.pin ?? '0000',
+          id: `u${seq}`, name: input.name.trim(), role: input.role, pin: input.pin!,
           initials: ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase(),
           color: ['#2563EB', '#DB2777', '#D97706', '#7C3AED'][seq % 4], lastLogin: 'Never',
         };
@@ -1093,13 +1103,25 @@ export function createCrmMock(store: MockStore): CrmApi {
       st.active = input.active; st.phone = input.phone.trim();
       return delay(accountOf(u));
     },
-    resetUserPin: (userId) => {
+    setUserPin: (userId, pin) => {
       const u = store.users.find((x) => x.id === userId);
       if (!u) return Promise.reject(new Error('User not found'));
-      const pin = String(1000 + Math.floor(Math.random() * 8999));
+      const problem = pinRuleProblem(pin) ?? (pinInUse(pin, u.id) ? 'Another user already has this PIN. Choose a different one.' : null);
+      if (problem) return Promise.reject(new Error(problem));
       u.pin = pin;
       accountState.get(u.id)!.pinChangedAt = new Date().toISOString();
-      return delay({ pin });
+      return delay(undefined);
+    },
+    changeMyPin: (userId, oldPin, newPin) => {
+      const u = store.users.find((x) => x.id === userId);
+      if (!u) return Promise.reject(new Error('User not found'));
+      if (u.pin !== oldPin) return Promise.reject(new Error('Your current PIN is not correct.'));
+      if (oldPin === newPin) return Promise.reject(new Error('The new PIN is the same as the current one. Choose a different PIN.'));
+      const problem = pinRuleProblem(newPin) ?? (pinInUse(newPin, u.id) ? 'Another user already has this PIN. Choose a different one.' : null);
+      if (problem) return Promise.reject(new Error(problem));
+      u.pin = newPin;
+      accountState.get(u.id)!.pinChangedAt = new Date().toISOString();
+      return delay(undefined);
     },
 
     /* settings */

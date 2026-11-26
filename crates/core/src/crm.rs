@@ -5,8 +5,7 @@ use crate::bills::{like_escape, query_bills};
 use crate::catalog::OFFICE;
 use crate::db::{self, audit, doc_number, drawer_entry, fresh_id, fy_of, get_setting, iso, next_seq, parse_iso, round_div, set_setting, when_label};
 use crate::error::{invalid, Result};
-use crate::store::hash_pin;
-use argon2::password_hash::rand_core::{OsRng, RngCore};
+use crate::store::{check_pin, hash_pin};
 use chrono::{Duration, Local, NaiveDate};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::Deserialize;
@@ -693,8 +692,38 @@ fn yes() -> bool {
     true
 }
 
-fn valid_pin(p: &str) -> bool {
-    p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())
+/// The rules every PIN a person picks must pass: 4 to 6 digits, not one digit repeated (1111), not a straight run (1234, 4321, 123456).
+/// The answer is a plain-words message for the screen, or `None` when the PIN is fine.
+pub fn pin_rule_problem(p: &str) -> Option<&'static str> {
+    if p.len() < 4 || p.len() > 6 || !p.chars().all(|c| c.is_ascii_digit()) {
+        return Some("The PIN must be 4 to 6 digits, numbers only.");
+    }
+    let d: Vec<i32> = p.chars().map(|c| c as i32 - '0' as i32).collect();
+    if d.iter().all(|x| *x == d[0]) {
+        return Some("That PIN is too easy to guess (the same digit repeated). Choose another.");
+    }
+    if d.windows(2).all(|w| w[1] - w[0] == 1) || d.windows(2).all(|w| w[0] - w[1] == 1) {
+        return Some("That PIN is too easy to guess (digits in a row, like 1234). Choose another.");
+    }
+    None
+}
+
+/// Another active user already signs in with this PIN (compared through the stored hashes; no PIN is ever kept).
+fn pin_taken(conn: &Connection, pin: &str, except_user: &str) -> Result<bool> {
+    let mut st = conn.prepare("SELECT pin_hash FROM users WHERE active=1 AND id != ?1")?;
+    let hashes = st.query_map([except_user], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(hashes.iter().any(|h| check_pin(pin, h)))
+}
+
+/// Rules plus uniqueness, for a PIN chosen for `user_id` (empty for a user who does not exist yet).
+fn check_new_pin(conn: &Connection, pin: &str, user_id: &str) -> Result<()> {
+    if let Some(m) = pin_rule_problem(pin) {
+        return invalid(m);
+    }
+    if pin_taken(conn, pin, user_id)? {
+        return invalid("Another user already has this PIN. Choose a different one.");
+    }
+    Ok(())
 }
 
 const COLORS: &[&str] = &["#2563EB", "#DB2777", "#D97706", "#7C3AED", "#0E4330", "#DC2626"];
@@ -706,11 +735,6 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
     }
     if !["owner", "admin", "manager", "staff", "cashier"].contains(&i.role.as_str()) {
         return invalid("Choose a role.");
-    }
-    if let Some(p) = i.pin.as_deref().filter(|p| !p.is_empty()) {
-        if !valid_pin(p) {
-            return invalid("The PIN must be exactly 4 digits.");
-        }
     }
     let now = Local::now();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -730,13 +754,16 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
             }
             tx.execute("UPDATE users SET name=?1, role=?2, phone=?3, active=?4 WHERE id=?5", params![name, i.role, i.phone.trim(), i.active, id])?;
             if let Some(p) = i.pin.as_deref().filter(|p| !p.is_empty()) {
+                check_new_pin(&tx, p, id)?;
                 tx.execute("UPDATE users SET pin_hash=?1, pin_changed_at=?2 WHERE id=?3", params![hash_pin(p)?, iso(now), id])?;
+                audit(&tx, now, OFFICE, "set_pin", "user", id, &format!("PIN set for {name} by {}", db::actor_or(OFFICE)))?;
             }
             audit(&tx, now, OFFICE, "update", "user", id, &format!("{name} ({})", i.role))?;
             id.clone()
         }
         None => {
-            let Some(pin) = i.pin.as_deref().filter(|p| !p.is_empty()) else { return invalid("Set a 4 digit PIN for the new user.") };
+            let Some(pin) = i.pin.as_deref().filter(|p| !p.is_empty()) else { return invalid("Choose a PIN (4 to 6 digits) for the new user.") };
+            check_new_pin(&tx, pin, "")?;
             let id = fresh_id(&tx, "users", "u", "USER")?;
             let parts: Vec<&str> = name.split_whitespace().collect();
             let initials: String = parts.iter().take(2).filter_map(|p| p.chars().next()).collect::<String>().to_uppercase();
@@ -746,6 +773,7 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
                 params![id, name, i.role, initials, color, hash_pin(pin)?, i.phone.trim(), i.active, iso(now)],
             )?;
             audit(&tx, now, OFFICE, "create", "user", &id, &format!("{name} ({})", i.role))?;
+            audit(&tx, now, OFFICE, "set_pin", "user", &id, &format!("PIN set for {name} by {}", db::actor_or(OFFICE)))?;
             id
         }
     };
@@ -754,18 +782,44 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
     Ok(a)
 }
 
-/// A new random 4 digit PIN. Only the argon2 hash is stored; the PIN is returned once for the owner to hand over.
-pub fn reset_user_pin(conn: &mut Connection, user_id: &str) -> Result<Value> {
+/// The owner (or anyone with the users permission) chooses a PIN for a user. Only the argon2 hash is stored; the PIN is never returned.
+pub fn set_user_pin(conn: &mut Connection, user_id: &str, pin: &str) -> Result<Value> {
     let now = Local::now();
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let name: Option<String> = tx.query_row("SELECT name FROM users WHERE id=?1", [user_id], |r| r.get(0)).optional()?;
     let Some(name) = name else { return invalid("User not found") };
-    let mut rng = OsRng;
-    let pin = format!("{:04}", 1000 + rng.next_u32() % 9000);
-    tx.execute("UPDATE users SET pin_hash=?1, pin_changed_at=?2 WHERE id=?3", params![hash_pin(&pin)?, iso(now), user_id])?;
-    audit(&tx, now, OFFICE, "reset_pin", "user", user_id, &name)?;
+    check_new_pin(&tx, pin, user_id)?;
+    tx.execute("UPDATE users SET pin_hash=?1, pin_changed_at=?2, failed_pins=0, locked_until=NULL WHERE id=?3", params![hash_pin(pin)?, iso(now), user_id])?;
+    audit(&tx, now, OFFICE, "set_pin", "user", user_id, &format!("PIN set for {name} by {}", db::actor_or(OFFICE)))?;
     tx.commit()?;
-    Ok(json!({ "pin": pin }))
+    Ok(Value::Null)
+}
+
+/// A signed-in user changes their own PIN: the old PIN must be right (wrong ones count towards the same lockout as at sign-in).
+pub fn change_my_pin(conn: &mut Connection, user_id: &str, old_pin: &str, new_pin: &str) -> Result<Value> {
+    let now = Local::now();
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let row: Option<(String, String)> = tx.query_row("SELECT pin_hash, name FROM users WHERE id=?1 AND active=1", [user_id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+    let Some((hash, name)) = row else { return invalid("User not found") };
+    if let Some(left) = crate::store::locked_secs(&tx, user_id)? {
+        return invalid(crate::store::locked_message(left));
+    }
+    if !check_pin(old_pin, &hash) {
+        let locked = crate::store::register_pin_failure(&tx, user_id, &name, "wrong old PIN when changing PIN")?;
+        tx.commit()?;
+        return invalid(match locked {
+            Some(secs) => crate::store::locked_message(secs),
+            None => "Your current PIN is not correct.".to_string(),
+        });
+    }
+    if old_pin == new_pin {
+        return invalid("The new PIN is the same as the current one. Choose a different PIN.");
+    }
+    check_new_pin(&tx, new_pin, user_id)?;
+    tx.execute("UPDATE users SET pin_hash=?1, pin_changed_at=?2 WHERE id=?3", params![hash_pin(new_pin)?, iso(now), user_id])?;
+    audit(&tx, now, &name, "change_pin", "user", user_id, &format!("PIN changed by {name}"))?;
+    tx.commit()?;
+    Ok(Value::Null)
 }
 
 // =====================================================================
@@ -862,7 +916,7 @@ pub fn get_settings_bundle(conn: &Connection) -> Result<Value> {
         }
     }
     let mut bill_format = bill_format;
-    for (k, v) in [("footerTamil", json!("")), ("titleCash", json!("Cash Bill")), ("titleUpi", json!("BHARATQR Bill")), ("titleCard", json!("Card Bill")),
+    for (k, v) in [("footerTamil", json!("")), ("titleCash", json!("Cash Bill")), ("titleUpi", json!("UPI Bill")), ("titleCard", json!("Card Bill")),
                    ("titleCredit", json!("Credit Bill")), ("titleOther", json!("Bill")), ("tamilNames", json!(false)), ("numberFormat", json!("yy/nnnnn"))] {
         if bill_format[k].is_null() {
             bill_format[k] = v;

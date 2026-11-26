@@ -124,7 +124,7 @@ fn cashier_cannot_bypass_the_role_matrix_with_direct_calls() {
     err_has(call(&db, &s, "saveUserAccount", json!([{ "name": "Sneaky", "role": "owner", "pin": "1357" }])), "permission");
     err_has(call(&db, &s, "saveRoles", json!([[]])), "permission");
     err_has(call(&db, &s, "saveSettingsBundle", json!([{}])), "permission");
-    err_has(call(&db, &s, "resetUserPin", json!(["u1"])), "permission");
+    err_has(call(&db, &s, "setUserPin", json!(["u1", "7391"])), "permission");
     err_has(call(&db, &s, "runReport", json!(["daily-summary", {}])), "permission");
     err_has(call(&db, &s, "createGrn", json!([{}])), "permission");
     err_has(call(&db, &s, "backupNow", json!([])), "permission");

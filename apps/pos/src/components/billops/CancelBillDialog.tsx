@@ -23,7 +23,7 @@ export function CancelBillDialog({ open, detail, onClose, onConfirm }: {
   const submit = async () => {
     if (!ready) {
       if (!finalReason) setError('Write the reason for cancelling');
-      else setError('Enter the 4-digit manager PIN');
+      else setError('Enter the manager PIN (4 to 6 digits)');
       return;
     }
     setBusy(true);

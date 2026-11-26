@@ -6,6 +6,7 @@ for (const w of [1280, 1366]) {
   const page = await (await browser.newContext({ viewport: { width: w, height: w === 1280 ? 720 : 768 } })).newPage();
   await page.goto('http://localhost:5180/'); await sleep(800);
   for (const d of '1111') { await page.keyboard.press(d); await sleep(60); }
+  await page.keyboard.press('Enter');
   await sleep(1200);
   await page.evaluate(() => { location.hash = '#/billing'; }); await sleep(500);
   const add = async (c) => { const i = page.locator('[data-scan-input]'); await i.focus(); await i.fill(c); await page.keyboard.press('Enter'); await sleep(400); };

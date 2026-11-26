@@ -539,28 +539,25 @@ fn cashier_cannot_cancel_without_a_manager_pin_and_roles_are_enforced() {
 }
 
 #[test]
-fn users_pins_are_hashed_reset_is_shown_once_and_the_last_owner_is_protected() {
+fn users_pins_are_hashed_set_by_the_owner_and_the_last_owner_is_protected() {
     let (_d, db) = mini_db();
     db.with(|c| {
         assert!(crm::save_user_account(c, &de(json!({ "name": "Divya Selvam", "role": "cashier", "phone": "", "active": true }))).is_err(), "a new user needs a PIN");
         assert!(crm::save_user_account(c, &de(json!({ "name": "Divya Selvam", "role": "cashier", "phone": "", "active": true, "pin": "12" }))).is_err());
-        let u = crm::save_user_account(c, &de(json!({ "name": "Divya Selvam", "role": "cashier", "phone": "98400 33333", "active": true, "pin": "4321" })))?;
+        let u = crm::save_user_account(c, &de(json!({ "name": "Divya Selvam", "role": "cashier", "phone": "98400 33333", "active": true, "pin": "4829" })))?;
         assert_eq!(u["initials"], "DS");
         let id = u["id"].as_str().unwrap().to_string();
         let hash: String = c.query_row("SELECT pin_hash FROM users WHERE id=?1", [&id], |r| r.get(0))?;
-        assert!(hash.starts_with("$argon2id$") && !hash.contains("4321"));
-        assert!(store::verify_pin(c, &id, "4321")?.is_some());
-        // reset: a new 4 digit PIN, only the hash is stored, the old one stops working
-        let r = crm::reset_user_pin(c, &id)?;
-        let pin = r["pin"].as_str().unwrap().to_string();
-        assert!(pin.len() == 4 && pin.chars().all(|ch| ch.is_ascii_digit()));
+        assert!(hash.starts_with("$argon2id$") && !hash.contains("4829"));
+        assert!(store::verify_pin(c, &id, "4829")?.is_some());
+        // the owner sets a new PIN: only the hash is stored, the old one stops working
+        crm::set_user_pin(c, &id, "582913")?;
         let hash2: String = c.query_row("SELECT pin_hash FROM users WHERE id=?1", [&id], |r| r.get(0))?;
-        assert!(hash2 != hash && hash2.starts_with("$argon2id$") && !hash2.contains(&pin));
-        assert!(store::verify_pin(c, &id, &pin)?.is_some());
-        if pin != "4321" {
-            assert!(store::verify_pin(c, &id, "4321")?.is_none());
-        }
-        assert!(crm::reset_user_pin(c, "ghost").is_err());
+        assert!(hash2 != hash && hash2.starts_with("$argon2id$") && !hash2.contains("582913"));
+        assert!(store::verify_pin(c, &id, "582913")?.is_some());
+        assert!(store::verify_pin(c, &id, "4829")?.is_none());
+        assert!(crm::set_user_pin(c, "ghost", "582913").is_err());
+        let pin = "582913".to_string();
         // list shows no secrets; deactivated users cannot log in
         let list = crm::list_user_accounts(c)?;
         assert!(list.iter().all(|a| a.get("pin").is_none() && a.get("pinHash").is_none()));
@@ -572,6 +569,76 @@ fn users_pins_are_hashed_reset_is_shown_once_and_the_last_owner_is_protected() {
         Ok(())
     })
     .unwrap();
+}
+
+#[test]
+fn people_choose_their_pins_with_rules_uniqueness_audit_and_working_login() {
+    let (_d, db) = mini_db();
+    db.with(|c| {
+        // rules: 4 to 6 digits, no repeats, no straight runs
+        for bad in ["", "123", "1234567", "12a4", "1111", "0000", "999999", "1234", "4321", "123456", "654321", "3456", "9876"] {
+            assert!(crm::pin_rule_problem(bad).is_some(), "{bad} must be refused");
+        }
+        for good in ["1357", "2580", "8416", "135792", "1212", "1233"] {
+            assert!(crm::pin_rule_problem(good).is_none(), "{good} is allowed");
+        }
+        // a new user must bring a chosen PIN that passes the rules
+        let new_user = |pin: Option<&str>| de(json!({ "name": "Divya Selvam", "role": "cashier", "phone": "", "active": true, "pin": pin }));
+        assert!(crm::save_user_account(c, &new_user(None)).is_err());
+        assert!(crm::save_user_account(c, &new_user(Some("1111"))).is_err());
+        assert!(crm::save_user_account(c, &new_user(Some("1234"))).is_err());
+        let u = crm::save_user_account(c, &new_user(Some("7391")))?;
+        let id = u["id"].as_str().unwrap().to_string();
+        // unique among active users (below, a second user cannot take the first one's PIN)
+        assert!(crm::set_user_pin(c, &id, "1111").is_err(), "trivial");
+        crm::set_user_pin(c, &id, "846259")?;
+        let other = crm::save_user_account(c, &de(json!({ "name": "Meena K", "role": "cashier", "phone": "", "active": true, "pin": "7391" })))?;
+        let other_id = other["id"].as_str().unwrap().to_string();
+        let dup = crm::set_user_pin(c, &other_id, "846259").unwrap_err().to_string();
+        assert!(dup.contains("already has this PIN"), "{dup}");
+        // login: the new PIN works, the old one does not
+        assert!(store::verify_pin(c, &id, "846259")?.is_some());
+        assert!(store::verify_pin(c, &id, "7391")?.is_none());
+        // change my PIN: needs the right old PIN, passes the rules, is unique, and the old one stops working
+        assert!(crm::change_my_pin(c, &id, "000000", "582913").unwrap_err().to_string().contains("not correct"));
+        assert!(crm::change_my_pin(c, &id, "846259", "846259").is_err(), "same as now");
+        assert!(crm::change_my_pin(c, &id, "846259", "1234").is_err());
+        assert!(crm::change_my_pin(c, &id, "846259", "7391").unwrap_err().to_string().contains("already has this PIN"));
+        crm::change_my_pin(c, &id, "846259", "582913")?;
+        assert!(store::verify_pin(c, &id, "582913")?.is_some());
+        assert!(store::verify_pin(c, &id, "846259")?.is_none());
+        // the audit log says who set or changed it and never holds a PIN
+        let log: Vec<String> = {
+            let mut st = c.prepare("SELECT detail FROM audit_log WHERE action IN ('set_pin','change_pin') ORDER BY id")?;
+            let v = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+            v
+        };
+        assert!(log.iter().any(|d| d.starts_with("PIN set for Divya Selvam by ")), "{log:?}");
+        assert!(log.iter().any(|d| d == "PIN changed by Divya Selvam"), "{log:?}");
+        for pin in ["7391", "846259", "582913"] {
+            assert!(log.iter().all(|d| !d.contains(pin)), "the log must not hold a PIN");
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn change_my_pin_goes_through_the_session_for_any_user_and_set_pin_needs_the_users_permission() {
+    let (_d, db) = mini_db();
+    let s = gokul_core::Session::office();
+    let call = |m: &str, a: serde_json::Value| gokul_core::dispatch_session(&db, &s, m, a.as_array().cloned().unwrap_or_default()).map_err(|e| e.to_string());
+    assert!(!call("verifyPin", json!(["u1", "1111"])).unwrap().is_null());
+    // the owner picks a PIN for a new user, then that user signs in and changes it; the id sent by the screen is ignored
+    let u = call("saveUserAccount", json!([{ "name": "Divya Selvam", "role": "staff", "phone": "", "active": true, "pin": "7391" }])).unwrap();
+    let id = u["id"].as_str().unwrap().to_string();
+    call("setUserPin", json!([id, "528146"])).unwrap();
+    assert!(call("verifyPin", json!([id, "528146"])).unwrap().as_object().is_some());
+    assert!(call("setUserPin", json!(["u1", "8264"])).unwrap_err().contains("permission"), "a staff user cannot set PINs");
+    call("changeMyPin", json!(["u1", "528146", "602814"])).unwrap();
+    assert!(call("verifyPin", json!([id, "602814"])).unwrap().as_object().is_some(), "changed Divya's own PIN");
+    assert!(call("verifyPin", json!([id, "528146"])).unwrap().is_null());
+    assert!(call("verifyPin", json!(["u1", "1111"])).unwrap().as_object().is_some(), "the owner's PIN is untouched");
 }
 
 // ---------- settings and backup ----------

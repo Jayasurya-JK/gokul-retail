@@ -8,13 +8,13 @@ export function printNumber(number: string, format: 'yy/nnnnn' | 'raw' = 'yy/nnn
   return m ? `${m[1]}/${m[2].padStart(5, '0')}` : number;
 }
 
-/** "Cash Bill", "BHARATQR Bill" ...: the heading the shop chose for the payment mode that paid most of the bill. */
+/** "Cash Bill", "UPI Bill" ...: the heading the shop chose for the payment mode that paid most of the bill. */
 export function billTitleFor(payments: Payment[], f: BillFormatSettings): string {
   const top = [...payments].sort((a, b) => b.amount - a.amount)[0];
   const mode = !top ? 'cash' : top.mode === 'credit_note' ? 'other' : top.mode;
   switch (mode) {
     case 'cash': return f.titleCash || 'Cash Bill';
-    case 'upi': return f.titleUpi || 'BHARATQR Bill';
+    case 'upi': return !f.titleUpi || f.titleUpi === 'BHARATQR Bill' ? 'UPI Bill' : f.titleUpi;
     case 'card': return f.titleCard || 'Card Bill';
     case 'credit': return f.titleCredit || 'Credit Bill';
     default: return f.titleOther || 'Bill';

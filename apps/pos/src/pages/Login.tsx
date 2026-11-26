@@ -7,7 +7,9 @@ import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { usePrinterStatus } from '../printing';
 
-const PIN_LEN = 4;
+/** A PIN is 4 to 6 digits (chosen by the person), so nothing is checked until Enter, or at the 6th digit. */
+const PIN_MIN = 4;
+const PIN_MAX = 6;
 
 export function Login() {
   const nav = useNavigate();
@@ -56,9 +58,9 @@ export function Login() {
   const press = useCallback((d: string) => {
     if (busy || locked) return;
     setPin((p) => {
-      if (p.length >= PIN_LEN) return p;
+      if (p.length >= PIN_MAX) return p;
       const next = p + d;
-      if (next.length === PIN_LEN) window.setTimeout(() => submit(next), 80);
+      if (next.length === PIN_MAX) window.setTimeout(() => submit(next), 80);
       return next;
     });
   }, [busy, locked, submit]);
@@ -70,7 +72,7 @@ export function Login() {
       else if (e.key === 'Escape') setPin('');
       else if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, users.length - 1)); setPin(''); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); setPin(''); }
-      else if (e.key === 'Enter' && pin.length === PIN_LEN) submit(pin);
+      else if (e.key === 'Enter' && pin.length >= PIN_MIN) submit(pin);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -87,7 +89,7 @@ export function Login() {
         { key: 'Up/Down', label: 'Choose user' },
         { key: 'Back', label: 'Delete digit', onClick: () => setPin((p) => p.slice(0, -1)) },
         { key: 'Esc', label: 'Clear', onClick: () => setPin('') },
-        { key: 'Enter', label: 'Sign in', tone: 'primary', onClick: () => pin.length === PIN_LEN && submit(pin) },
+        { key: 'Enter', label: 'Sign in', tone: 'primary', onClick: () => pin.length >= PIN_MIN && submit(pin) },
       ]}
       side={
         <div className="flex h-full flex-col px-10 py-8">
@@ -113,7 +115,7 @@ export function Login() {
 
           <div className="mt-auto flex flex-col items-center">
             <div className={cn('flex gap-3', error && 'animate-[shake_0.35s]', locked && 'opacity-40')}>
-              {Array.from({ length: PIN_LEN }, (_, i) => (
+              {Array.from({ length: Math.max(PIN_MIN, pin.length) }, (_, i) => (
                 <span key={i} className={cn('h-3.5 w-3.5 rounded-full border-2 transition-colors', i < pin.length ? (error ? 'border-danger bg-danger' : 'border-primary bg-primary') : 'border-line-strong bg-transparent')} />
               ))}
             </div>
@@ -128,6 +130,12 @@ export function Login() {
               <PadKey onClick={() => press('0')}>0</PadKey>
               <PadKey muted onClick={() => setPin((p) => p.slice(0, -1))}><Delete size={20} /></PadKey>
             </div>
+            <button
+              tabIndex={-1} disabled={pin.length < PIN_MIN || busy || locked} onClick={() => submit(pin)}
+              className="mt-2 flex h-12 w-[264px] items-center justify-center gap-2 rounded-xl bg-primary text-base font-semibold text-white transition-colors enabled:hover:brightness-110 disabled:opacity-40"
+            >
+              Sign in <Kbd>Enter</Kbd>
+            </button>
           </div>
         </div>
       }

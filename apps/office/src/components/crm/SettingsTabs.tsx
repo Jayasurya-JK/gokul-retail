@@ -169,7 +169,7 @@ export function BillFormatTab({ v, shop, set }: { v: BillFormatSettings; shop: S
         <Card title="Bill heading by how it was paid">
           <div className="grid grid-cols-2 gap-3">
             <Input label="Cash" value={v.titleCash} onChange={(e) => up('titleCash', e.target.value)} maxLength={20} />
-            <Input label="UPI / QR" value={v.titleUpi} onChange={(e) => up('titleUpi', e.target.value)} maxLength={20} />
+            <Input label="UPI" value={v.titleUpi} onChange={(e) => up('titleUpi', e.target.value)} maxLength={20} />
             <Input label="Card" value={v.titleCard} onChange={(e) => up('titleCard', e.target.value)} maxLength={20} />
             <Input label="Credit (pay later)" value={v.titleCredit} onChange={(e) => up('titleCredit', e.target.value)} maxLength={20} />
             <Input label="Anything else" value={v.titleOther} onChange={(e) => up('titleOther', e.target.value)} maxLength={20} className="col-span-2" />
