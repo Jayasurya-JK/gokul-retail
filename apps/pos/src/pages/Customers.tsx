@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IndianRupee, Pencil, Phone, Plus, ReceiptIndianRupee, Search, ShoppingCart, Star, UserRound, UserPlus } from 'lucide-react';
 import { compareCustomers, isNoName, formatPoints, formatRupees, parsePaise, type AgeingBuckets, type CustomerProfile, type CustomerRow, type CustomerWallet, type CustStatement, type PointsLedgerRow } from '@gokul/data';
-import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
+import { Badge, Button, Dialog, EmptyState, Input, Kbd, Money, NumberInput, PosLayout, Sheet, cn, useCachedLoad, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useBilling } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -26,12 +26,12 @@ const CUSTOMERS_KEYS: KeyRows = [
   ['Clear search, or back to billing', ['Esc']],
 ];
 
+const NO_CUSTOMERS: CustomerRow[] = [];
+
 export function Customers() {
   useScreenKeys('Customer Profile', CUSTOMERS_KEYS);
   const nav = useNavigate();
   const toast = useToast();
-  const [rows, setRows] = useState<CustomerRow[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState('');
   const [selId, setSelId] = useState<string | null>(null);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -42,11 +42,10 @@ export function Customers() {
   const searchRef = useRef<HTMLInputElement>(null);
   useRefreshOnFocus(() => setVersion((v) => v + 1));
 
-  useEffect(() => {
-    let live = true;
-    void api.listCustomerRows().then((r) => { if (!live) return; setRows(r); setLoaded(true); });
-    return () => { live = false; };
-  }, [version]);
+  /* the last list shows at once; it refreshes behind it */
+  const { data: custData } = useCachedLoad('customers', () => api.listCustomerRows(), [version]);
+  const rows = custData ?? NO_CUSTOMERS;
+  const loaded = custData !== undefined;
 
   const list = useMemo(() => {
     const t = query.trim().toLowerCase();

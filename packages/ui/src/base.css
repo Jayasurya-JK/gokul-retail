@@ -43,10 +43,6 @@ input[type='number']::-webkit-inner-spin-button { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .g-overlay, .g-dialog, .g-drawer, .g-toast, .g-overlay[data-state='closed'], .g-dialog[data-state='closed'], .g-drawer[data-state='closed'] { animation: none !important; }
 }
-/* A screen change: the new screen fades in over 150 ms. Opacity only, so no layout moves and nothing waits for it. */
-@keyframes g-route { from { opacity: 0 } to { opacity: 1 } }
-.g-route { animation: g-route 150ms ease-out; }
-@media (prefers-reduced-motion: reduce) { .g-route { animation: none !important; } }
 @keyframes shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-6px) } 40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(4px) } }
 
 /* Table header cells carry the dark green themselves (Office thead rows), so text on them is always white on green. */

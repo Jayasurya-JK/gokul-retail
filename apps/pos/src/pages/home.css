@@ -1,6 +1,6 @@
-/* Tiles rise 8 px and fade in, 30 ms apart: the last one is done in about 380 ms. Off when reduced motion is on. */
+/* Tiles rise 8 px and fade in, 30 ms apart (last one done in about 380 ms). Only on the first visit of Home in a session (data-enter). Off when reduced motion is on. */
 @keyframes home-rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-@media (prefers-reduced-motion: no-preference) { .home-tile { animation: home-rise 200ms ease-out backwards; } }
+@media (prefers-reduced-motion: no-preference) { .home-tile[data-enter='true'] { animation: home-rise 200ms ease-out backwards; } }
 
 /* Home v6: the tiles fill the page. Solid colours, a faint watermark icon, white text at least 4.5:1 on every base. */
 .home-grid {

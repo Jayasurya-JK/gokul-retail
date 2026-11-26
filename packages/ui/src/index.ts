@@ -21,3 +21,4 @@ export * from './components/useResizableColumns';
 export * from './components/WindowControls';
 export * from './components/OverflowRow';
 export * from './color';
+export * from './components/useCachedLoad';

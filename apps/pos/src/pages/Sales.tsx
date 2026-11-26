@@ -5,7 +5,7 @@ import { formatQty, invoiceFromBill, invoiceFromCreditNote, isDecimalUnit, needs
 import { printWithToast } from '../printing';
 import { useScanHandler } from '../scanner';
 import { useReceiptConfig } from '../receiptConfig';
-import { Badge, Button, EmptyState, IconButton, InvoiceDialog, Input, Kbd, Money, PosLayout, ReceiptPreview, TaxInvoicePreview, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
+import { Badge, Button, EmptyState, IconButton, InvoiceDialog, Input, Kbd, Money, PosLayout, ReceiptPreview, TaxInvoicePreview, cn, useCachedLoad, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -17,6 +17,7 @@ import { billReceipt, dayKey, dayLabel, dateTimeOf, modeLabel, payLabel, refundL
 type Dialog = null | 'cancel' | 'note';
 /** The list shows bills (default) or the credit notes of the day (the Returns tile) */
 type View = 'bills' | 'returns';
+const NO_BILLS: Bill[] = [];
 
 const SALES_KEYS: KeyRows = [
   ['Move between bills', ['Up', 'Down']],
@@ -48,8 +49,6 @@ export function Sales() {
   const [date, setDate] = useState(() => dayKey(new Date()));
   const [query, setQuery] = useState('');
   const [allDays, setAllDays] = useState(false);
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BillDetail | null>(null);
   const [walletBits, setWalletBits] = useState<{ points?: number; pointsExpiry?: { points: number; on: string } | null; storeCreditBalance?: number }>({});
@@ -89,15 +88,10 @@ export function Sales() {
     if (canBrowse) setAllDays(true);
   });
 
-  /* list */
-  useEffect(() => {
-    let live = true;
-    void api.listBillsOn({ date, query, allDays }).then((r) => {
-      if (!live) return;
-      setBills(r); setLoaded(true);
-    });
-    return () => { live = false; };
-  }, [date, query, allDays, version]);
+  /* list: the last answer for this day and search shows at once; it refreshes behind it */
+  const { data: billsData } = useCachedLoad(`bills|${date}|${query}|${allDays}`, () => api.listBillsOn({ date, query, allDays }), [date, query, allDays, version]);
+  const bills = billsData ?? NO_BILLS;
+  const loaded = billsData !== undefined;
 
   useEffect(() => { void api.listCreditNotes(500).then(setNotes); }, [version]);
 

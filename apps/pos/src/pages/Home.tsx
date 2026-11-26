@@ -55,8 +55,11 @@ function nextTile(from: Tile, dir: 'Up' | 'Down' | 'Left' | 'Right'): Tile | und
 /* ---------- live numbers (a few cheap calls, refreshed every 30 s) ---------- */
 interface Live { dash: DashboardStats | null; owed: Paise; owing: number; lowStock: number; customersToday: number; nextBill: string }
 
+/** The numbers from the last visit, so Home opens with them instead of zeros. */
+let lastLive: Live | null = null;
+
 function useLive(): Live {
-  const [live, setLive] = useState<Live>({ dash: null, owed: 0, owing: 0, lowStock: 0, customersToday: 0, nextBill: '' });
+  const [live, setLive] = useState<Live>(() => lastLive ?? { dash: null, owed: 0, owing: 0, lowStock: 0, customersToday: 0, nextBill: '' });
   useEffect(() => {
     let dead = false;
     const load = async () => {
@@ -66,7 +69,9 @@ function useLive(): Live {
         const names = new Set<string>();
         for (const r of rep.rows) if (r.status !== 'cancelled' && r.customerName && !/^walk-?in$/i.test(r.customerName)) names.add(r.customerName);
         const owing = custs.filter((c) => c.outstanding > 0);
-        setLive({ dash, owed: owing.reduce((n, c) => n + c.outstanding, 0), owing: owing.length, lowStock: low.length, customersToday: names.size, nextBill });
+        const next: Live = { dash, owed: owing.reduce((n, c) => n + c.outstanding, 0), owing: owing.length, lowStock: low.length, customersToday: names.size, nextBill };
+        lastLive = next;
+        setLive(next);
       } catch { /* a busy moment: keep what is shown */ }
     };
     void load();
@@ -78,12 +83,17 @@ function useLive(): Live {
 
 const rupees = (p: Paise) => formatRupees(p, { decimals: false });
 
+/** Tiles rise in only on the first visit of Home in this session; later visits show them at once. */
+let homeSeen = false;
+
 export function HomePage() {
   useScreenKeys('Home', HOME_KEYS);
   const nav = useNavigate();
   const settings = useSession((s) => s.settings);
   const heldCount = useSession((s) => s.heldCount);
   const live = useLive();
+  const [enter] = useState(() => !homeSeen);
+  useEffect(() => { homeSeen = true; }, []);
   const [sel, setSel] = useState(0);
   const [now, setNow] = useState(new Date());
   const [moreOpen, setMoreOpen] = useState(false);
@@ -195,6 +205,7 @@ export function HomePage() {
                   <button
                     type="button" tabIndex={-1} data-hue={t.hue} data-on={i === sel}
                     style={{ gridRow: `${t.row} / span ${t.rows}`, gridColumn: `${t.col} / span ${t.cols}`, animationDelay: `${i * 30}ms` } as CSSProperties}
+                    data-enter={enter}
                     onMouseEnter={() => setSel(i)}
                     onClick={() => { setSel(i); open(t); }}
                     className="home-tile"

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, BarChart3, ChevronRight, CreditCard, Download, Package, RefreshCw, Search, Users } from 'lucide-react';
 import {
-  formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type PaymodeReport, type SalesReport, type SalesReportRow, type Staff, type StaffReportRow, type StockReport, type StockRow,
+  formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type SalesReportRow, type Staff, type StaffReportRow, type StockRow,
 } from '@gokul/data';
-import { Badge, Button, ColResizer, DateRangePicker, EmptyState, Money, PosLayout, ROW_COLS, cn, parseTracks, useResizableColumns, useRefreshOnFocus, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
+import { Badge, Button, ColResizer, DateRangePicker, EmptyState, Money, PosLayout, ROW_COLS, cn, parseTracks, useResizableColumns, useRefreshOnFocus, useCachedLoad, dateRangePresets, useToast, type DateRange, type FKey } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -131,24 +131,21 @@ export function SalesReportPage() {
   const [range, setRange] = useState<DateRange>(today);
   const [staff, setStaff] = useState('');
   const [query, setQuery] = useState('');
-  const [data, setData] = useState<SalesReport | null>(null);
-  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
   useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    const t = window.setTimeout(() => {
-      api.salesReport({ from: range.from, to: range.to, staff: staff || undefined, query: query || undefined })
-        .then((r) => { if (live) { setData(r); setSel(0); setOpen(new Set()); } })
-        .catch((e) => live && toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }))
-        .finally(() => live && setLoading(false));
-    }, query ? 250 : 0);
-    return () => { live = false; window.clearTimeout(t); };
-  }, [range, staff, query, tick, toast]);
+  const { data, loading } = useCachedLoad(
+    `sales|${range.from}|${range.to}|${staff}|${query}`,
+    () => new Promise<void>((ok) => window.setTimeout(ok, query ? 250 : 0))
+      .then(() => api.salesReport({ from: range.from, to: range.to, staff: staff || undefined, query: query || undefined })),
+    [range, staff, query, tick],
+    {
+      onLoaded: () => { setSel(0); setOpen(new Set()); },
+      onError: (e) => toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }),
+    },
+  );
 
   const rows = data?.rows ?? [];
   const shown = rows.slice(0, ROW_CAP);
@@ -205,7 +202,8 @@ export function SalesReportPage() {
         }
       >
         {rows.length > ROW_CAP && <div className="border-b border-line bg-warning-soft px-4 py-1.5 text-xs text-warning">Showing the first {ROW_CAP} bills. Narrow the dates, or save as Excel for all {rows.length}.</div>}
-        {!loading && rows.length === 0 && <EmptyState icon={<BarChart3 size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
+        {data === undefined && <LoadingRows />}
+        {data && !loading && rows.length === 0 && <EmptyState icon={<BarChart3 size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
         {shown.map((r, i) => (
           <SalesRow key={r.id} r={r} cols={cols} canCost={canCost} on={i === sel} open={open.has(r.id)} multiDay={range.from !== range.to}
             onSelect={() => setSel(i)} onToggle={() => { setSel(i); toggle(r.id); }} />
@@ -286,6 +284,15 @@ function RemarkTags({ r }: { r: SalesReportRow }) {
 
 const SALES_HOVER = PAY_HOVER;
 /** Header plus rows inside one scroll area, so the columns scroll together and the header stays on top. */
+/** First-ever open of a report: the layout is already drawn, so show quiet placeholder rows (no pulse, no empty state). */
+function LoadingRows() {
+  return (
+    <div aria-hidden className="space-y-2 px-3 py-3">
+      {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-7 rounded bg-line/50" />)}
+    </div>
+  );
+}
+
 function Grid({ cols, head, right, minWidth = 1000, foot, readable, headTone, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; foot?: ReactNode; readable?: boolean; headTone?: (i: number) => { className?: string; style?: CSSProperties } | undefined; children: ReactNode }) {
   const specs = useMemo(() => parseTracks(cols, head.map((h, i) => h || `c${i}`)), [cols, head]);
   const rc = useResizableColumns(`pos-report|${head.join(',')}`, specs);
@@ -344,21 +351,19 @@ export function PaymodeReportPage() {
   const staffList = useStaffList();
   const [range, setRange] = useState<DateRange>(today);
   const [staff, setStaff] = useState('');
-  const [data, setData] = useState<PaymodeReport | null>(null);
-  const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
   useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    api.paymodeReport({ from: range.from, to: range.to, staff: staff || undefined })
-      .then((r) => { if (live) { setData(r); setSel(0); } })
-      .catch((e) => live && toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }))
-      .finally(() => live && setLoading(false));
-    return () => { live = false; };
-  }, [range, staff, tick, toast]);
+  const { data, loading } = useCachedLoad(
+    `paymode|${range.from}|${range.to}|${staff}`,
+    () => api.paymodeReport({ from: range.from, to: range.to, staff: staff || undefined }),
+    [range, staff, tick],
+    {
+      onLoaded: () => setSel(0),
+      onError: (e) => toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }),
+    },
+  );
 
   const rows = data?.rows ?? [];
   const shown = rows.slice(0, ROW_CAP);
@@ -398,7 +403,8 @@ export function PaymodeReportPage() {
           </FootRow>
         }
       >
-        {!loading && rows.length === 0 && <EmptyState icon={<CreditCard size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
+        {data === undefined && <LoadingRows />}
+        {data && !loading && rows.length === 0 && <EmptyState icon={<CreditCard size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
         {shown.map((r, i) => {
           const used = ALL_MODES.filter((m) => r[m.key] > 0).length;
           return (
@@ -455,8 +461,6 @@ export function StockPage() {
   const toast = useToast();
   const canCost = useCanSeeCost();
   const [query, setQuery] = useState('');
-  const [data, setData] = useState<StockReport | null>(null);
-  const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(0);
   const [tick, setTick] = useState(0);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
@@ -467,17 +471,16 @@ export function StockPage() {
   const boxRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { boxRef.current?.focus(); }, []);
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    const t = window.setTimeout(() => {
-      api.stockReport({ query: query || undefined })
-        .then((r) => { if (live) { setData(r); setSel(0); } })
-        .catch((e) => live && toast.show({ tone: 'error', title: 'Could not load stock', detail: e instanceof Error ? e.message : undefined }))
-        .finally(() => live && setLoading(false));
-    }, query ? 200 : 0);
-    return () => { live = false; window.clearTimeout(t); };
-  }, [query, tick, toast]);
+  const { data, loading } = useCachedLoad(
+    `stock|${query}`,
+    () => new Promise<void>((ok) => window.setTimeout(ok, query ? 200 : 0))
+      .then(() => api.stockReport({ query: query || undefined })),
+    [query, tick],
+    {
+      onLoaded: () => setSel(0),
+      onError: (e) => toast.show({ tone: 'error', title: 'Could not load stock', detail: e instanceof Error ? e.message : undefined }),
+    },
+  );
 
   const defs = useMemo(() => STOCK_COLS.filter((c) => canCost || !c.cost), [canCost]);
   const cols = defs.map((c) => c.w).join(' ');
@@ -564,7 +567,8 @@ export function StockPage() {
               </div>
             ))}
           </div>
-          {!loading && rows.length === 0 && <EmptyState icon={<Package size={22} />} title={query ? `No item matches "${query}"` : 'No items'} className="py-16" />}
+          {data === undefined && <LoadingRows />}
+          {data && !loading && rows.length === 0 && <EmptyState icon={<Package size={22} />} title={query ? `No item matches "${query}"` : 'No items'} className="py-16" />}
           {lines.map((l) => {
             if (l.kind === 'group') {
               const open = !closed.has(l.g.key);
@@ -628,20 +632,16 @@ export function StaffReportPage() {
   const toast = useToast();
   const cashier = useSession((s) => s.user?.role === 'cashier' || s.user?.role === 'staff');
   const [range, setRange] = useState<DateRange>(today);
-  const [rows, setRows] = useState<StaffReportRow[]>([]);
-  const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   useRefreshOnFocus(() => setTick((t) => t + 1), { f5: false });
 
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    api.staffReport({ from: range.from, to: range.to })
-      .then((r) => live && setRows(r.rows))
-      .catch((e) => live && toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }))
-      .finally(() => live && setLoading(false));
-    return () => { live = false; };
-  }, [range, tick, toast]);
+  const { data, loading } = useCachedLoad(
+    `staff|${range.from}|${range.to}`,
+    () => api.staffReport({ from: range.from, to: range.to }),
+    [range, tick],
+    { onError: (e) => toast.show({ tone: 'error', title: 'Could not load the report', detail: e instanceof Error ? e.message : undefined }) },
+  );
+  const rows = useMemo<StaffReportRow[]>(() => data?.rows ?? [], [data]);
 
   const save = useCallback(() => {
     downloadCsv(`staff-report-${range.from}-to-${range.to}.csv`, ['Staff', 'Bills', 'Qty', 'Total', 'Net (ex GST)'],
@@ -672,7 +672,8 @@ export function StaffReportPage() {
       }
     >
       <Grid cols={cols} head={['Staff', 'Bills', 'Qty', 'Net', 'Total']} right={[1, 2, 3, 4]} minWidth={720}>
-        {!loading && rows.length === 0 && <EmptyState icon={<Users size={22} />} title="No bills in this period" className="py-16" />}
+        {data === undefined && <LoadingRows />}
+        {data && !loading && rows.length === 0 && <EmptyState icon={<Users size={22} />} title="No bills in this period" className="py-16" />}
         {rows.map((r) => (
           <div key={r.staff} className="grid h-12 items-center border-b border-line/70 px-3 text-sm" style={{ gridTemplateColumns: ROW_COLS }}>
             <span className="min-w-0 px-2">
