@@ -17,9 +17,9 @@ const columns: ColumnDef<SalesBill>[] = [
     id: 'when', header: 'Date', meta: { w: '140px' }, accessorFn: (r) => r.at,
     cell: (c) => <span className="text-muted">{fmtShort(c.getValue<string>())}, {fmtTime(c.getValue<string>())}</span>,
   },
-  { accessorKey: 'customerName', header: 'Customer', meta: { w: 'minmax(96px,1fr)' }, cell: (c) => <span className={c.getValue<string>() === 'Walk-in' ? 'text-subtle' : ''}>{c.getValue<string>()}</span> },
+  { accessorKey: 'customerName', header: 'Customer', meta: { w: 'minmax(140px,1fr)' }, cell: (c) => <span className={c.getValue<string>() === 'Walk-in' ? 'text-subtle' : ''}>{c.getValue<string>()}</span> },
   {
-    id: 'cashier', header: 'Cashier', meta: { w: '100px' }, accessorFn: (r) => r.cashier,
+    id: 'cashier', header: 'Cashier', meta: { w: '120px' }, accessorFn: (r) => r.cashier,
     cell: (c) => <span>{c.row.original.cashier.split(' ')[0]} <span className="text-subtle">C{c.row.original.counter.slice(-1)}</span></span>,
   },
   { id: 'mode', header: 'Mode', meta: { w: '60px' }, accessorFn: (r) => billMode(r) },
@@ -52,7 +52,7 @@ function BillDetail({ bill, settings }: { bill: SalesBill; settings: Settings | 
           </div>
           <StatusBadge status={bill.status} />
         </div>
-        <div className="mt-3 flex items-end justify-between">
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <div className="text-xs text-muted">Bill total</div>
             <div className="text-2xl font-semibold num"><Money paise={t.grand} /></div>

@@ -19,7 +19,7 @@ const variants: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-fg hover:bg-primary-hover shadow-[inset_0_1px_0_rgb(255_255_255/0.12)]',
   secondary: 'bg-surface text-ink border border-line-strong hover:bg-surface-3',
   ghost: 'text-muted hover:bg-surface-3 hover:text-ink',
-  danger: 'bg-danger text-white hover:brightness-95',
+  danger: 'bg-[rgb(var(--money-owed-ink))] text-white hover:brightness-110',
 };
 const sizes: Record<ButtonSize, string> = {
   sm: 'h-7 px-2.5 text-sm gap-1.5',

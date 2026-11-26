@@ -431,8 +431,8 @@ type StockCol = { key: string; label: string; right?: boolean; w: string; cost?:
 const STOCK_COLS: StockCol[] = [
   { key: 'barcode', label: 'Barcode', w: '128px', get: (r) => r.barcode },
   { key: 'name', label: 'Product', w: 'minmax(190px,2.2fr)', get: (r) => r.name.toLowerCase() },
-  { key: 'category', label: 'Category', w: 'minmax(130px,1.1fr)', get: (r) => r.category.toLowerCase() },
-  { key: 'brand', label: 'Brand', w: 'minmax(110px,1fr)', get: (r) => r.brand.toLowerCase() },
+  { key: 'category', label: 'Category', w: 'minmax(176px,1.1fr)', get: (r) => r.category.toLowerCase() },
+  { key: 'brand', label: 'Brand', w: 'minmax(156px,1fr)', get: (r) => r.brand.toLowerCase() },
   { key: 'mrp', label: 'MRP', right: true, w: '78px', get: (r) => r.mrp },
   { key: 'cost', label: 'Cost', right: true, w: '78px', cost: true, get: (r) => r.cost ?? 0 },
   { key: 'profitPct', label: 'Profit %', right: true, w: '76px', cost: true, get: (r) => r.profitPct ?? 0 },
@@ -442,7 +442,7 @@ const STOCK_COLS: StockCol[] = [
   { key: 'costTotal', label: 'Cost total', right: true, w: '100px', cost: true, get: (r) => r.costTotal ?? 0 },
   { key: 'profitTotal', label: 'Profit total', right: true, w: '100px', cost: true, get: (r) => r.profitTotal ?? 0 },
   { key: 'salesTotal', label: 'Sales total', right: true, w: '104px', get: (r) => r.salesTotal },
-  { key: 'supplier', label: 'Supplier', w: 'minmax(130px,1.2fr)', get: (r) => r.supplier.toLowerCase() },
+  { key: 'supplier', label: 'Supplier', w: 'minmax(176px,1.2fr)', get: (r) => r.supplier.toLowerCase() },
 ];
 const GROUPS: { id: GroupBy; label: string }[] = [{ id: 'none', label: 'None (A-Z)' }, { id: 'category', label: 'Category' }, { id: 'brand', label: 'Brand' }, { id: 'supplier', label: 'Supplier' }];
 const QUICK: { id: StockFilter; label: string }[] = [{ id: 'all', label: 'All' }, { id: 'low', label: 'Low stock' }, { id: 'out', label: 'Out / negative' }, { id: 'has', label: 'Has stock' }];
@@ -550,7 +550,7 @@ export function StockPage() {
       }
     >
       <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
-        <div style={{ minWidth: Math.max(canCost ? 1500 : 1000, rc.customised ? rc.minTotal + 24 : 0) }}>
+        <div style={{ minWidth: Math.max(canCost ? 1650 : 1210, rc.customised ? rc.minTotal + 24 : 0) }}>
           <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
             {defs.map((c, ci) => (
               <div key={c.key} className="relative flex h-full min-w-0 items-center overflow-hidden">

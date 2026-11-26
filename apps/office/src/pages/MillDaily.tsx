@@ -208,7 +208,7 @@ export function MillDailyPage() {
               <table className="mb-3 w-full table-fixed">
                 <thead>
                   <tr>
-                    <th className={cn(th, 'w-[190px]')}>Oil</th>
+                    <th className={cn(th, 'w-[150px]')}>Oil</th>
                     {['Opening L', 'Pressed L', 'Outsourced L', 'To store L', 'Stick adj. L', 'Closing L'].map((h) => <th key={h} className={cn(th, 'text-right')}>{h}</th>)}
                   </tr>
                 </thead>
@@ -241,8 +241,8 @@ export function MillDailyPage() {
               <table className="w-full table-fixed">
                 <thead>
                   <tr>
-                    <th className={cn(th, 'w-[140px]')}>Barrel</th>
-                    <th className={cn(th, 'w-[140px]')}>Oil</th>
+                    <th className={cn(th, 'w-[110px]')}>Barrel</th>
+                    <th className={cn(th, 'w-[110px]')}>Oil</th>
                     <th className={cn(th, 'w-[92px]')}>Status</th>
                     {['Opening L', 'Pressed L', 'Outsourced L', 'To store L', 'Stick adj. L', 'Closing L'].map((h) => <th key={h} className={cn(th, 'text-right')}>{h}</th>)}
                     <th className={cn(th, 'w-[130px] text-right')}>Stick reading</th>

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Badge, type Tone } from '@gokul/ui';
+import { Badge, darkenForWhite, type Tone } from '@gokul/ui';
 import type { Bill, PayMode } from '@gokul/data';
 
 export const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -50,7 +50,7 @@ export function Avatar({ initials, color, size = 32 }: { initials: string; color
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
-      style={{ width: size, height: size, background: color, fontSize: size * 0.38 }}
+      style={{ width: size, height: size, background: darkenForWhite(color), fontSize: size * 0.38 }}
     >
       {initials}
     </span>

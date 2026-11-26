@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock as LockIcon, LogOut, ShoppingBasket } from 'lucide-react';
 import { countdownText, lockedSeconds } from '@gokul/data';
-import { Kbd, Logo, StatusDot, clockTime, cn, useCountdown } from '@gokul/ui';
+import { Kbd, Logo, StatusDot, clockTime, cn, darkenForWhite, useCountdown } from '@gokul/ui';
 import { api, useOpenLines, useSession } from '../store';
 
 const PIN_LEN = 4;
@@ -61,7 +61,7 @@ export function Lock() {
   const mins = Math.max(0, Math.floor((now.getTime() - lockedAt.current.getTime()) / 60000));
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-chrome text-chrome-ink">
+    <div data-overflow-ok className="relative flex h-full w-full flex-col overflow-hidden bg-chrome text-chrome-ink">
       <div className="pointer-events-none absolute -right-24 -top-24 h-[480px] w-[480px] rounded-full bg-primary/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-accent/10 blur-3xl" />
 
@@ -75,7 +75,7 @@ export function Lock() {
 
       <main className="relative flex min-h-0 flex-1 flex-col items-center justify-center">
         <div className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-chrome-ink"><LockIcon size={12} /> Counter locked{mins > 0 ? ` ${mins} min ago` : ''}</div>
-        <span className="mt-6 flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold text-white shadow-overlay ring-4 ring-white/10" style={{ background: user.color }}>{user.initials}</span>
+        <span className="mt-6 flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold text-white shadow-overlay ring-4 ring-white/10" style={{ background: darkenForWhite(user.color) }}>{user.initials}</span>
         <div className="mt-4 text-2xl font-semibold tracking-tight text-white">{user.name}</div>
         <div className="mt-0.5 text-sm capitalize text-chrome-muted">{user.role} - {settings?.counter ?? '-'}</div>
 

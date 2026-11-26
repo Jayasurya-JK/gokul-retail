@@ -173,7 +173,7 @@ const pressCols: ColumnDef<PressingBatch>[] = [
   },
   { id: 'op', header: 'Operator', accessorFn: (r) => r.operator, meta: { w: '100px' }, cell: (c) => <span className="truncate text-ink">{c.row.original.operator || '-'}</span> },
   {
-    id: 'barrel', header: 'Godown barrel', accessorFn: (r) => r.godownBarrelLabel ?? '', meta: { w: '112px' },
+    id: 'barrel', header: 'Godown barrel', accessorFn: (r) => r.godownBarrelLabel ?? '', meta: { w: '140px' },
     cell: (c) => <span className="truncate text-ink">{c.row.original.godownBarrelLabel ?? <span className="text-subtle">not in a barrel</span>}</span>,
   },
 ];
@@ -192,7 +192,7 @@ const packCols: ColumnDef<PackRun>[] = [
     id: 'src', header: 'Oil and barrel', accessorFn: (r) => r.oilName, meta: { w: '150px' },
     cell: (c) => <div className="leading-tight"><div className="truncate font-medium text-ink">{c.row.original.oilName}</div><div className="text-xs text-muted">{c.row.original.barrelLabel}</div></div>,
   },
-  { id: 'packs', header: 'Packs filled', accessorFn: (r) => r.packs, meta: { w: 'minmax(120px,1fr)' }, cell: (c) => <span className="text-ink">{packSummary(c.row.original)}</span> },
+  { id: 'packs', header: 'Packs filled', accessorFn: (r) => r.packs, meta: { w: 'minmax(200px,1.2fr)' }, cell: (c) => <span className="text-ink" title={packSummary(c.row.original)}>{packSummary(c.row.original)}</span> },
   { id: 'exp', header: 'In packs', accessorFn: (r) => r.expectedL, meta: { w: '76px', align: 'right', num: true }, cell: (c) => `${fmtMilli(c.row.original.expectedL)} L` },
   { id: 'used', header: 'Taken', accessorFn: (r) => r.usedL, meta: { w: '76px', align: 'right', num: true }, cell: (c) => `${fmtMilli(c.row.original.usedL)} L` },
   {
@@ -213,7 +213,7 @@ function PackDetail({ r }: { r: PackRun }) {
         <div className="text-md font-semibold text-ink">{r.number}</div>
         <div className="mt-0.5 text-sm text-muted">{r.oilName} from {r.barrelLabel}</div>
         <div className="text-xs text-subtle">{fmtDateYear(r.date)}, {fmtTime(r.date)} - packed by {r.packer}</div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-[1fr_1fr_1.4fr] gap-2">
           <div className="rounded-card border border-line bg-surface-2 px-3 py-2"><div className="text-xs text-muted">In packs</div><div className="num text-lg font-semibold text-ink">{fmtMilli(r.expectedL)} L</div></div>
           <div className="rounded-card border border-line bg-surface-2 px-3 py-2"><div className="text-xs text-muted">Taken</div><div className="num text-lg font-semibold text-ink">{fmtMilli(r.usedL)} L</div></div>
           <div className="rounded-card border border-line bg-surface-2 px-3 py-2"><div className="text-xs text-muted">Wastage</div><div className="flex items-center gap-1.5"><span className="num text-lg font-semibold text-ink">{fmtNum(r.wastageL / 1000, 2)}</span><Badge tone={tone}>{fmtNum(r.wastagePct, 1)}%</Badge></div></div>

@@ -11,7 +11,7 @@ import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 
-const COLS = '72px minmax(0,1.1fr) minmax(0,1.6fr) 112px minmax(0,0.8fr) 104px 176px';
+const COLS = '64px minmax(104px,1fr) minmax(130px,1.5fr) 104px minmax(120px,0.9fr) 96px 150px';
 const MODES: ExpensePaidFrom[] = ['cash', 'upi', 'bank'];
 const time = (iso: string) => clockTime(iso);
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };

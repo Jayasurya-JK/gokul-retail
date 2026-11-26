@@ -11,7 +11,7 @@
 .rpt-mode-sodexo { --pm-ink: #334155; --pm-bar: #64748b; }
 
 .rpt-amt { color: var(--pm-ink); font-weight: 600; }
-.rpt-empty { color: #cbd2dc; font-weight: 400; }
+.rpt-empty { color: rgb(var(--subtle)); font-weight: 400; }
 
 /* Totals boxes: a solid light tint of the mode colour behind bold ink. */
 .rpt-box {

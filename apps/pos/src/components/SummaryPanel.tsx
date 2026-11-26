@@ -28,7 +28,7 @@ function GridRow({ label, sub, hint, onLabel, box, amount, clear, tone }: {
       <span className="block truncate">{label}</span>
       {sub && <span className="num block truncate text-[10px] leading-tight text-subtle">{sub}</span>}
     </span>
-    {hint && <Kbd>{hint}</Kbd>}
+    {hint && <span className="hidden min-[1366px]:inline-flex"><Kbd>{hint}</Kbd></span>}
   </>;
   return (
     <div className={ROW_GRID}>
@@ -42,7 +42,7 @@ function GridRow({ label, sub, hint, onLabel, box, amount, clear, tone }: {
   );
 }
 
-function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: string; wholesale?: boolean }) {
+function BillStrip({ billNo, label, wholesale, deliveryOn, onDelivery, onWholesale }: { billNo: string; label?: string; wholesale?: boolean; deliveryOn?: boolean; onDelivery?: () => void; onWholesale?: () => void }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 20000);
@@ -56,9 +56,12 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">
             Bill no.
             {label && label !== 'Point of Sale' && <span className="rounded bg-primary-soft px-1.5 py-px text-[10px] font-bold tracking-wide text-primary">{label}</span>}
-            {wholesale && <span className="rounded bg-accent/25 px-1.5 py-px text-[10px] font-bold tracking-wide text-warning">WHOLESALE</span>}
           </div>
-          <div className="num whitespace-nowrap text-md font-semibold tracking-tight text-ink">{billNo || '-'}</div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="num whitespace-nowrap text-md font-semibold tracking-tight text-ink">{billNo || '-'}</span>
+            {deliveryOn && <button type="button" tabIndex={-1} onClick={onDelivery} title="Home delivery is on for this bill. Click to change (F2)" className="whitespace-nowrap rounded-full bg-[rgb(var(--mode-upi-tint))] px-2 py-px text-[11px] font-bold text-[rgb(var(--mode-upi-ink))] ring-1 ring-[rgb(var(--mode-upi)/0.35)]">Delivery on</button>}
+            {wholesale && <button type="button" tabIndex={-1} onClick={onWholesale} title="Wholesale prices are on for this bill. Click to turn off (Alt+W)" className="whitespace-nowrap rounded-full bg-[rgb(var(--mode-card-tint))] px-2 py-px text-[11px] font-bold text-[rgb(var(--mode-card-ink))] ring-1 ring-[rgb(var(--mode-card)/0.35)]">Wholesale price</button>}
+          </div>
         </div>
       </div>
       <div className="whitespace-nowrap text-right leading-tight">
@@ -108,7 +111,7 @@ function TaxBox({ slabs, inter }: { slabs: Slab[]; inter: boolean }) {
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, staff, onStaff, supply, shopState, onPlace }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, onWholesale, staff, onStaff, supply, shopState, onPlace }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
@@ -122,7 +125,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   cashDisc: number; cashDiscBps: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
   /** Store credit (the customer's wallet / open credit notes) put on this bill, and how much of it this bill can use (Alt+C). */
   storeCredit: number; storeCreditUsed: number; focusStoreCredit: number; onApplyStoreCredit: (typed: string) => void; onClearStoreCredit: () => void;
-  delivery: Delivery; onDelivery: () => void;
+  delivery: Delivery; onDelivery: () => void; onWholesale: () => void;
   staff: string; onStaff: () => void;
   /** Place of supply of this bill (customer's state, else the shop's), the shop's own state, and the click to change it */
   supply: Supply; shopState: string; onPlace: () => void;
@@ -139,7 +142,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   const creditText = !customer ? '' : customer.creditLimit === 0 ? 'No credit' : customer.creditLimit < 0 ? 'No limit' : formatRupees(creditLeft(customer) ?? 0, { decimals: false });
   return (
     <>
-      <BillStrip billNo={billNo} label={slotLabel} wholesale={wholesale} />
+      <BillStrip billNo={billNo} label={slotLabel} wholesale={wholesale} deliveryOn={hasDelivery} onDelivery={onDelivery} onWholesale={onWholesale} />
       <button
         tabIndex={-1} onClick={onCustomer}
         className="mx-3 mt-3 flex shrink-0 flex-col rounded-xl border border-line bg-surface-2 p-2.5 text-left transition-colors hover:border-line-strong hover:bg-surface-3"
@@ -302,7 +305,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
           </div>
         )}
         <div className={cn('flex items-center justify-between gap-3 rounded-lg px-3.5 py-1.5 transition-colors', empty ? 'bg-surface-3 text-muted' : 'bg-chrome text-white')}>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">Grand total</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-95">Grand total</span>
           <span className="num font-semibold leading-none tracking-tight" style={{ fontSize: 36 }}>
             <Money paise={totals.grand - storeCreditUsed} softPaise />
           </span>

@@ -361,7 +361,7 @@ export function PrintersTab({ v, set, hardware, setHardware, paper = '80mm' }: {
             <Button icon={<Printer size={14} />} onClick={async () => setAlignRes(await api.testPrint('labelAlign', v.labelPrinter, { ...labelOpts(), verify: true }))}>Check with my correction</Button>
           </div>
           <TestResult r={alignRes} />
-          <div className="mt-3 grid grid-cols-4 items-end gap-2">
+          <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2">
             <Input label="Sticker 1 left edge (mm)" size="sm" value={read.x1} placeholder="e.g. 1.5" className="text-right num" onChange={(e) => setRead({ ...read, x1: e.target.value })} />
             <Input label="Sticker 3 left edge (mm)" size="sm" value={read.x3} placeholder="same as 1" className="text-right num" onChange={(e) => setRead({ ...read, x3: e.target.value })} />
             <Input label="Top edge (mm)" size="sm" value={read.y} placeholder="e.g. -1" className="text-right num" onChange={(e) => setRead({ ...read, y: e.target.value })} />

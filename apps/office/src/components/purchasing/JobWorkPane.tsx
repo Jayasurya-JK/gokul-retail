@@ -65,7 +65,7 @@ export function JobWorkPane() {
           <div className="text-sm font-semibold text-ink">New job work <span className="text-xs font-normal text-muted">the customer brings their own seed. Their seed and oil never become shop stock.</span></div>
           <Button variant="primary" icon={<Check size={15} />} disabled={busy} onClick={() => void save()} kbd="Ctrl+Enter">Save and bill</Button>
         </div>
-        <div className="grid grid-cols-[130px_minmax(180px,2fr)_120px_120px_90px_100px_90px_160px] items-end gap-3">
+        <div className="grid grid-cols-[118px_minmax(150px,2fr)_104px_104px_80px_92px_80px_140px] items-end gap-3">
           <Field label="Date"><Input type="date" value={entry.day} max={todayYmd()} onChange={(e) => entry.setDay(e.target.value)} aria-label="Date of the job work" className="num" /></Field>
           <Field label="Customer">
             <Input list="jobwork-customers" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Type a name or phone" data-autofocus />

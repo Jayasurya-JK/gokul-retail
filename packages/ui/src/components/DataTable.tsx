@@ -136,7 +136,7 @@ export function DataTable<T>({
                       const meta = c.column.columnDef.meta as { align?: string; num?: boolean } | undefined;
                       return (
                         <div
-                          key={c.id} role="cell"
+                          key={c.id} role="cell" title={typeof c.getValue() === 'string' ? (c.getValue() as string) : undefined}
                           className={cn('truncate px-2', meta?.align === 'right' && 'text-right', meta?.align === 'center' && 'text-center', meta?.num && 'num')}
                         >
                           {flexRender(c.column.columnDef.cell, c.getContext())}

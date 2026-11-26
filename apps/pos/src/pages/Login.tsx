@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Delete, LockKeyhole } from 'lucide-react';
 import { countdownText, lockedSeconds, type Settings, type User } from '@gokul/data';
-import { Kbd, Logo, PosLayout, cn, useCountdown } from '@gokul/ui';
+import { Kbd, Logo, PosLayout, cn, darkenForWhite, useCountdown } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { usePrinterStatus } from '../printing';
@@ -101,7 +101,7 @@ export function Login() {
                   i === sel ? 'border-primary bg-primary-soft shadow-[0_0_0_1px_rgb(var(--primary))]' : 'border-line bg-surface hover:bg-surface-2',
                 )}
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: u.color }}>{u.initials}</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: darkenForWhite(u.color) }}>{u.initials}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-base font-semibold text-ink">{u.name}</span>
                   <span className="block text-xs text-muted"><span className="capitalize">{u.role}</span> - last in {u.lastLogin}</span>

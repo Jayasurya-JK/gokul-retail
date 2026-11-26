@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Printer, ReceiptIndianRupee, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
-import { Kbd, Logo, Tooltip, WindowButtons, clockTime, cn, useWindowControls } from '@gokul/ui';
+import { Kbd, Logo, OverflowRow, Tooltip, darkenForWhite, type OverflowItem, WindowButtons, clockTime, cn, useWindowControls } from '@gokul/ui';
 import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
@@ -92,13 +92,6 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
 
   const brand = (
     <div className="flex shrink-0 items-center gap-2.5">
-      {!minimal && (
-        <Tooltip label="Home" kbd="Alt+0">
-          <button type="button" tabIndex={-1} onClick={() => nav('/home')} aria-label="Home" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20">
-            <House size={15} />
-          </button>
-        </Tooltip>
-      )}
       <Logo size={24} badge="P" />
       <div className="whitespace-nowrap text-[13px] text-chrome-ink">
         <span className="font-semibold text-white">{settings?.shopName ?? ''}</span>
@@ -158,7 +151,7 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
 
         <div ref={menuRef} className="relative">
           <button onClick={() => setMenu((o) => !o)} tabIndex={-1} className="flex h-7 items-center gap-1.5 rounded-md pl-0.5 pr-1.5 hover:bg-white/10">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: user?.color }}>{user?.initials}</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: darkenForWhite(user?.color) }}>{user?.initials}</span>
             <span className="whitespace-nowrap text-xs font-medium text-white">{(user?.name ?? '').split(' ')[0]}</span>
             <ChevronDown size={12} className="text-chrome-muted" />
           </button>
@@ -183,28 +176,52 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
         <WindowButtons />
       </div>
 
-      <nav className="flex h-[50px] shrink-0 items-center gap-1.5 border-b border-line bg-surface px-3" aria-label="Main menu">
-        {TABS.map((m) => {
-          const active = (m.match as readonly string[]).includes(pathname);
-          const Icon = m.icon;
-          return (
-            <Tooltip key={m.path} label={m.label} kbd={m.kbd}>
+      {pathname !== '/home' && <OverflowRow
+        className="h-[50px] shrink-0 border-b border-line bg-surface px-3" gap={6} moreWidth={110} alwaysMore role="navigation" ariaLabel="Main menu"
+        items={[{
+          key: '/home',
+          node: (
+            <Tooltip label="Home" kbd="Alt+0">
               <button
-                onClick={() => nav(m.path)} tabIndex={-1}
-                className={cn(
-                  'flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors',
-                  active ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_rgb(var(--primary)/0.25)]' : 'text-muted hover:bg-surface-3 hover:text-ink',
-                )}
+                type="button" tabIndex={-1} onClick={() => nav('/home')} aria-label="Home"
+                className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink transition-colors hover:bg-surface-3', pathname === '/home' && 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_rgb(var(--primary)/0.25)]')}
               >
-                <Icon size={18} className={active ? 'text-primary' : 'text-subtle'} />
-                {m.label}
-                {openLines[m.path] > 0 && <span className="num rounded-full bg-primary px-1.5 text-[11px] font-bold leading-[18px] text-primary-fg" title="Items on this bill">{openLines[m.path]}</span>}
+                <House size={20} />
               </button>
             </Tooltip>
-          );
-        })}
-        <DropMenu label={current?.label ?? 'More'} icon={<ChevronDown size={16} />} variant="tab" active={!!current} items={moreItems} heading="More" />
-      </nav>
+          ),
+        } as OverflowItem, ...TABS.map((m, i) => {
+          const active = (m.match as readonly string[]).includes(pathname);
+          const Icon = m.icon;
+          return {
+            key: m.path,
+            priority: i === 0 ? undefined : TABS.length - i, // last tab moves into More first
+            node: (
+              <Tooltip label={m.label} kbd={m.kbd}>
+                <button
+                  onClick={() => nav(m.path)} tabIndex={-1}
+                  className={cn(
+                    'flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors',
+                    active ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_rgb(var(--primary)/0.25)]' : 'text-muted hover:bg-surface-3 hover:text-ink',
+                  )}
+                >
+                  <Icon size={18} className={active ? 'text-primary' : 'text-muted'} />
+                  {m.label}
+                  {openLines[m.path] > 0 && <span className="num rounded-full bg-primary px-1.5 text-[11px] font-bold leading-[18px] text-primary-fg" title="Items on this bill">{openLines[m.path]}</span>}
+                </button>
+              </Tooltip>
+            ),
+          };
+        })]}
+        moreButton={(hidden) => {
+          const tabEntries: MenuEntry[] = hidden.map((h) => {
+            const t = TABS.find((x) => x.path === h.key)!;
+            return { label: t.label, kbd: t.kbd, icon: <t.icon size={15} />, onClick: () => nav(t.path) };
+          });
+          const hiddenActive = hidden.some((h) => (TABS.find((x) => x.path === h.key)!.match as readonly string[]).includes(pathname));
+          return <DropMenu label={current?.label ?? 'More'} icon={<ChevronDown size={16} />} variant="tab" active={!!current || hiddenActive} items={[...tabEntries.map((e, i) => (i === tabEntries.length - 1 ? { ...e } : e)), ...moreItems.map((e, i) => (i === 0 && tabEntries.length ? { ...e, divider: true } : e))]} heading="More" />;
+        }}
+      />}
 
       <ShortcutsSheet open={keys} onClose={() => setKeys(false)} />
     </>

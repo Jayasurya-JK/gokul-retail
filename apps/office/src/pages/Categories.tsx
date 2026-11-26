@@ -46,7 +46,7 @@ export function Categories() {
           >
             <LayoutGrid size={16} className={all ? 'text-primary-fg' : 'text-primary'} />
             <span className="flex-1 text-left">All items</span>
-            <span className={cn('rounded-full px-2 py-0.5 text-xs num', all ? 'bg-primary-fg/20 text-primary-fg' : 'bg-surface text-muted ring-1 ring-line')}>{total}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-xs num', all ? 'bg-black/25 text-primary-fg' : 'bg-surface text-muted ring-1 ring-line')}>{total}</span>
           </button>
           <div className="mx-3 mb-1 mt-2 h-px shrink-0 bg-line-strong" />
           <ManagedList

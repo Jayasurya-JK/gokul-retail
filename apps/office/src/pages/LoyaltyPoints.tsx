@@ -205,7 +205,7 @@ function ReportsTab() {
               <div className="sticky top-0 grid grid-cols-[minmax(0,1fr)_84px_70px_70px] gap-2 border-b border-line bg-surface-2 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"><span>Customer</span><span className="text-right">Points</span><span className="text-right">Earned</span><span className="text-right">Used</span></div>
               {rep.top.slice(0, 12).map((t, i) => (
                 <div key={t.id} className="grid grid-cols-[minmax(0,1fr)_84px_70px_70px] items-center gap-2 border-b border-line/70 px-4 py-1.5 text-sm">
-                  <span className="flex min-w-0 items-center gap-2"><span className="num w-4 shrink-0 text-xs text-subtle">{i + 1}</span><span className="truncate font-medium text-ink">{t.name}</span></span>
+                  <span className="flex min-w-0 items-center gap-2"><span className="num w-4 shrink-0 text-xs text-subtle">{i + 1}</span><span className="truncate font-medium text-ink" title={t.name}>{t.name}</span></span>
                   <b className="num text-right text-ink">{formatPoints(t.points)}</b><span className="num text-right text-success">{formatPoints(t.earned)}</span><span className="num text-right text-muted">{formatPoints(t.redeemed)}</span>
                 </div>
               ))}

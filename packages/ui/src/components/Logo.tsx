@@ -3,7 +3,7 @@ import logoPng from '../assets/logo.png';
 /** The Gokul Oils round logo (forest green, yellow G, amber oil drop). `badge` adds a small P / O mark so the two apps can be told apart. */
 export function Logo({ size = 22, badge, className }: { size?: number; badge?: string; className?: string }) {
   return (
-    <span className={`relative inline-flex shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
+    <span data-overflow-ok className={`relative inline-flex shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
       <img src={logoPng} width={size} height={size} alt="Gokul Oils" draggable={false} className="h-full w-full select-none rounded-full" />
       {badge && (
         <span

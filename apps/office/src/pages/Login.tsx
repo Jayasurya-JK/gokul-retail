@@ -46,7 +46,7 @@ export function Login() {
         <Logo size={30} badge="O" /><span className="text-[13px] font-semibold tracking-tight text-white">Gokul Office</span>
       </header>
       <div className="flex min-h-0 flex-1">
-        <div className="relative flex flex-1 flex-col justify-between overflow-hidden bg-chrome px-14 py-12 text-chrome-ink">
+        <div data-overflow-ok className="relative flex flex-1 flex-col justify-between overflow-hidden bg-chrome px-14 py-12 text-chrome-ink">
           <div className="pointer-events-none absolute -right-24 -top-24 h-[420px] w-[420px] rounded-full bg-primary/20 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-32 left-10 h-[360px] w-[360px] rounded-full bg-accent/10 blur-3xl" />
           <div className="relative text-xs font-medium uppercase tracking-[0.18em] text-chrome-muted">Gokul Retail</div>

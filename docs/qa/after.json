@@ -1,0 +1,28 @@
+[
+ {
+  "app": "POS",
+  "route": "/sales",
+  "type": "overflow",
+  "el": "div.flex.min-h-0.min-w-0.flex-1.flex-col \"GK-049738 Paid 26 Nov 2026, \"",
+  "detail": "content 766px spills out of a 644px box",
+  "views": [
+   "1366 no bill",
+   "1366 open bill",
+   "1366 held + open bill"
+  ],
+  "n": 3
+ },
+ {
+  "app": "POS",
+  "route": "/sales",
+  "type": "overflow",
+  "el": "div.flex.shrink-0.items-center.gap-2.border-t.border-l \"Reprint bill Ctrl+P Tax invo\"",
+  "detail": "content 766px spills out of a 644px box",
+  "views": [
+   "1366 no bill",
+   "1366 open bill",
+   "1366 held + open bill"
+  ],
+  "n": 3
+ }
+]

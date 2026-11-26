@@ -16,7 +16,7 @@ const BUCKETS: { key: AgeingKey; label: string; bar: string; text: string }[] = 
 
 const bucketCell = (key: AgeingKey) => (c: { row: { original: ReceivableRow } }) => {
   const v = c.row.original.buckets[key];
-  return v > 0 ? <Money paise={v} decimals={false} className={key === 'd90p' ? 'font-semibold text-danger' : ''} /> : <span className="text-line-strong">-</span>;
+  return v > 0 ? <Money paise={v} decimals={false} className={key === 'd90p' ? 'font-semibold text-danger' : ''} /> : <span className="text-subtle">-</span>;
 };
 
 const columns: ColumnDef<ReceivableRow>[] = [

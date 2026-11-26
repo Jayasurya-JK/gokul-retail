@@ -397,7 +397,7 @@ export function Sales() {
             ) : detail && settings ? (
               <>
                 <BillDetailPane detail={detail} onOpenNote={(n) => { setNote(n); setDialog('note'); }} />
-                <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface-2 px-5 py-2.5">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface-2 px-5 py-2.5">
                   <Button variant="primary" icon={<Printer size={15} />} kbd="Ctrl+P" disabled={cancelled} onClick={() => void reprint()}>Reprint bill</Button>
                   <Button icon={<FileText size={15} />} disabled={cancelled} onClick={() => openInvoice({ kind: 'bill', id: detail.bill.id }, invoiceFromBill(detail.bill, invoiceCtx))}>Tax invoice</Button>
                   <Button icon={<CornerUpLeft size={15} />} kbd="F10" disabled={cancelled} onClick={startReturn}>Return items</Button>

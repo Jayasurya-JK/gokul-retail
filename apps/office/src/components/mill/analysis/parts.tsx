@@ -10,7 +10,7 @@ export const rupees = (paise: number) => formatRupees(paise, { decimals: false }
 const shortDay = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
 const varianceTone = (v: number, _threshold: number) => (v >= -2 ? 'text-success' : v >= -5 ? 'text-warning' : 'text-danger');
-const th = 'h-8 px-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted whitespace-nowrap';
+const th = 'h-8 px-1.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted whitespace-nowrap';
 const td = 'px-2 py-1 text-right text-sm text-ink num whitespace-nowrap';
 
 const SEED_LINE: Record<SeedType, string> = { groundnut: 'rgb(var(--warning))', sesame: 'rgb(var(--ink))', copra: 'rgb(var(--info))' };
@@ -69,17 +69,17 @@ export function YieldTable({ a, empty }: { a: MillAnalysis; empty: React.ReactNo
     >
       {a.seeds.length === 0 ? empty : (
         <>
-          <table className="w-full min-w-[640px] table-fixed">
+          <table className="w-full min-w-[760px] table-fixed">
             <thead className="sticky top-0 z-10 bg-surface-2">
               <tr className="border-b border-line">
                 <th className="h-8 pl-3 pr-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted">Seed, machine, operator</th>
-                <th className={cn(th, 'w-[56px]')}>Batches</th>
+                <th className={cn(th, 'w-[70px]')}>Batches</th>
                 <th className={cn(th, 'w-[70px]')}>Seed kg</th>
                 <th className={cn(th, 'w-[62px]')}>Oil L</th>
                 <th className={cn(th, 'w-[74px]')} title="Litres of oil from 100 kg of clean seed">L / 100 kg</th>
-                <th className={cn(th, 'w-[56px]')}>Norm</th>
-                <th className={cn(th, 'w-[66px]')}>vs norm</th>
-                <th className={cn(th, 'w-[62px]')}>Cake kg</th>
+                <th className={cn(th, 'w-[60px]')}>Norm</th>
+                <th className={cn(th, 'w-[72px]')}>vs norm</th>
+                <th className={cn(th, 'w-[72px]')}>Cake kg</th>
                 <th className={cn(th, 'w-[92px]')}>Cost per L</th>
                 <th className={cn(th, 'w-[48px]')}>Low</th>
               </tr>

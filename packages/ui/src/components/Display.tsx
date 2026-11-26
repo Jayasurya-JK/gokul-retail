@@ -10,7 +10,7 @@ export function Kbd({ children, tone = 'default', className }: { children: React
       className={cn(
         'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border px-1 font-sans text-[11px] font-semibold leading-none',
         tone === 'default' && 'border-line-strong bg-surface-2 text-muted',
-        tone === 'inverse' && 'border-white/25 bg-white/15 text-white',
+        tone === 'inverse' && 'border-white/30 bg-black/25 text-white',
         tone === 'chrome' && 'border-white/15 bg-white/10 text-chrome-ink',
         className,
       )}
@@ -39,7 +39,7 @@ export function Money({ paise, symbol = true, decimals = true, softPaise, sign, 
       {neg ? '-' : sign && paise > 0 ? '+' : ''}
       {symbol && <span className="mr-[0.08em]">{'₹'}</span>}
       {int}
-      {decimals && frac !== undefined && (softPaise ? <span className="opacity-60">.{frac}</span> : `.${frac}`)}
+      {decimals && frac !== undefined && (softPaise ? <span className="opacity-[0.9]">.{frac}</span> : `.${frac}`)}
     </span>
   );
 }

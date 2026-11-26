@@ -133,7 +133,7 @@ export function ManagedList({ title, noun, icon, rows, selectedId, onSelect, onA
                   <span className="flex shrink-0 items-center justify-end">
                     <span className={cn(
                       'min-w-[32px] rounded-full px-2 py-0.5 text-center text-xs font-semibold num',
-                      active ? 'bg-primary-fg/20 text-primary-fg' : 'bg-surface-3 text-muted',
+                      active ? 'bg-black/25 text-primary-fg' : 'bg-surface-3 text-muted',
                       isCur ? 'invisible' : 'group-hover:invisible',
                     )}>{r.items}</span>
                   </span>

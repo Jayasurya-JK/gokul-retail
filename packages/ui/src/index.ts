@@ -19,3 +19,5 @@ export * from './clock';
 export * from './components/useRefreshOnFocus';
 export * from './components/useResizableColumns';
 export * from './components/WindowControls';
+export * from './components/OverflowRow';
+export * from './color';

@@ -542,7 +542,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
           storeCredit={storeCreditAvail} storeCreditUsed={storeCreditUsed} focusStoreCredit={storeFocus}
           onApplyStoreCredit={applyStoreCredit} onClearStoreCredit={() => setStoreCredit(0)}
-          delivery={delivery} onDelivery={() => setDialog('delivery')} staff={staff} onStaff={() => setDialog('staff')}
+          delivery={delivery} onDelivery={() => setDialog('delivery')} onWholesale={toggleWholesale} staff={staff} onStaff={() => setDialog('staff')}
         />
       }
     >

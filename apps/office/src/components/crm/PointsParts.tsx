@@ -5,7 +5,7 @@ import { api } from '../../store';
 import { fmtDate, fmtTime } from './common';
 
 export const kindLabel: Record<PointsKind, string> = {
-  earn: 'Earned', redeem: 'Used to pay', reverse: 'Reversed', adjust: 'Adjusted', expire: 'Expired', import: 'Brought from POSBean',
+  earn: 'Earned', redeem: 'Used to pay', reverse: 'Reversed', adjust: 'Adjusted', expire: 'Expired', import: 'From POSBean',
 };
 const kindTone: Record<PointsKind, Tone> = { earn: 'success', redeem: 'info', reverse: 'warning', adjust: 'primary', expire: 'danger', import: 'neutral' };
 
