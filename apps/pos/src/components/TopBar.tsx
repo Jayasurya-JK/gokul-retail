@@ -183,7 +183,7 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
         <WindowButtons />
       </div>
 
-      <nav className="flex h-[50px] shrink-0 items-center gap-1.5 border-b border-line bg-surface px-3" aria-label="Main menu">
+      {pathname !== '/home' && <nav className="flex h-[50px] shrink-0 items-center gap-1.5 border-b border-line bg-surface px-3" aria-label="Main menu">
         {TABS.map((m) => {
           const active = (m.match as readonly string[]).includes(pathname);
           const Icon = m.icon;
@@ -204,7 +204,7 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
           );
         })}
         <DropMenu label={current?.label ?? 'More'} icon={<ChevronDown size={16} />} variant="tab" active={!!current} items={moreItems} heading="More" />
-      </nav>
+      </nav>}
 
       <ShortcutsSheet open={keys} onClose={() => setKeys(false)} />
     </>
