@@ -5,7 +5,7 @@ import { Kbd, Tooltip, cn } from '@gokul/ui';
 export interface MenuEntry { label: string; kbd?: string; icon?: ReactNode; onClick: () => void; danger?: boolean; /** Draws a rule above this entry */ divider?: boolean }
 
 /** A compact dropdown button. Mouse or touch only; every entry has its own key as well. */
-export function DropMenu({ label, icon, items, active, variant, heading }: { label: string; icon: ReactNode; items: MenuEntry[]; active?: boolean; variant?: 'chrome'; heading?: string }) {
+export function DropMenu({ label, icon, items, active, variant, heading, dot }: { label: string; icon: ReactNode; items: MenuEntry[]; active?: boolean; variant?: 'chrome'; heading?: string; dot?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -21,9 +21,10 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
       {variant === 'chrome' ? (
         <button
           type="button" tabIndex={-1} onClick={() => setOpen((o) => !o)}
-          className={cn('relative ml-1 flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium transition-colors hover:bg-white/10', active || open ? 'text-white' : 'text-chrome-ink')}
+          className={cn('relative ml-1 flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[17px] font-medium transition-colors hover:bg-white/10', active || open ? 'text-white' : 'text-chrome-ink')}
         >
           {label}{icon}
+          {dot && <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-accent" title="Held bills waiting" />}
           {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
         </button>
       ) : (

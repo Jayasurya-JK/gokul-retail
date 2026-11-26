@@ -6,7 +6,7 @@ const GROUPS: { title: string; rows: [string, string[]][] }[] = [
   {
     title: 'Go to',
     rows: [
-      ['Point of Sale', ['Alt+1']], ['POS 1 (second bill)', ['Alt+2']], ['Bills (reprint, cancel)', ['Alt+4']],
+      ['Start billing (Home)', ['Alt+0']], ['Point of Sale', ['Alt+1']], ['POS 1 (second bill)', ['Alt+2']], ['Bills (reprint, cancel)', ['Alt+4']],
       ['Sales Report', ['Alt+5']], ['Paymode Report', ['Alt+6']], ['Stock', ['Alt+7']], ['Customer', ['Alt+8']],
       ['Returns and exchange', ['F10']], ['Expenses and cash', ['F9']], ['Day close', ['Ctrl+E']], ['User menu', ['Alt+U']],
       ['Lock the counter', ['Ctrl+L']], ['Full screen on or off', ['Shift+F11']], ['This sheet', ['F1']], ['Back to billing (from any other screen)', ['Esc']],

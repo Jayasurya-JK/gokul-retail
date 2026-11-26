@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, BarChart3, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShieldCheck, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, ReceiptIndianRupee, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
 import { Kbd, Logo, Tooltip, cn, useWindowControls } from '@gokul/ui';
 import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
-import { usePrinterStatus } from '../printing';
 import { DropMenu, type MenuEntry } from './BillToolbar';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -39,7 +38,6 @@ const SCREENS: (string | null)[] = ['/billing', '/pos1', null, '/sales', '/repor
 export const BILL_PATHS = ['/billing', '/pos1'];
 
 export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () => void; onCloseDay?: () => void; minimal?: boolean }) {
-  const printer = usePrinterStatus();
   const openLines: Record<string, number> = {
     '/billing': billingStores.pos((s) => s.lines.length),
     '/pos1': billingStores.pos1((s) => s.lines.length),
@@ -64,7 +62,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     const h = (e: KeyboardEvent) => {
       if (e.key === 'F1') { e.preventDefault(); e.stopPropagation(); setKeys((o) => !o); return; }
       if (keys && e.key !== 'Escape' && e.key !== 'Tab' && e.key !== ' ' && e.key !== 'Enter') { e.stopPropagation(); return; } // the sheet is modal: nothing leaks to the screen behind
-      if (e.altKey && !e.ctrlKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); const target = SCREENS[Number(e.key) - 1]; if (target) nav(target); }
+      if (e.altKey && !e.ctrlKey && /^[0-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); const target = e.key === '0' ? '/billing' : SCREENS[Number(e.key) - 1]; if (target) nav(target); }
       else if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'u') { e.preventDefault(); e.stopPropagation(); setMenu((o) => !o); }
       else if (menu && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false); }
       else if (e.key === 'Escape' && !keys && !BILL_PATHS.includes(pathname)) {
@@ -89,7 +87,14 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
   const opened = shift ? new Date(shift.openedAt) : null;
 
   const brand = (
-    <div className="flex shrink-0 items-center gap-2.5 pr-2">
+    <div className="flex shrink-0 items-center gap-3 pr-2">
+      {!minimal && (
+        <Tooltip label="Home: start billing" kbd="Alt+0">
+          <button type="button" tabIndex={-1} onClick={() => nav('/billing')} aria-label="Home" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20">
+            <House size={22} />
+          </button>
+        </Tooltip>
+      )}
       <Logo size={30} badge="P" />
       <div className="leading-tight">
         <div className="text-[13px] font-semibold tracking-tight text-white">{settings?.shopName ?? ''}</div>
@@ -112,13 +117,13 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
 
   /* The More button names the screen you are on when that screen lives under More */
   const current = MORE.find((m) => (m.match as readonly string[]).includes(pathname));
-  const moreItems: MenuEntry[] = MORE.map((m) => ({
+  const moreItems: MenuEntry[] = [{ label: heldCount ? `Held bills (${heldCount})` : 'Held bills', kbd: 'Shift+F6', icon: <Pause size={15} />, onClick: onHeld ?? (() => nav('/billing')), divider: false }, ...MORE.map((m) => ({
     label: m.label,
     kbd: m.kbd,
     icon: <m.icon size={15} />,
     divider: m.divider,
     onClick: () => (m.path ? nav(m.path) : setKeys(true)),
-  }));
+  }))];
 
   return (
     <>
@@ -133,14 +138,14 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
               <button
                 onClick={() => nav(m.path)} tabIndex={-1}
                 className={cn(
-                  'relative flex shrink-0 items-center gap-2 whitespace-nowrap px-2.5 text-[13px] font-medium transition-colors min-[1450px]:px-3',
+                  'relative flex shrink-0 items-center gap-2.5 whitespace-nowrap px-3.5 text-[17px] font-medium transition-colors min-[1600px]:px-5',
                   active ? 'text-white' : 'text-chrome-muted hover:bg-white/[0.06] hover:text-white',
                 )}
               >
-                <Icon size={15} className={cn(active && 'text-yellow')} />
+                <Icon size={18} className={cn(active && 'text-yellow')} />
                 {m.label}
-                {openLines[m.path] > 0 && <span className="num rounded-full bg-yellow px-1.5 text-[10px] font-bold leading-4 text-chrome" title="Items on this bill">{openLines[m.path]}</span>}
-                {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
+                {openLines[m.path] > 0 && <span className="num rounded-full bg-yellow px-1.5 text-[11px] font-bold leading-4 text-chrome" title="Items on this bill">{openLines[m.path]}</span>}
+                {active && <span className="absolute inset-x-2 bottom-0 h-[4px] rounded-t bg-yellow" />}
               </button>
             </Tooltip>
           );
@@ -148,38 +153,16 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       </nav>
 
       <div className="flex shrink-0 items-center">
-      <button
-        onClick={onHeld ?? (() => nav('/billing'))} tabIndex={-1}
-        className={cn('ml-2 flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs transition-colors hover:bg-white/10', heldCount ? 'bg-accent/15 text-accent' : 'text-chrome-muted')}
-      >
-        <Pause size={13} />
-        <span className="num font-semibold">{heldCount}</span><span>held</span>
-        <span className="hidden min-[1500px]:inline"><Kbd tone="chrome">Shift+F6</Kbd></span>
-      </button>
-
       <DropMenu
         label={current?.label ?? 'More'} icon={<ChevronDown size={14} />} variant="chrome" active={!!current}
-        items={moreItems} heading="More"
+        items={moreItems} heading="More" dot={heldCount > 0}
       />
 
-      <div className="mx-1 flex items-center gap-0.5">
-        <Tooltip label={printer.ready ? `Printer ready: ${printer.name}` : printer.message}>
-          <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><Printer size={15} /><span className={cn('absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-chrome', printer.ready ? 'bg-success' : printer.configured ? 'bg-danger' : 'bg-warning')} /></span>
-        </Tooltip>
-        <Tooltip label="All bills saved on this computer">
-          <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><ShieldCheck size={15} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-chrome" /></span>
-        </Tooltip>
-      </div>
-
-      <span className="num mx-3 text-[13px] font-medium text-chrome-ink">{pad(now.getHours())}:{pad(now.getMinutes())}</span>
+      <span className="num mx-3 text-base font-medium text-chrome-ink">{pad(now.getHours())}:{pad(now.getMinutes())}</span>
 
       <div ref={menuRef} className="relative">
         <button onClick={() => setMenu((o) => !o)} tabIndex={-1} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-white/10">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: user?.color }}>{user?.initials}</span>
-          <span className="hidden text-left leading-tight min-[1500px]:block">
-            <span className="block whitespace-nowrap text-xs font-semibold text-white">{user?.name}</span>
-            <span className="block text-[10px] capitalize text-chrome-muted">{user?.role}</span>
-          </span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: user?.color }}>{user?.initials}</span>
           <ChevronDown size={13} className="text-chrome-muted" />
         </button>
         {menu && (
