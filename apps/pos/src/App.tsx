@@ -27,8 +27,8 @@ const closeGuard: CloseGuard = {
       await api.holdBill({
         customerId: b.customer?.id, customerName: b.customer?.name, lines: b.lines, billDiscount: b.billDiscount, payments: [],
         staff: b.staff || undefined, deliveryAddress: b.delivery.address || undefined, deliveryLocality: b.delivery.locality || undefined,
-        deliveryCharge: b.delivery.charge || undefined, wholesale: b.wholesale || undefined, cashDiscBps: b.cashDiscBps || undefined,
-        placeOfSupply: b.placeOfSupply || undefined,
+        deliveryCharge: b.delivery.charge || undefined, wholesale: b.wholesale || undefined, cashDisc: b.cashDisc || undefined,
+        placeOfSupply: b.placeOfSupply || undefined, pointsApplied: b.pointsApplied || undefined,
       });
       b.clear();
     }

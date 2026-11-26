@@ -3,7 +3,7 @@
 
 use crate::db::{self, audit, doc_number, fy_of, iso, next_seq, parse_id};
 use crate::error::{invalid, ApiError, Result};
-use crate::money::{cash_discount, compute_bill, compute_totals_with_delivery, recalc_line, Delivery};
+use crate::money::{cash_discount_of, compute_bill, compute_totals_with_delivery, recalc_line, Delivery};
 use crate::types::*;
 use chrono::{DateTime, Local};
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
@@ -56,13 +56,13 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
     }
     let mut lines: Vec<BillLine> = draft.lines.iter().map(recalc_line).collect();
     let ex = &draft.extras;
-    if ex.delivery_charge < 0 || !(0..=10000).contains(&ex.cash_disc_bps) {
+    if ex.delivery_charge < 0 || !(0..=10000).contains(&ex.cash_disc_bps) || ex.cash_disc < 0 {
         return invalid("Delivery charge or cash discount is not valid");
     }
 
     let settings = db::load_settings(tx)?;
     check_line_rates(tx, &lines)?;
-    let cash_disc = cash_discount(&lines, ex.cash_disc_bps);
+    let cash_disc = cash_discount_of(&lines, ex.cash_disc_bps, ex.cash_disc);
 
     // Where the supply is made decides CGST + SGST (same state as the shop) or IGST (another state). It is worked out here from the
     // customer saved in the database, never taken from the screen; the grand total is the same either way (prices include GST).
@@ -476,7 +476,7 @@ pub fn hold_bill(conn: &mut Connection, draft: &BillDraft) -> Result<HeldBill> {
     let lines: Vec<BillLine> = draft.lines.iter().map(recalc_line).collect();
     let round = db::load_settings(conn)?.round_to_rupee;
     let ex = draft.extras.clone();
-    let cash_disc = cash_discount(&lines, ex.cash_disc_bps.clamp(0, 10000));
+    let cash_disc = cash_discount_of(&lines, ex.cash_disc_bps.clamp(0, 10000), ex.cash_disc.max(0));
     let dgst = db::load_settings(conn)?.delivery_gst_rate;
     let total = compute_totals_with_delivery(&lines, draft.bill_discount + cash_disc, round, ex.delivery_charge.max(0), dgst).grand;
     let name = draft.customer_name.clone().unwrap_or_else(|| "Walk-in".into());

@@ -139,6 +139,18 @@ pub fn cash_discount(lines: &[BillLine], bps: i64) -> i64 {
     round_div(net as i128 * bps as i128, 10000) as i64
 }
 
+/// The cash discount of a bill in paise. A typed rupee amount (`amount`) is taken exactly (never more than the net of the lines); the
+/// older percent form (`bps`) is only used when there is no amount. The result goes into `compute_bill` as part of the bill discount,
+/// which spreads it over the lines in whole paise with the remainder on the last line, so the bill drops by exactly this amount.
+/// Same as `cashDiscountOf` in money.ts.
+pub fn cash_discount_of(lines: &[BillLine], bps: i64, amount: i64) -> i64 {
+    if amount > 0 {
+        let net: i64 = lines.iter().map(|l| l.amount).sum();
+        return amount.min(net);
+    }
+    cash_discount(lines, bps)
+}
+
 /// Totals for item lines plus an optional home-delivery charge (a separate taxable amount at `delivery_gst` percent; 0 = no GST).
 /// With no delivery charge this is exactly `compute_totals`. Intra-state.
 pub fn compute_totals_with_delivery(lines: &[BillLine], bill_discount: i64, round_to_rupee: bool, delivery: i64, delivery_gst: f64) -> BillTotals {

@@ -14,7 +14,7 @@ import { createHsnMock } from './areas/hsn';
 import { createGstrMock } from './areas/gstr';
 import { createSyncMock } from './areas/sync';
 import type { Bill, BillDraft, DaySummary, HeldBill, StockMovement, TopItem } from './types';
-import { cashDiscount, computeBill, computeTotalsWithDelivery } from './money';
+import { cashDiscountOf, computeBill, computeTotalsWithDelivery } from './money';
 import { enabledRates, supplyFor } from './gst';
 import { fuzzyFilter } from './fuzzy';
 import {
@@ -88,7 +88,7 @@ export function createMockApi(): Api {
     getBill: async (id) => bills.find((b) => b.id === id) ?? null,
     saveBill: async (draft: BillDraft) => {
       billSeq += 1;
-      const cashDisc = cashDiscount(draft.lines, draft.cashDiscBps ?? 0);
+      const cashDisc = cashDiscountOf(draft.lines, draft.cashDiscBps ?? 0, draft.cashDisc ?? 0);
       const delivery = draft.deliveryCharge ?? 0;
       const dGst = settings.deliveryGstRate ?? 0;
       const cust = draft.customerId ? customers.find((c) => c.id === draft.customerId) : undefined;
@@ -144,9 +144,9 @@ export function createMockApi(): Api {
       const h: HeldBill = {
         id: `h${heldSeq}`, at: new Date().toISOString(), customerName: draft.customerName ?? 'Walk-in',
         customerId: draft.customerId, lines: draft.lines, billDiscount: draft.billDiscount,
-        total: computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDiscount(draft.lines, draft.cashDiscBps ?? 0), true, draft.deliveryCharge ?? 0, settings.deliveryGstRate ?? 0).grand,
+        total: computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDiscountOf(draft.lines, draft.cashDiscBps ?? 0, draft.cashDisc ?? 0), true, draft.deliveryCharge ?? 0, settings.deliveryGstRate ?? 0).grand,
         staff: draft.staff, deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: draft.deliveryCharge,
-        wholesale: draft.wholesale, cashDiscBps: draft.cashDiscBps, remarks: draft.remarks, pointsApplied: draft.pointsApplied,
+        wholesale: draft.wholesale, cashDiscBps: draft.cashDiscBps, cashDisc: draft.cashDisc, remarks: draft.remarks, pointsApplied: draft.pointsApplied,
       };
       held.push(h);
       return h;

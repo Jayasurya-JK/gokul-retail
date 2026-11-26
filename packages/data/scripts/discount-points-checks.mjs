@@ -24,21 +24,29 @@ assert.equal(m.percentDiscount(net, '5%'), null, 'a % sign typed in is not a num
 assert.equal(m.percentDiscount(net, '\u20B95'), null, 'a rupee sign is refused');
 assert.equal(m.percentDiscount(net, ''), null);
 
-// ---- Cash discount: rupees only, within a paise or two on small bills
-const lines = [line(137_00, 1000)];
-for (const rupees of [5_00, 10_00, 12_50, 1_00, 99_00]) {
-  const bps = m.cashDiscBpsForRupees(lines, rupees);
-  const got = m.cashDiscount(lines, bps);
-  assert.ok(Math.abs(got - rupees) <= 1, `Rs ${rupees / 100} off a Rs 137 bill is within 1 paise (got ${got})`);
+// ---- Cash discount: rupees only, EXACT to the paise on every bill (spread over the lines, remainder on the last line)
+const exact = (name, ls, rupeePaise, round = false) => {
+  const cash = m.cashDiscountOf(ls, 0, rupeePaise);
+  const before = m.computeTotals(ls, 0, round);
+  const after = m.computeTotals(ls, cash, round);
+  assert.equal(cash, Math.min(rupeePaise, ls.reduce((s, l) => s + l.amount, 0)), `${name}: the discount is the typed amount`);
+  assert.equal(before.beforeRound - after.beforeRound, cash, `${name}: the bill drops by exactly the typed amount`);
+  assert.equal(after.taxable + after.gst, after.beforeRound, `${name}: taxable + GST still add up to the bill`);
+};
+exact('Rs 5 on Rs 137', [line(137_00, 1000)], 5_00);
+exact('Rs 1 on odd 3-line bill', [line(33_33, 1000, 18), line(45_67, 1000, 5), line(19_99, 1000, 12)], 1_00);
+exact('50 paise on mixed GST', [line(100_01, 1000, 0), line(77_77, 1000, 5), line(33_33, 1000, 12), line(9_99, 1000, 18)], 50);
+const eq = [line(100_01, 1000, 5), line(77_77, 1000, 12)];
+exact('Rs equal to the bill total', eq, 177_78);
+assert.equal(m.computeTotals(eq, m.cashDiscountOf(eq, 0, 177_78), false).beforeRound, 0, 'a discount equal to the bill leaves nothing to pay');
+assert.equal(m.cashDiscountOf(eq, 0, 999_99), 177_78, 'cannot go past the whole bill');
+assert.equal(m.cashDiscountOf(eq, 0, 0), 0);
+assert.equal(m.cashDiscountOf([], 0, 5_00), 0);
+assert.equal(m.cashDiscountOf(eq, 1000, 0), Math.round(177_78 * 0.1), 'the old percent form still works for old held bills');
+for (let i = 1; i <= 400; i++) { // many odd bills
+  const ls = [line(100 + ((i * 7919) % 40000), 1000 + i, 5), line(100 + ((i * 104729) % 30000), 3000 - i, 12), line(50 + ((i * 31) % 999), 7, 0)];
+  exact(`odd bill ${i}`, ls, 1 + ((i * 37) % 5000));
 }
-const big = [line(1250_00, 2000), line(380_00, 1000)]; // Rs 2,880
-for (const rupees of [5_00, 20_00, 75_50]) {
-  const got = m.cashDiscount(big, m.cashDiscBpsForRupees(big, rupees));
-  assert.ok(Math.abs(got - rupees) <= 15, `Rs ${rupees / 100} off Rs 2,880 is within 15 paise (got ${got})`);
-}
-assert.equal(m.cashDiscBpsForRupees(lines, 500_00), 10000, 'cannot go past the whole bill');
-assert.equal(m.cashDiscBpsForRupees(lines, 0), 0);
-assert.equal(m.cashDiscBpsForRupees([], 5_00), 0);
 
 // ---- Points within the loyalty rules (1 point = Rs 1, min 100, max 50% of the bill)
 const rules = { enabled: true, pointValue: 100, minRedeem: 100, maxPct: 50 };
@@ -63,7 +71,4 @@ assert.match(ok('12.5').error, /whole points/);
 assert.match(ok('0').error, /number of points/);
 assert.match(m.checkPointsTyped('200', { ...rules, enabled: false }, 783.08, bill, bill).error, /switched off/);
 
-// Points are a payment, not a discount: the bill total does not move.
-const t0 = m.computeTotals(lines, 0, true);
-assert.equal(t0.grand, m.computeTotals(lines, 0, true).grand);
 console.log('discount-points-checks: ok');

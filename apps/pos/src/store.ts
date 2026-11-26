@@ -2,7 +2,7 @@ import { useEffect, useReducer } from 'react';
 import { create } from 'zustand';
 import { configureKeyBar, reloadKeyBar } from '@gokul/ui';
 import {
-  makeLine, recalcLine, api as backendApi, type Api, type BillLine, type Customer, type HeldBill, type Item, type Paise, type Settings, type Shift, type User,
+  cashDiscount, makeLine, recalcLine, api as backendApi, type Api, type BillLine, type Customer, type HeldBill, type Item, type Paise, type Settings, type Shift, type User,
 } from '@gokul/data';
 
 /**
@@ -63,8 +63,8 @@ interface BillingState {
   delivery: Delivery;
   /** The bill uses wholesale prices */
   wholesale: boolean;
-  /** Cash discount percent x 100 (250 = 2.5%), on top of item discounts */
-  cashDiscBps: number;
+  /** Cash discount in paise, typed in rupees, on top of item discounts */
+  cashDisc: Paise;
   /** Whole loyalty points the cashier applied in the bill panel; they belong to the attached customer and are paid as a points payment at save */
   pointsApplied: number;
   /** GST state code the cashier chose for the place of supply; '' = from the customer, else the shop's own state */
@@ -83,7 +83,7 @@ interface BillingState {
   setBillDiscount: (d: Paise) => void;
   setStaff: (s: string) => void;
   setDelivery: (d: Delivery) => void;
-  setCashDisc: (bps: number) => void;
+  setCashDisc: (paise: Paise) => void;
   setPointsApplied: (points: number) => void;
   setPlaceOfSupply: (state: string) => void;
   /** Switch wholesale on or off and re-price the lines that still carry the other mode's price. */
@@ -95,7 +95,7 @@ interface BillingState {
 /** The rate an item is billed at in the current mode. */
 export const rateFor = (item: Item, wholesale: boolean): Paise => (wholesale && item.wholesalePrice ? item.wholesalePrice : item.price);
 
-const EMPTY = { lines: [] as BillLine[], selected: -1, customer: null as Customer | null, billDiscount: 0, staff: '', delivery: NO_DELIVERY, wholesale: false, cashDiscBps: 0, pointsApplied: 0, placeOfSupply: '' };
+const EMPTY = { lines: [] as BillLine[], selected: -1, customer: null as Customer | null, billDiscount: 0, staff: '', delivery: NO_DELIVERY, wholesale: false, cashDisc: 0, pointsApplied: 0, placeOfSupply: '' };
 
 function makeBillingStore() {
   return create<BillingState>((set, get) => ({
@@ -132,7 +132,7 @@ function makeBillingStore() {
     setBillDiscount: (billDiscount) => set({ billDiscount }),
     setStaff: (staff) => set({ staff }),
     setDelivery: (delivery) => set({ delivery }),
-    setCashDisc: (cashDiscBps) => set({ cashDiscBps }),
+    setCashDisc: (cashDisc) => set({ cashDisc }),
     setPointsApplied: (pointsApplied) => set({ pointsApplied }),
     setPlaceOfSupply: (placeOfSupply) => set({ placeOfSupply }),
     setWholesale: (on, itemOf) => set((s) => ({
@@ -148,7 +148,7 @@ function makeBillingStore() {
     load: (h, customer) => set({
       lines: h.lines, selected: h.lines.length - 1, customer, billDiscount: h.billDiscount, staff: h.staff ?? '',
       delivery: { address: h.deliveryAddress ?? '', locality: h.deliveryLocality ?? '', charge: h.deliveryCharge ?? 0 },
-      wholesale: !!h.wholesale, cashDiscBps: h.cashDiscBps ?? 0, placeOfSupply: h.placeOfSupply ?? '',
+      wholesale: !!h.wholesale, cashDisc: h.cashDisc || cashDiscount(h.lines, h.cashDiscBps ?? 0), placeOfSupply: h.placeOfSupply ?? '',
       pointsApplied: customer ? h.pointsApplied ?? 0 : 0,
     }),
   }));

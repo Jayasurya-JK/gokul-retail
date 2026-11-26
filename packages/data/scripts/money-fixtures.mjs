@@ -32,7 +32,7 @@ const mkLine = (l, i) => ({
 const solve = (c) => {
   const lines = c.lines.map(mkLine).map(m.recalcLine);
   const inter = !!c.inter;
-  const totals = m.computeTotals(lines, c.billDiscount, c.round, inter);
+  const totals = m.computeTotals(lines, c.billDiscount + m.cashDiscountOf(lines, 0, c.cashDisc ?? 0), c.round, inter);
   const out = { lines: lines.map((l) => ({ discount: l.discount, amount: l.amount })), totals };
   if (c.kind === 'return') {
     const bill = { lines, totals };
@@ -56,8 +56,8 @@ function rng(seed) {
 function buildInputs() {
   const cases = [];
   const L = (rate, qty, gstRate, discount = 0, cessRate = 0) => ({ rate, qty, gstRate, discount, ...(cessRate ? { cessRate } : {}) });
-  const add = (name, lines, billDiscount = 0, round = true, picks, inter = false) =>
-    cases.push({ name, kind: picks ? 'return' : 'totals', round, billDiscount, lines, ...(picks ? { picks } : {}), ...(inter ? { inter: true } : {}) });
+  const add = (name, lines, billDiscount = 0, round = true, picks, inter = false, cashDisc = 0) =>
+    cases.push({ name, kind: picks ? 'return' : 'totals', round, billDiscount, ...(cashDisc ? { cashDisc } : {}), lines, ...(picks ? { picks } : {}), ...(inter ? { inter: true } : {}) });
 
   // Hand-picked edge cases
   add('single pack 5%', [L(36000, 1000, 5)]);
@@ -80,6 +80,13 @@ function buildInputs() {
   add('all slabs', [L(10000, 1000, 0), L(10000, 1000, 5), L(10000, 1000, 12), L(10000, 1000, 18)], 777);
   add('odd gst split', [L(10001, 1000, 5)], 0, false);
   add('big bill', [L(2400000, 1500, 5), L(78000, 3250, 5), L(110000, 750, 12)], 12345);
+  // Cash discount typed in rupees: the bill drops by exactly that amount (before round-off)
+  add('cash discount Rs 5 on Rs 137', [L(13700, 1000, 5)], 0, false, undefined, false, 500);
+  add('cash discount Re 1 on odd 3-line bill', [L(3333, 1000, 18), L(4567, 1000, 5), L(1999, 1000, 12)], 0, false, undefined, false, 100);
+  add('cash discount 50 paise on mixed gst', [L(10001, 1000, 0), L(7777, 1000, 5), L(3333, 1000, 12), L(999, 1000, 18)], 0, false, undefined, false, 50);
+  add('cash discount equal to bill total', [L(10001, 1000, 5), L(7777, 1000, 12)], 0, false, undefined, false, 17778);
+  add('cash discount above bill is capped', [L(1000, 1000, 5)], 0, false, undefined, false, 99999);
+  add('cash discount with bill discount, inter-state', [L(10001, 1000, 5), L(7777, 1000, 12)], 300, true, undefined, true, 250);
   add('single line return half', [L(36000, 2000, 5)], 0, true, [{ lineIndex: 0, qty: 1000 }]);
   add('partial return with bill discount', [L(10000, 3000, 5), L(2500, 4000, 12)], 1500, true, [{ lineIndex: 0, qty: 1000 }, { lineIndex: 1, qty: 1500 }]);
   add('return full line', [L(10000, 1000, 5), L(2500, 1000, 12)], 700, true, [{ lineIndex: 1, qty: 1000 }]);

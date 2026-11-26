@@ -121,8 +121,8 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   /** Exchange credit carried into this bill, what is left to pay after it, and what goes back to the customer when the bill is smaller */
   exchange: CreditNote | null; exchangeCredit: number; due: number; refundDue: number; onDropExchange: () => void;
   slotLabel?: string; wholesale?: boolean;
-  /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K). The box applies a rupee amount or a percent. */
-  cashDisc: number; cashDiscBps: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
+  /** Cash discount in paise, typed in rupees; separate from item discounts (Ctrl+K). */
+  cashDisc: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
   /** Points row: shown only when the customer has points and loyalty is on. `maxPoints` / `maxWorth` is what the rules allow on this bill today. */
   pointsRow: { balance: number; maxPoints: number; maxWorth: number; minRedeem: number; applied: number; amount: number } | null;
   focusPoints: number; onApplyPoints: (typed: string) => string | null; onClearPoints: () => void;

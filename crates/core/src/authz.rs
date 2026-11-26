@@ -420,7 +420,7 @@ fn check_bill(conn: &Connection, actor: &Actor, args: &[Value]) -> Result<Option
         return Ok(None);
     }
     // The cash discount counts as discount too: a cashier cannot get round the limit by using it.
-    let cash = crate::money::cash_discount(&lines, draft.extras.cash_disc_bps.clamp(0, 10000));
+    let cash = crate::money::cash_discount_of(&lines, draft.extras.cash_disc_bps.clamp(0, 10000), draft.extras.cash_disc.max(0));
     let totals = compute_totals(&lines, draft.bill_discount + cash, true);
     let mut reasons: Vec<String> = vec![];
     let mut perm: Option<&str> = None;

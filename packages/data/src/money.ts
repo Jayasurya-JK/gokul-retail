@@ -149,6 +149,16 @@ export function cashDiscount(lines: BillLine[], bps: number): Paise {
 }
 
 /**
+ * The cash discount of a bill in paise. A typed rupee amount is taken exactly (never more than the net of the lines); the older
+ * percent form (bps) is used only when there is no amount. It goes into computeBill as part of the bill discount, which spreads it
+ * over the lines in whole paise with the remainder on the last line, so the bill drops by exactly this amount. Same as Rust `cash_discount_of`.
+ */
+export function cashDiscountOf(lines: BillLine[], bps: number, amount: Paise = 0): Paise {
+  if (amount > 0) return Math.min(amount, lines.reduce((s, l) => s + l.amount, 0));
+  return cashDiscount(lines, bps);
+}
+
+/**
  * Totals for item lines plus an optional home-delivery charge (a separate taxable amount at `deliveryGst` percent). The bill
  * discount is spread over the item lines only. With no delivery charge this is exactly `computeTotals`. Same as the Rust side.
  */
@@ -176,24 +186,6 @@ export function percentDiscount(net: Paise, typed: string): Paise | null {
   const pct = Number(t);
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) return null;
   return Math.round((net * pct) / 100);
-}
-
-/**
- * Cash discount box: rupees only. The bill keeps it as percent x 100 (bps) of the item lines, so this finds the bps whose
- * rupee result is nearest the typed amount (exact to the paise on normal bills). Capped at the whole bill.
- */
-export function cashDiscBpsForRupees(lines: BillLine[], amount: Paise): number {
-  const net = lines.reduce((s, l) => s + l.amount, 0);
-  if (net <= 0 || !(amount > 0)) return 0;
-  if (amount >= net) return 10000;
-  const guess = Math.round((amount * 10000) / net);
-  let best = guess;
-  let bestErr = Infinity;
-  for (let b = Math.max(0, guess - 3); b <= Math.min(10000, guess + 3); b++) {
-    const err = Math.abs(cashDiscount(lines, b) - amount);
-    if (err < bestErr) { best = b; bestErr = err; }
-  }
-  return best;
 }
 
 export interface PointsRules { enabled: boolean; pointValue: Paise; minRedeem: number; maxPct: number }

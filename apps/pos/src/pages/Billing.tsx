@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ScanBarcode, XCircle } from 'lucide-react';
 import {
-  cashDiscBpsForRupees, cashDiscount, checkPointsTyped, computeTotalsWithDelivery, percentDiscount, pointsLimit, supplyFor, formatQty, formatRupees, lineGross, parsePaise, parseQty,
+  cashDiscountOf, checkPointsTyped, computeTotalsWithDelivery, percentDiscount, pointsLimit, supplyFor, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
 import { Kbd, ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
@@ -32,7 +32,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /* Point of Sale and POS 1 are two separate bills: this screen shows the one for its tab, the other keeps its state. */
   const useBilling = billingStores[slot];
   const B = useBilling();
-  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps, placeOfSupply, pointsApplied } = B;
+  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDisc: cashDiscTyped, placeOfSupply, pointsApplied } = B;
 
   const [items, setItems] = useState<Item[]>([]);
   const [scan, setScan] = useState('');
@@ -73,7 +73,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const isLoose = useCallback((l: BillLine) => byId.get(l.itemId)?.loose ?? false, [byId]);
 
   const deliveryGst = settings?.deliveryGstRate ?? 0;
-  const cashDisc = useMemo(() => cashDiscount(lines, cashDiscBps), [lines, cashDiscBps]);
+  const cashDisc = useMemo(() => cashDiscountOf(lines, 0, cashDiscTyped), [lines, cashDiscTyped]);
   /* Where the supply is made: the state picked on the bill, else the customer's (their GSTIN's), else the shop's own. Local = CGST + SGST,
      another state = IGST. The total is the same either way (prices include GST); the server works it out again when it saves. */
   const shopState = settings?.stateCode ?? '33';
@@ -85,7 +85,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /** What goes to the backend next to the lines */
   const extras = () => ({
     staff: staff || undefined, deliveryAddress: delivery.address || undefined, deliveryLocality: delivery.locality || undefined,
-    deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDiscBps: cashDiscBps || undefined,
+    deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDisc: cashDisc || undefined,
     placeOfSupply: placeOfSupply || undefined, pointsApplied: pointsUsedPts || undefined,
   });
   /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). A bigger credit than the bill is allowed:
@@ -406,7 +406,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     B.setWholesale(on, (id) => byId.get(id));
     toast.show({ tone: 'info', title: on ? 'Wholesale prices on' : 'Wholesale prices off', detail: on ? 'Items without a wholesale price keep the normal price.' : 'Back to normal prices.' });
   };
-  /** Inline cash discount: rupees only. "5" is Rs 5 off the bill. It is kept as a percent (bps) of the item lines, as before. */
+  /** Inline cash discount: rupees only. "5" is exactly Rs 5 off the bill (kept in paise; the money engine spreads it over the lines). */
   const applyCashDiscount = (v: string) => {
     const t = v.trim();
     if (!t || t === '0') { B.setCashDisc(0); return; }
@@ -415,7 +415,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (net <= 0) { toast.show({ tone: 'info', title: 'Add items before a cash discount' }); return; }
     if (amt === null || amt <= 0) { toast.show({ tone: 'error', title: 'Type the cash discount in rupees, like 5' }); return; }
     if (amt + billDiscount > net) { toast.show({ tone: 'error', title: 'Cash discount is more than the bill', detail: `At most ${formatRupees(Math.max(0, net - billDiscount))} can be taken off.` }); return; }
-    B.setCashDisc(cashDiscBpsForRupees(lines, amt));
+    B.setCashDisc(amt);
   };
   /** Points typed in the panel: whole points to pay part of the bill. Returns a plain-words reason when they cannot be used. */
   const applyPoints = (v: string): string | null => {
@@ -571,7 +571,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
         <SummaryPanel
           totals={totals} customer={customer} wallet={wallet} onCustomer={() => setDialog('customer')} onPay={openPay}
           onDiscount={() => setDialog('billDisc')} onClearDiscount={() => B.setBillDiscount(0)} lastBill={lastBill} exchange={exchange} exchangeCredit={exchangeCredit} due={due} refundDue={refundDue} onDropExchange={() => setDialog('dropEx')} onApplyDiscount={applyBillDiscount} billNo={billNo}
-          slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
+          slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc}
           supply={supply} shopState={shopState} onPlace={() => setDialog('place')}
           focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
           pointsRow={walletOk && rules?.enabled && pointsBalance > 0 ? { balance: pointsBalance, maxPoints: pointsMax.maxPoints, maxWorth: pointsMax.worth, minRedeem: rules.minRedeem, applied: pointsUsedPts, amount: pointsUsed } : null}
