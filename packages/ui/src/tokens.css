@@ -16,9 +16,9 @@
   --tile-more-a: 58 66 82; --tile-more-b: 30 36 48;
   /* Light status colours that read on the deep tiles (same meanings as green / red / amber) */
   --on-tile-good: 150 242 182; --on-tile-bad: 255 190 190; --on-tile-warn: 253 224 110;
-  /* Green touch: billing toolbar (pale green, dark green ink, >= 7:1) and table header rows (pale green-grey). */
-  --toolbar: 238 245 240; --toolbar-hover: 226 240 231; --toolbar-active: 214 235 223; --toolbar-ink: 14 67 48;
-  --table-head: 241 245 242; --table-head-ink: 14 67 48;
+  /* Dark green chrome: header block (chrome 900 > tabs on chrome > toolbar 700) and table header rows (800), all white text (>= 7:1). */
+  --toolbar: 20 82 56; --toolbar-hover: 26 90 64; --toolbar-active: 30 98 71; --toolbar-ink: 255 255 255;
+  --table-head: 14 67 48; --table-head-ink: 255 255 255;
   --bg: 242 244 247;
   --surface: 255 255 255;
   --surface-2: 248 249 251;
@@ -61,8 +61,8 @@
   color-scheme: light;
 }
 :root[data-theme='dark'] {
-  --toolbar: 20 34 29; --toolbar-hover: 27 46 39; --toolbar-active: 33 58 46; --toolbar-ink: 190 232 210;
-  --table-head: 23 36 31; --table-head-ink: 190 232 210;
+  --toolbar: 14 60 44; --toolbar-hover: 22 78 58; --toolbar-active: 34 100 74; --toolbar-ink: 236 248 241;
+  --table-head: 10 48 36; --table-head-ink: 236 248 241;
   --bg: 11 15 20;
   --surface: 18 25 33;
   --surface-2: 23 32 42;

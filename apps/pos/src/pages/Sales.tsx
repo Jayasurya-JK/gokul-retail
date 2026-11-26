@@ -487,7 +487,7 @@ function NotePane({ note }: { note: CreditNote }) {
         </div>
       </div>
       <div className="px-5 pt-4">
-        <div className="grid grid-cols-[minmax(0,1fr)_96px_110px] h-8 items-center gap-x-2.5 rounded-t-control border border-b-0 border-line bg-surface-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
+        <div className="grid grid-cols-[minmax(0,1fr)_96px_110px] h-8 items-center gap-x-2.5 rounded-t-control border border-b-0 border-line bg-table-head px-3 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink">
           <span>Item returned</span><span className="text-right">Qty</span><span className="text-right">Amount</span>
         </div>
         <div className="divide-y divide-line rounded-b-control border border-line">

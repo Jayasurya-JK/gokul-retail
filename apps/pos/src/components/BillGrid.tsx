@@ -74,7 +74,7 @@ export function BillGrid({ lines, selected, edit, loose, stock, onSelect, onDraf
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <div className="grid h-8 shrink-0 items-center border-b border-line bg-surface-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted min-[1700px]:h-10 min-[1700px]:text-xs" style={{ gridTemplateColumns: GRID_COLS }}>
+      <div className="grid h-8 shrink-0 items-center border-b border-line bg-table-head px-3 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink min-[1700px]:h-10 min-[1700px]:text-xs" style={{ gridTemplateColumns: GRID_COLS }}>
         <div className="px-2 text-center">S.No</div>
         <div className="px-2">Item</div>
         <div className="px-2 text-right">Qty</div>

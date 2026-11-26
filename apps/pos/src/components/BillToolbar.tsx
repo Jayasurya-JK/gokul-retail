@@ -21,7 +21,7 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
       {variant === 'tab' ? (
         <button
           type="button" tabIndex={-1} onClick={() => setOpen((o) => !o)}
-          className={cn('flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors', active || open ? 'bg-primary-soft text-primary' : 'text-muted hover:bg-surface-3 hover:text-ink')}
+          className={cn('flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors', active || open ? 'bg-forest-600 text-white shadow-[inset_0_-3px_0_rgb(var(--brand-yellow))]' : 'text-white hover:bg-white/10')}
         >
           {label}{icon}
         </button>
@@ -34,7 +34,7 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
           {active && <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-t bg-yellow" />}
         </button>
       ) : (
-        <TBtn label={label} icon={icon} active={active || open} onClick={() => setOpen((o) => !o)} trailing={<ChevronDown size={12} className="text-subtle" />} />
+        <TBtn label={label} icon={icon} active={active || open} onClick={() => setOpen((o) => !o)} trailing={<ChevronDown size={12} className="text-white" />} />
       )}
       {open && (
         <div className={cn("g-overlay absolute top-[calc(100%+4px)] z-[60] w-64 overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay", variant === "tab" ? "left-0" : "right-0")}>
@@ -70,7 +70,7 @@ function TBtn({ label, icon, kbd, onClick, active, trailing, tip, alwaysKbd }: {
       >
         <span className="text-toolbar-ink">{icon}</span>
         {label}
-        {kbd && <span className={alwaysKbd ? "inline-flex" : "hidden min-[1500px]:inline-flex"}><Kbd>{kbd}</Kbd></span>}
+        {kbd && <span className={alwaysKbd ? "inline-flex" : "hidden min-[1500px]:inline-flex"}><Kbd tone="chrome" className="!border-white/60 !bg-transparent !text-white">{kbd}</Kbd></span>}
         {trailing}
       </button>
     </Tooltip>
@@ -106,7 +106,7 @@ export function BillToolbar({ deliveryOn, staff, wholesale, heldCount, onDeliver
     { key: 'delete', priority: 4, label: 'Delete', kbd: 'Del', onClick: onDelete, icon: <Trash2 size={15} />, node: <TBtn label="Delete" tip="Delete the selected item" kbd="Del" icon={<Trash2 size={15} />} onClick={onDelete} active={false} /> },
     { key: 'refresh', priority: 3, label: 'Refresh', kbd: 'F5', onClick: onRefresh, icon: <RefreshCw size={15} />, node: <TBtn label="Refresh" tip="Reload items, customer and totals" kbd="F5" icon={<RefreshCw size={15} />} onClick={onRefresh} /> },
     { key: 'manual', priority: 1, label: 'Manual item', onClick: onManual, icon: <PencilLine size={15} />, node: <TBtn label="Manual" tip="Add an item that is not in the list" icon={<PencilLine size={15} />} onClick={onManual} /> },
-    { key: 'sep', label: '', onClick: () => undefined, node: <span className="mx-1 h-5 w-px shrink-0 bg-forest-200" /> },
+    { key: 'sep', label: '', onClick: () => undefined, node: <span className="mx-1 h-5 w-px shrink-0 bg-white/30" /> },
     { key: 'staff', priority: 5, label: staffLabel, kbd: 'F7', onClick: onStaff, icon: <UserRoundCheck size={15} />, node: <TBtn label={staffLabel} tip="Staff for this bill" kbd="F7" icon={<UserRoundCheck size={15} />} active={!!staff} onClick={onStaff} /> },
     { key: 'recent', priority: 2, label: 'Recent bills', kbd: 'F8', onClick: onRecent, icon: <ReceiptIndianRupee size={15} />, node: <TBtn label="Recent" tip="Recent bills: reprint" kbd="F8" icon={<ReceiptIndianRupee size={15} />} onClick={onRecent} /> },
     { key: 'hold', label: 'Hold', kbd: 'F6', onClick: onHold, icon: <Pause size={15} />, node: <TBtn label="Hold" tip="Hold this bill for later" kbd="F6" icon={<Pause size={15} />} onClick={onHold} alwaysKbd /> },
@@ -115,7 +115,7 @@ export function BillToolbar({ deliveryOn, staff, wholesale, heldCount, onDeliver
   ];
   return (
     <OverflowRow
-      className="h-11 shrink-0 border-b border-forest-200 bg-toolbar px-2" gap={2} role="toolbar" ariaLabel="Billing actions"
+      className="h-11 shrink-0 border-t border-forest-900/60 bg-toolbar px-2" gap={2} role="toolbar" ariaLabel="Billing actions"
       items={entries}
       alwaysMore moreWidth={92}
       moreButton={(hidden) => {

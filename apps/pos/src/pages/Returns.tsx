@@ -358,7 +358,7 @@ export function Returns() {
               </div>
             )}
 
-            <div className={`grid ${COLS} h-8 shrink-0 items-center gap-x-3 border-b border-line bg-surface-2 px-5 text-[11px] font-semibold uppercase tracking-wider text-muted`}>
+            <div className={`grid ${COLS} h-8 shrink-0 items-center gap-x-3 border-b border-line bg-table-head px-5 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink`}>
               <span /><span>Item</span><span className="text-right">Sold</span><span className="text-right">Returned</span><span className="text-right">Return now</span><span className="text-right">Refund</span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">

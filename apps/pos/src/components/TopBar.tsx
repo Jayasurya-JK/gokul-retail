@@ -93,14 +93,14 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
   const brand = (
     <div className="flex shrink-0 items-center gap-2.5">
       <Logo size={24} badge="P" />
-      <div className="whitespace-nowrap text-[13px] text-chrome-ink">
+      <div className="whitespace-nowrap text-[13px] text-white/85">
         <span className="font-semibold text-white">{settings?.shopName ?? ''}</span>
         <span className="text-chrome-muted"> · Billing Counter</span>
       </div>
     </div>
   );
 
-  const rowOne = 'flex h-9 shrink-0 items-center gap-2 bg-chrome px-3 text-chrome-ink shadow-[0_1px_0_rgb(0_0_0/0.25)]';
+  const rowOne = 'flex h-9 shrink-0 items-center gap-2 bg-chrome px-3 text-white/85';
 
   if (minimal) {
     return (
@@ -177,14 +177,14 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
       </div>
 
       {pathname !== '/home' && <OverflowRow
-        className="h-[50px] shrink-0 border-b border-line bg-surface px-3" gap={6} moreWidth={110} alwaysMore role="navigation" ariaLabel="Main menu"
+        className="h-[50px] shrink-0 bg-chrome px-3" gap={6} moreWidth={110} alwaysMore role="navigation" ariaLabel="Main menu"
         items={[{
           key: '/home',
           node: (
             <Tooltip label="Home" kbd="Alt+0">
               <button
                 type="button" tabIndex={-1} onClick={() => nav('/home')} aria-label="Home"
-                className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink transition-colors hover:bg-surface-3', pathname === '/home' && 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_rgb(var(--primary)/0.25)]')}
+                className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/10', pathname === '/home' && 'bg-forest-600 text-white shadow-[inset_0_-3px_0_rgb(var(--brand-yellow))]')}
               >
                 <House size={20} />
               </button>
@@ -202,10 +202,10 @@ export function TopBar({ minimal }: { onHeld?: () => void; onLock?: () => void; 
                   onClick={() => nav(m.path)} tabIndex={-1}
                   className={cn(
                     'flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors',
-                    active ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_rgb(var(--primary)/0.25)]' : 'text-muted hover:bg-surface-3 hover:text-ink',
+                    active ? 'bg-forest-600 text-white shadow-[inset_0_-3px_0_rgb(var(--brand-yellow))]' : 'text-white hover:bg-white/10',
                   )}
                 >
-                  <Icon size={18} className={active ? 'text-primary' : 'text-muted'} />
+                  <Icon size={18} className="text-white" />
                   {m.label}
                   {openLines[m.path] > 0 && <span className="num rounded-full bg-primary px-1.5 text-[11px] font-bold leading-[18px] text-primary-fg" title="Items on this bill">{openLines[m.path]}</span>}
                 </button>

@@ -324,7 +324,7 @@ export function Expenses() {
         <Stat label="Cash added to drawer" tone="success" value={<Money paise={cashIn} decimals={false} />} hint={`UPI and bank expenses: ${formatRupees((data?.byMode.upi ?? 0) + (data?.byMode.bank ?? 0), { decimals: false })}`} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col bg-surface">
-        <div className="grid h-8 shrink-0 items-center border-b border-line bg-surface-2 px-5 text-[11px] font-semibold uppercase tracking-wider text-muted" style={{ gridTemplateColumns: COLS }}>
+        <div className="grid h-8 shrink-0 items-center border-b border-line bg-table-head px-5 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink" style={{ gridTemplateColumns: COLS }}>
           <span>Time</span><span>Category</span><span>Paid to / note</span><span>Paid from</span><span>By</span><span className="text-right">Amount</span><span className="text-right">Edit / void</span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">

@@ -237,7 +237,7 @@ function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
       </div>
       {open && (
         <div className="mx-3 mb-2 ml-[52px] overflow-hidden rounded-lg border border-line bg-surface">
-          <div className="grid h-7 items-center bg-surface-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted" style={{ gridTemplateColumns: canCost ? 'minmax(160px,2fr) 80px 90px 90px 70px 100px 90px 90px' : 'minmax(160px,2fr) 80px 90px 90px 70px 100px' }}>
+          <div className="grid h-7 items-center bg-table-head px-3 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink" style={{ gridTemplateColumns: canCost ? 'minmax(160px,2fr) 80px 90px 90px 70px 100px 90px 90px' : 'minmax(160px,2fr) 80px 90px 90px 70px 100px' }}>
             <span>Item</span><span className="text-right">Qty</span><span className="text-right">Rate</span><span className="text-right">Disc</span><span className="text-right">GST</span><span className="text-right">Amount</span>
             {canCost && <><span className="text-right">Cost</span><span className="text-right">Profit</span></>}
           </div>
@@ -292,7 +292,7 @@ function Grid({ cols, head, right, minWidth = 1000, foot, readable, headTone, ch
   return (
     <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
       <div className={cn(!!foot && 'flex min-h-full flex-col')} style={{ minWidth: Math.max(minWidth, rc.customised ? rc.minTotal + 24 : 0) }}>
-        <div onContextMenu={rc.headerProps.onContextMenu} className={cn('sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 font-semibold uppercase', readable ? 'text-[11.5px] tracking-wide text-ink' : 'text-[10.5px] tracking-wide text-muted')} style={{ gridTemplateColumns: ROW_COLS }}>
+        <div onContextMenu={rc.headerProps.onContextMenu} className={cn('sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-table-head px-3 font-semibold uppercase', readable ? 'text-[11.5px] tracking-wide text-table-head-ink' : 'text-[10.5px] tracking-wide text-table-head-ink')} style={{ gridTemplateColumns: ROW_COLS }}>
           {head.map((h, i) => (
             <div key={i} className={cn('relative h-full min-w-0 truncate px-2 pr-3 leading-9', right.includes(i) && 'text-right', headTone?.(i)?.className)} style={headTone?.(i)?.style}>
               {h}{h && <ColResizer rc={rc} index={i} />}
@@ -385,7 +385,7 @@ export function PaymodeReportPage() {
     >
       <Grid
         cols={cols} readable head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}
-        headTone={(i) => (i >= PAY_FIRST_MODE ? { className: `${PAY_DIVIDER} rpt-mode-${MODE_COLS[i - PAY_FIRST_MODE].key}`, style: { color: 'var(--pm-ink)', boxShadow: 'inset 0 -3px 0 var(--pm-bar)' } } : undefined)}
+        headTone={(i) => (i >= PAY_FIRST_MODE ? { className: `${PAY_DIVIDER} rpt-mode-${MODE_COLS[i - PAY_FIRST_MODE].key}`, style: { boxShadow: 'inset 0 -3px 0 var(--pm-bar)' } } : undefined)}
         foot={
           <FootRow>
             <span className="col-span-4 px-2 font-bold text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
@@ -551,12 +551,12 @@ export function StockPage() {
     >
       <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
         <div style={{ minWidth: Math.max(canCost ? 1650 : 1210, rc.customised ? rc.minTotal + 24 : 0) }}>
-          <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
+          <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-table-head px-3 text-[10.5px] font-semibold uppercase tracking-wide text-table-head-ink" style={{ gridTemplateColumns: ROW_COLS }}>
             {defs.map((c, ci) => (
               <div key={c.key} className="relative flex h-full min-w-0 items-center overflow-hidden">
                 <button
                   onClick={() => onSort(c.key)} tabIndex={-1} title={`Sort by ${c.label}`}
-                  className={cn('flex h-full min-w-0 flex-1 items-center gap-1 truncate px-2 pr-3 uppercase hover:text-ink', c.right && 'justify-end', sort.key === c.key && 'text-primary')}
+                  className={cn('flex h-full min-w-0 flex-1 items-center gap-1 truncate px-2 pr-3 uppercase hover:text-white', c.right && 'justify-end', sort.key === c.key && 'text-table-head-ink underline decoration-yellow decoration-2 underline-offset-4')}
                 >
                   <span className="truncate">{c.label}</span>{sort.key === c.key && (sort.dir === 1 ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
                 </button>

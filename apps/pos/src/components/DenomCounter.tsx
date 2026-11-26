@@ -19,7 +19,7 @@ export function DenomCounter({ counts, onChange, onDone, autoFocus = true, doneL
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="grid h-8 shrink-0 grid-cols-[minmax(110px,1.1fr)_28px_minmax(110px,1fr)_28px_minmax(120px,1.2fr)] items-center border-b border-line bg-surface-2 px-5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+      <div className="grid h-8 shrink-0 grid-cols-[minmax(110px,1.1fr)_28px_minmax(110px,1fr)_28px_minmax(120px,1.2fr)] items-center border-b border-line bg-table-head px-5 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink">
         <span>Note</span><span /><span className="text-right">Count</span><span /><span className="text-right">Amount</span>
       </div>
       {rows.map((r, i) => {

@@ -52,7 +52,7 @@ export function ItemSearchDialog({ open, onClose, seed, onPick }: { open: boolea
         {q && <span className="num text-xs text-subtle">{list.length}{list.length >= 40 ? '+' : ''} found</span>}
         <Kbd>Esc</Kbd>
       </div>
-      <div className={cn('grid h-8 items-center border-b border-line bg-surface-2 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted', ITEM_COLS)}>
+      <div className={cn('grid h-8 items-center border-b border-line bg-table-head px-4 text-[11px] font-semibold uppercase tracking-wider text-table-head-ink', ITEM_COLS)}>
         <span>Code</span><span>Item</span><span>Pack</span><span className="text-right">Price</span><span className="text-right">Stock</span>
       </div>
       <ul className="h-[372px] overflow-y-auto">
