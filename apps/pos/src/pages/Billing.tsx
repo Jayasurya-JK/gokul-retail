@@ -9,6 +9,7 @@ import { Kbd, ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type
 import { needsManagerPin } from '@gokul/data';
 import { api, billingStores, refreshTodaySales, SLOT_LABEL, useSession, type BillSlot, type Delivery } from '../store';
 import { plural } from '../plural';
+import { FEATURES } from '../features';
 import { TopBar } from '../components/TopBar';
 import { BillToolbar } from '../components/BillToolbar';
 import { DeliveryDialog, ManualItemDialog, PlaceOfSupplyDialog, RecentBillsDialog, StaffDialog } from '../components/BillDialogs';
@@ -87,7 +88,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const exchangeCredit = exchange ? exchange.balance ?? exchange.totals.grand : 0;
   const exchangeUsed = exchange ? Math.min(exchangeCredit, totals.grand) : 0;
   /** Store credit never takes the bill below zero: it can use only what the customer has and what is still payable. */
-  const storeCreditAvail = customer ? wallet?.storeCredit ?? 0 : 0;
+  // wallet (store credit) disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true
+  const storeCreditAvail = FEATURES.wallet && customer ? wallet?.storeCredit ?? 0 : 0;
   const storeCreditUsed = Math.min(storeCredit, storeCreditAvail, Math.max(0, totals.grand - exchangeUsed));
   const due = totals.grand - exchangeUsed - storeCreditUsed;
   const refundDue = exchange && totals.grand > 0 ? Math.max(0, exchangeCredit - totals.grand) : 0;

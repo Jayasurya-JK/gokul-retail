@@ -9,6 +9,14 @@
   unicode-range: U+20B9;
 }
 
+/* Calm colours for how a bill was paid (Paymode report). Contrast 4.5:1 or better on the white / dark surface. */
+:root {
+  --mode-cash: 21 128 61; --mode-upi: 29 78 216; --mode-card: 126 34 206; --mode-credit: 180 83 9; --mode-points: 15 118 110;
+}
+:root[data-theme='dark'] {
+  --mode-cash: 74 222 128; --mode-upi: 96 165 250; --mode-card: 196 160 252; --mode-credit: 251 191 36; --mode-points: 45 212 191;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

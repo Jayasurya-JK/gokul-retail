@@ -9,6 +9,8 @@ import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 import { dateTimeOf, timeOf } from '../components/billops/helpers';
 import { downloadCsv, rupeesCell } from '../csv';
+import { FEATURES } from '../features';
+import { plural } from '../plural';
 
 /** A screen can draw this many rows at once; the Excel export always holds every row. */
 const ROW_CAP = 1000;
@@ -35,7 +37,7 @@ function useStaffList() {
 
 /** Screen frame: toolbar on top, a table that scrolls both ways, totals pinned at the bottom. */
 function Frame({ icon, title, subtitle, controls, actions, footer, children }: {
-  icon: ReactNode; title: string; subtitle?: ReactNode; controls: ReactNode; actions: ReactNode; footer: ReactNode; children: ReactNode;
+  icon: ReactNode; title: string; subtitle?: ReactNode; controls: ReactNode; actions: ReactNode; footer?: ReactNode; children: ReactNode;
 }) {
   const keys: FKey[] = [];
   return (
@@ -50,7 +52,7 @@ function Frame({ icon, title, subtitle, controls, actions, footer, children }: {
         <div className="flex shrink-0 items-center gap-2">{actions}</div>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col bg-surface">{children}</div>
-      <div className="flex h-12 shrink-0 items-center gap-6 overflow-x-auto border-t border-line-strong bg-surface-2 px-4 text-sm">{footer}</div>
+      {footer && <div className="flex h-12 shrink-0 items-center gap-6 overflow-x-auto border-t border-line-strong bg-surface-2 px-4 text-sm">{footer}</div>}
     </PosLayout>
   );
 }
@@ -185,20 +187,21 @@ export function SalesReportPage() {
           <Button icon={<Download size={14} />} kbd="Ctrl+S" onClick={save} disabled={!rows.length}>Excel</Button>
         </>
       }
-      footer={
-        <>
-          <Total label="Bills">{t?.bills ?? 0}</Total>
-          <Total label="Qty">{formatQty(t?.qty ?? 0, (t?.qty ?? 0) % 1000 !== 0)}</Total>
-          <Total label="Net">{formatRupees(t?.net ?? 0, { decimals: false })}</Total>
-          <Total label="GST">{formatRupees(t?.gst ?? 0, { decimals: false })}</Total>
-          {canCost && <Total label="Profit" tone="success">{formatRupees(t?.profit ?? 0, { decimals: false })}</Total>}
-          <span className="flex-1" />
-          {rows.length > ROW_CAP && <span className="text-xs text-warning">Showing the first {ROW_CAP} bills. Narrow the dates, or save as Excel for all {rows.length}.</span>}
-          <Total label="Total" tone="primary">{formatRupees(t?.total ?? 0)}</Total>
-        </>
-      }
     >
-      <Grid cols={cols} head={['', 'Bill no', 'Time', 'Customer', 'Staff', 'Qty', 'Total', 'Net', ...(canCost ? ['Profit'] : []), 'Remarks']} right={[5, 6, 7, canCost ? 8 : -1]}>
+      <Grid
+        cols={cols} readable head={['', 'Bill no', 'Time', 'Customer', 'Staff', 'Qty', 'Total', 'Net', ...(canCost ? ['Profit'] : []), 'Remarks']} right={[5, 6, 7, canCost ? 8 : -1]}
+        foot={
+          <FootRow>
+            <span className="col-span-5 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
+            <span className="num px-2 text-right text-ink">{formatQty(t?.qty ?? 0, (t?.qty ?? 0) % 1000 !== 0)}</span>
+            <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
+            <span className="px-2 text-right text-ink"><Money paise={t?.net ?? 0} symbol={false} /></span>
+            {canCost && <span className={cn('px-2 text-right', (t?.profit ?? 0) < 0 ? 'text-danger' : 'text-success')}><Money paise={t?.profit ?? 0} symbol={false} /></span>}
+            <span className="truncate px-2 text-xs font-medium text-muted">GST <Money paise={t?.gst ?? 0} symbol={false} /></span>
+          </FootRow>
+        }
+      >
+        {rows.length > ROW_CAP && <div className="border-b border-line bg-warning-soft px-4 py-1.5 text-xs text-warning">Showing the first {ROW_CAP} bills. Narrow the dates, or save as Excel for all {rows.length}.</div>}
         {!loading && rows.length === 0 && <EmptyState icon={<BarChart3 size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
         {shown.map((r, i) => (
           <SalesRow key={r.id} r={r} cols={cols} canCost={canCost} on={i === sel} open={open.has(r.id)} multiDay={range.from !== range.to}
@@ -259,22 +262,32 @@ function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
 }
 
 /** Header plus rows inside one scroll area, so the columns scroll together and the header stays on top. */
-function Grid({ cols, head, right, minWidth = 1000, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; children: ReactNode }) {
+function Grid({ cols, head, right, minWidth = 1000, foot, readable, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; foot?: ReactNode; readable?: boolean; children: ReactNode }) {
   const specs = useMemo(() => parseTracks(cols, head.map((h, i) => h || `c${i}`)), [cols, head]);
   const rc = useResizableColumns(`pos-report|${head.join(',')}`, specs);
   return (
     <div className="min-h-0 flex-1 overflow-auto" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={rc.rootProps.style}>
-      <div style={{ minWidth: Math.max(minWidth, rc.customised ? rc.minTotal + 24 : 0) }}>
-        <div onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 text-[10.5px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: ROW_COLS }}>
+      <div className={cn(!!foot && 'flex min-h-full flex-col')} style={{ minWidth: Math.max(minWidth, rc.customised ? rc.minTotal + 24 : 0) }}>
+        <div onContextMenu={rc.headerProps.onContextMenu} className={cn('sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 font-semibold uppercase', readable ? 'text-[11.5px] tracking-wide text-ink' : 'text-[10.5px] tracking-wide text-muted')} style={{ gridTemplateColumns: ROW_COLS }}>
           {head.map((h, i) => (
             <div key={i} className={cn('relative h-full min-w-0 truncate px-2 pr-3 leading-9', right.includes(i) && 'text-right')}>
               {h}{h && <ColResizer rc={rc} index={i} />}
             </div>
           ))}
         </div>
-        {children}
+        {foot ? <div className="flex-1">{children}</div> : children}
+        {foot}
       </div>
       {rc.menu}
+    </div>
+  );
+}
+
+/** Totals row that sits under the table columns (same grid, so each total is under its own column). Pinned to the bottom. */
+function FootRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky bottom-0 z-10 grid h-11 items-center border-t-2 border-line-strong bg-surface-2 px-3 text-sm font-semibold" style={{ gridTemplateColumns: ROW_COLS }}>
+      {children}
     </div>
   );
 }
@@ -282,10 +295,19 @@ function Grid({ cols, head, right, minWidth = 1000, children }: { cols: string; 
 /* ================================================================== */
 /* Paymode Report                                                      */
 /* ================================================================== */
-const MODE_COLS: { key: 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points' | 'sodexo'; label: string }[] = [
-  { key: 'cash', label: 'Cash' }, { key: 'upi', label: 'BharatQR / UPI' }, { key: 'card', label: 'Card' }, { key: 'credit', label: 'Credit' },
-  { key: 'wallet', label: 'Wallet' }, { key: 'points', label: 'Cust. points' }, { key: 'sodexo', label: 'Sodexo' },
+type ModeKey = 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points' | 'sodexo';
+/** Each pay mode keeps one calm colour everywhere on this screen, so one look shows how a bill was paid. */
+const ALL_MODES: { key: ModeKey; label: string; color: string; on: boolean }[] = [
+  { key: 'cash', label: 'Cash', color: 'rgb(var(--mode-cash))', on: true },
+  { key: 'upi', label: 'BharatQR / UPI', color: 'rgb(var(--mode-upi))', on: true },
+  { key: 'card', label: 'Card', color: 'rgb(var(--mode-card))', on: true },
+  { key: 'credit', label: 'Credit', color: 'rgb(var(--mode-credit))', on: true },
+  { key: 'points', label: 'Cust. points', color: 'rgb(var(--mode-points))', on: true },
+  // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true / FEATURES.sodexo=true (see ../features.ts)
+  { key: 'wallet', label: 'Wallet', color: 'rgb(var(--mode-points))', on: FEATURES.wallet },
+  { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-points))', on: FEATURES.sodexo },
 ];
+const MODE_COLS = ALL_MODES.filter((m) => m.on);
 
 export function PaymodeReportPage() {
   useScreenKeys('Paymode Report', REPORT_KEYS);
@@ -312,7 +334,7 @@ export function PaymodeReportPage() {
 
   const rows = data?.rows ?? [];
   const shown = rows.slice(0, ROW_CAP);
-  const cols = '116px 78px minmax(120px,1.4fr) 84px 100px repeat(7, minmax(80px,1fr))';
+  const cols = `116px 84px minmax(120px,1.4fr) 84px 124px repeat(${MODE_COLS.length}, minmax(92px,1fr))`;
 
   const save = useCallback(() => {
     if (!data) return;
@@ -332,29 +354,38 @@ export function PaymodeReportPage() {
           <Button icon={<Download size={14} />} kbd="Ctrl+S" onClick={save} disabled={!rows.length}>Excel</Button>
         </>
       }
-      footer={
-        <>
-          <Total label="Bills">{t?.bills ?? 0}</Total>
-          {MODE_COLS.map((m) => <Total key={m.key} label={m.label}>{formatRupees(t?.[m.key] ?? 0, { decimals: false })}</Total>)}
-          <span className="flex-1" />
-          <Total label="Total" tone="primary">{formatRupees(t?.total ?? 0)}</Total>
-        </>
-      }
     >
-      <Grid cols={cols} head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}>
+      <Grid
+        cols={cols} readable head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}
+        foot={
+          <FootRow>
+            <span className="col-span-4 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
+            <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
+            {MODE_COLS.map((m) => <span key={m.key} className="px-2 text-right" style={{ color: m.color }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
+          </FootRow>
+        }
+      >
         {!loading && rows.length === 0 && <EmptyState icon={<CreditCard size={22} />} title="No bills in this period" hint="Change the dates or the staff, then Fetch." className="py-16" />}
-        {shown.map((r, i) => (
-          <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
-            <span className="num truncate px-2 font-semibold text-ink">{r.number}</span>
-            <span className="num px-2 text-muted">{range.from !== range.to ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' : ''}{timeOf(r.at)}</span>
-            <span className="truncate px-2 text-ink">{r.customerName}</span>
-            <span className="truncate px-2 text-muted">{r.staff || '-'}</span>
-            <span className="px-2 text-right font-semibold"><Money paise={r.total} symbol={false} /></span>
-            {MODE_COLS.map((m) => (
-              <span key={m.key} className={cn('px-2 text-right', r[m.key] ? 'text-ink' : 'text-subtle')}>{r[m.key] ? <Money paise={r[m.key]} symbol={false} /> : '-'}</span>
-            ))}
-          </div>
-        ))}
+        {shown.map((r, i) => {
+          const used = ALL_MODES.filter((m) => r[m.key] > 0).length;
+          return (
+            <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
+              <span className="num truncate px-2 font-semibold text-ink">{r.number}</span>
+              <span className="num px-2 text-muted">{range.from !== range.to ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' : ''}{timeOf(r.at)}</span>
+              <span className="truncate px-2 text-ink">{r.customerName}</span>
+              <span className="truncate px-2 text-muted">{r.staff || '-'}</span>
+              <span className="flex items-center justify-end gap-1.5 px-2 text-right font-semibold text-ink">
+                {used > 1 && <span className="rounded border border-line-strong bg-surface-3 px-1 text-[10px] font-semibold uppercase leading-4 tracking-wide text-muted" title="Paid in more than one way">Split</span>}
+                <Money paise={r.total} symbol={false} />
+              </span>
+              {MODE_COLS.map((m) => (
+                <span key={m.key} className="px-2 text-right font-medium" style={r[m.key] ? { color: m.color } : undefined}>
+                  {r[m.key] ? <Money paise={r[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}
+                </span>
+              ))}
+            </div>
+          );
+        })}
       </Grid>
     </Frame>
   );

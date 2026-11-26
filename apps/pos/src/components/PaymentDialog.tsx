@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { FEATURES } from '../features';
 import { IndianRupee, CreditCard, QrCode, Star, Ticket, Wallet, X } from 'lucide-react';
 import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
 import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
@@ -9,9 +10,11 @@ const MODES: { mode: PayMode; label: string; key: string; icon: React.ReactNode 
   { mode: 'upi', label: 'UPI', key: 'F2', icon: <QrCode size={20} /> },
   { mode: 'card', label: 'Card', key: 'F3', icon: <CreditCard size={20} /> },
   { mode: 'credit', label: 'Credit', key: 'F4', icon: <IndianRupee size={20} /> },
-  { mode: 'credit_note', label: 'Wallet', key: 'F5', icon: <Wallet size={20} /> },
+  // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true
+  ...(FEATURES.wallet ? [{ mode: 'credit_note' as PayMode, label: 'Wallet', key: 'F5', icon: <Wallet size={20} /> }] : []),
   { mode: 'points', label: 'Points', key: 'F6', icon: <Star size={20} /> },
-  { mode: 'sodexo', label: 'Sodexo', key: 'F7', icon: <Ticket size={20} /> },
+  // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.sodexo=true
+  ...(FEATURES.sodexo ? [{ mode: 'sodexo' as PayMode, label: 'Sodexo', key: 'F7', icon: <Ticket size={20} /> }] : []),
 ];
 const modeLabel = (m: PayMode) => MODES.find((x) => x.mode === m)?.label ?? m;
 /** Methods where the cashier types how much of the customer's balance to use (nothing is pre-filled for them). */
@@ -363,7 +366,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
 
         <div className="flex items-center justify-between border-t border-line bg-surface px-5 py-3">
           <div className="flex items-center gap-3 text-xs text-muted">
-            {!refund && !covered && <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>F7</Kbd> method</span>}
+            {!refund && !covered && <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>{FEATURES.sodexo ? 'F7' : 'F6'}</Kbd> method</span>}
             {!refund && !covered && <span className="flex items-center gap-1"><Kbd>Ctrl+Z</Kbd> undo split</span>}
           </div>
           <div className="flex gap-2">

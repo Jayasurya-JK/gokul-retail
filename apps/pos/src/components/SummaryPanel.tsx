@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ReceiptIndianRupee, Truck, UserRound, UserRoundCheck, X, XCircle } from 'lucide-react';
+import { FEATURES } from '../features';
 import type { BillTotals, CreditNote, Customer, CustomerWallet, Supply } from '@gokul/data';
 import type { Delivery } from '../store';
 import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees, stateName } from '@gokul/data';
@@ -169,7 +170,7 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             <span><b className="num">{formatPoints(wallet.nextExpiry.points)}</b> points expire on</span><b className="num">{new Date(`${wallet.nextExpiry.on}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
           </span>
         )}
-        {customer && (wallet?.storeCredit ?? 0) > 0 && (
+        {FEATURES.wallet && customer && (wallet?.storeCredit ?? 0) > 0 && ( // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true
           <span className="mt-1.5 flex w-full items-center justify-between rounded-md bg-success-soft px-2 py-1 text-xs font-medium text-success">
             <span>Wallet balance</span><b className="num">{formatRupees(wallet!.storeCredit, { decimals: false })}</b>
           </span>
