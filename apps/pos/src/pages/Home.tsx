@@ -51,17 +51,20 @@ function nextTile(from: Tile, dir: 'Up' | 'Down' | 'Left' | 'Right'): Tile | und
 }
 
 /* ---------- live numbers (a few cheap calls, refreshed every 30 s) ---------- */
-interface Live { dash: DashboardStats | null; owed: Paise; lowStock: number }
+interface Live { dash: DashboardStats | null; owed: Paise; owing: number; lowStock: number; customersToday: number; nextBill: string }
 
 function useLive(): Live {
-  const [live, setLive] = useState<Live>({ dash: null, owed: 0, lowStock: 0 });
+  const [live, setLive] = useState<Live>({ dash: null, owed: 0, owing: 0, lowStock: 0, customersToday: 0, nextBill: '' });
   useEffect(() => {
     let dead = false;
     const load = async () => {
       try {
-        const [dash, custs, low] = await Promise.all([api.dashboard(), api.listCustomers(), api.lowStock(200)]);
+        const [dash, custs, low, rep, nextBill] = await Promise.all([api.dashboard(), api.listCustomers(), api.lowStock(200), api.salesReport(), api.peekNextBillNumber()]);
         if (dead) return;
-        setLive({ dash, owed: custs.reduce((s, c) => s + Math.max(0, c.outstanding), 0), lowStock: low.length });
+        const names = new Set<string>();
+        for (const r of rep.rows) if (r.status !== 'cancelled' && r.customerName && !/^walk-?in$/i.test(r.customerName)) names.add(r.customerName);
+        const owing = custs.filter((c) => c.outstanding > 0);
+        setLive({ dash, owed: owing.reduce((n, c) => n + c.outstanding, 0), owing: owing.length, lowStock: low.length, customersToday: names.size, nextBill });
       } catch { /* a busy moment: keep what is shown */ }
     };
     void load();
@@ -125,6 +128,18 @@ export function HomePage() {
     { key: 'Esc', label: 'Billing', onClick: () => nav('/billing') },
   ];
 
+  const figure = (id: string) => {
+    switch (id) {
+      case 'pos': return live.nextBill ? `Next bill ${live.nextBill}` : null;
+      case 'sales': return `${rupees(d?.todaySales ?? 0)} today`;
+      case 'paymode': return `Cash ${rupees(d?.cash ?? 0)} · UPI ${rupees(d?.upi ?? 0)}`;
+      case 'bills': return `${d?.todayBills ?? 0} today`;
+      case 'customer': return <>{live.customersToday} today{live.owing > 0 && <> · <span className="home-bad">{live.owing} owe</span></>}</>;
+      case 'stock': return live.lowStock > 0 ? `${live.lowStock} ${live.lowStock === 1 ? 'item' : 'items'} low` : 'All stocked';
+      default: return null;
+    }
+  };
+
   const sep = <span className="mx-2.5 text-line-strong">·</span>;
 
   return (
@@ -186,6 +201,7 @@ export function HomePage() {
                     {badge > 0 && <span className="home-badge num">{badgeText}</span>}
                     <Icon className="home-icon" strokeWidth={1.5} aria-hidden />
                     <span className="home-name">{t.name}</span>
+                    <span className="home-figure num">{figure(t.id) || ' '}</span>
                   </button>
                 </Tooltip>
               );
