@@ -95,7 +95,7 @@ export function DataTable<T>({
         className="min-h-0 flex-1 overflow-auto outline-none focus-visible:[&_[data-sel=true]]:ring-1 focus-visible:[&_[data-sel=true]]:ring-inset focus-visible:[&_[data-sel=true]]:ring-primary/50"
       >
         <div role="table" ref={rc.rootProps.ref} onMouseOver={rc.rootProps.onMouseOver} style={{ ...rc.rootProps.style, minWidth: 'max-content' }} className="min-w-full">
-          <div role="rowgroup" onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 border-b border-line bg-surface-2">
+          <div role="rowgroup" onContextMenu={rc.headerProps.onContextMenu} className="sticky top-0 z-10 border-b border-line bg-table-head">
             {table.getHeaderGroups().map((hg) => (
               <div key={hg.id} role="row" className="grid h-8 items-center px-4" style={{ gridTemplateColumns: ROW_COLS }}>
                 {hg.headers.map((h, hi) => {
@@ -105,7 +105,7 @@ export function DataTable<T>({
                     <div
                       key={h.id} role="columnheader"
                       onClick={h.column.getToggleSortingHandler()}
-                      className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap px-2 text-xs font-semibold uppercase tracking-wide text-muted', h.column.getCanSort() && 'hover:text-ink', align === 'right' && 'justify-end', align === 'center' && 'justify-center')}
+                      className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap px-2 text-xs font-semibold uppercase tracking-wide text-table-head-ink', h.column.getCanSort() && 'hover:text-ink', align === 'right' && 'justify-end', align === 'center' && 'justify-center')}
                     >
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       {dir === 'asc' && <ArrowUp size={12} />}

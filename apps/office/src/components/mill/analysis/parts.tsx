@@ -70,7 +70,7 @@ export function YieldTable({ a, empty }: { a: MillAnalysis; empty: React.ReactNo
       {a.seeds.length === 0 ? empty : (
         <>
           <table className="w-full min-w-[760px] table-fixed">
-            <thead className="sticky top-0 z-10 bg-surface-2">
+            <thead className="sticky top-0 z-10 bg-table-head">
               <tr className="border-b border-line">
                 <th className="h-8 pl-3 pr-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted">Seed, machine, operator</th>
                 <th className={cn(th, 'w-[70px]')}>Batches</th>

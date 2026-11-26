@@ -22,7 +22,7 @@ function Table({ head, rows, foot, empty }: { head: { label: string; right?: boo
   if (!rows.length && !foot) return <EmptyState title={empty ?? 'Nothing in this month'} />;
   return (
     <table className="w-full border-collapse text-sm">
-      <thead className="sticky top-0 z-10 bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+      <thead className="sticky top-0 z-10 bg-table-head text-[11px] font-semibold uppercase tracking-wider text-table-head-ink">
         <tr>{head.map((h, i) => <th key={i} style={{ width: h.w }} className={`border-b border-line px-3 py-2 ${h.right ? 'text-right' : 'text-left'}`}>{h.label}</th>)}</tr>
       </thead>
       <tbody>
@@ -200,7 +200,7 @@ export function GstReturns() {
           </div>
           <div className="mx-5 mb-2 min-h-0 flex-1 overflow-auto rounded-card border border-line bg-surface">
             <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+              <thead className="sticky top-0 z-10 bg-table-head text-[11px] font-semibold uppercase tracking-wider text-table-head-ink">
                 <tr><th className="w-[70px] border-b border-line px-3 py-2 text-left">Table</th><th className="border-b border-line px-3 py-2 text-left">Description</th><th className="border-b border-line px-3 py-2 text-right">Taxable value</th><th className="border-b border-line px-3 py-2 text-right">IGST</th><th className="border-b border-line px-3 py-2 text-right">CGST</th><th className="border-b border-line px-3 py-2 text-right">SGST / UTGST</th><th className="border-b border-line px-3 py-2 text-right">Cess</th></tr>
               </thead>
               <tbody>

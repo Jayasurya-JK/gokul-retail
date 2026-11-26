@@ -278,7 +278,7 @@ function ImportDialog({ open, onClose, onDone, gstRates }: { open: boolean; onCl
             </div>
             <div className="max-h-[360px] overflow-auto rounded-control border border-line">
               <table className="w-full border-collapse text-sm">
-                <thead className="sticky top-0 bg-surface-2 text-xs uppercase tracking-wide text-muted">
+                <thead className="sticky top-0 bg-table-head text-xs uppercase tracking-wide text-table-head-ink">
                   <tr><th className="px-3 py-1.5 text-left">Row</th><th className="px-3 py-1.5 text-left">In the file</th><th className="px-3 py-1.5 text-left">Item</th><th className="px-3 py-1.5 text-left">HSN now</th><th className="px-3 py-1.5 text-left">New HSN</th><th className="px-3 py-1.5 text-left">GST rate</th><th className="px-3 py-1.5 text-left">Result</th></tr>
                 </thead>
                 <tbody>

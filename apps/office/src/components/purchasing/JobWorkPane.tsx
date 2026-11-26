@@ -95,7 +95,7 @@ export function JobWorkPane() {
           <EmptyState icon={<Wheat size={22} />} title="No job work yet" hint="Record the first one above. The charge is billed to the customer on credit." />
         ) : (
           <table className="w-full table-fixed bg-surface">
-            <thead className="sticky top-0 z-10 bg-surface-2">
+            <thead className="sticky top-0 z-10 bg-table-head">
               <tr className="border-b border-line">
                 <th className={cn(th, 'w-[110px]')}>Day</th><th className={th}>Customer</th><th className={cn(th, 'w-[120px]')}>Seed</th>
                 <th className={cn(th, 'w-[90px] text-right')}>Seed kg</th><th className={cn(th, 'w-[90px] text-right')}>Oil L</th><th className={cn(th, 'w-[90px] text-right')}>Cake kg</th>

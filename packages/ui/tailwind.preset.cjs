@@ -10,6 +10,8 @@ module.exports = {
         primary: { DEFAULT: c('primary'), hover: c('primary-hover'), soft: c('primary-soft'), fg: c('primary-fg') },
         accent: { DEFAULT: c('accent'), soft: c('accent-soft') },
         yellow: c('brand-yellow'),
+        toolbar: { DEFAULT: c('toolbar'), hover: c('toolbar-hover'), active: c('toolbar-active'), ink: c('toolbar-ink') },
+        'table-head': { DEFAULT: c('table-head'), ink: c('table-head-ink') },
         forest: Object.fromEntries([50,100,200,300,400,500,600,700,800,900,950].map((n) => [n, c('forest-' + n)])),
         success: { DEFAULT: c('success'), soft: c('success-soft') },
         warning: { DEFAULT: c('warning'), soft: c('warning-soft') },
