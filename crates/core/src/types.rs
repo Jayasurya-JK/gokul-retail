@@ -488,8 +488,19 @@ pub struct ShiftSummary {
     /// Expenses by category: how many, paid from the drawer, paid another way.
     #[serde(default)]
     pub expense_lines: Vec<ExpenseLine>,
+    /// Every supplier payment of the shift: cash ones come off the drawer, UPI/bank/cheque ones are information only.
+    #[serde(default)]
+    pub supplier_payments: Vec<SupplierPayLine>,
     /// Opening + cash sales + cash in - cash out - cash refunds - cash expenses.
     pub expected_cash: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupplierPayLine {
+    pub supplier: String,
+    pub amount: i64,
+    pub mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

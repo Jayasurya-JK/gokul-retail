@@ -225,6 +225,8 @@ export interface SupplierPaymentDraft {
   /** yyyy-mm-dd, default today */
   date?: string;
   note?: string;
+  /** POS only: a counter user over the expense limit needs a manager PIN */
+  managerPin?: string;
 }
 
 export function isValidGstin(g: string): boolean {
@@ -996,6 +998,7 @@ export function createPurchasingMock(store: MockStore): PurchasingApi {
       allocate(d.supplierId, d.amount);
       paySeq += 1;
       payments.push({ id: `sp${paySeq}`, supplierId: d.supplierId, date: when.toISOString(), amount: d.amount, mode: d.mode, ref: d.ref ?? '', note: d.note ?? '' });
+      (store.supplierPays ??= []).push({ at: new Date().toISOString(), supplier: profileOf(d.supplierId)!.name, amount: d.amount, mode: d.mode });
       syncStore();
       return ledgerOf(d.supplierId)!;
     },

@@ -70,4 +70,24 @@ const open = async (s) => {
   assert.equal(x.expectedCash, 269000);
 }
 
+// Supplier payments: cash ones come off the drawer and are listed by name; UPI and bank ones are listed but never touch the drawer.
+{
+  const s = store();
+  const api = await open(s);
+  const at = new Date().toISOString();
+  s.supplierPays = [
+    { at, supplier: 'Kongu Traders', amount: 50000, mode: 'cash' },
+    { at, supplier: 'Sri Vinayaga Mill', amount: 20000, mode: 'upi' },
+    { at, supplier: 'Kongu Traders', amount: 30000, mode: 'bank' },
+    { at: new Date(Date.now() - 3 * 86400000).toISOString(), supplier: 'Old Supplier', amount: 99900, mode: 'cash' },
+  ];
+  const x = await api.shiftSummary();
+  assert.equal(x.supplierCash, 50000);
+  assert.equal(x.supplierPayments.length, 3, 'only today, every mode listed');
+  assert.equal(x.expensesCash, 0, 'supplier payments are not expenses');
+  // opening Rs 2,000 + Rs 1,000 cash in - (Rs 310 cash out + Rs 500 supplier cash)
+  assert.equal(x.cashOut, 81000);
+  assert.equal(x.expectedCash, 269000 - 50000, 'only the cash payment comes off the drawer');
+}
+
 console.log('shift-refunds: ok');

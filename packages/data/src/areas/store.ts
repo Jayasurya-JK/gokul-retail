@@ -24,6 +24,8 @@ export interface MockStore {
   creditNotes?: CreditNote[];
   /** Over this an expense needs a manager PIN (paise); kept in sync with Settings */
   expenseLimit?: number;
+  /** Set by the purchasing mock when a supplier is paid; the shift summary reads today's for the drawer and the day-close list */
+  supplierPays?: { at: string; supplier: string; amount: number; mode: string }[];
   mill?: MillSettings;
   /** The owner's enabled GST rates (Settings, Tax); the catalog mock validates items against them. Unset = the defaults. */
   taxRates?: number[];

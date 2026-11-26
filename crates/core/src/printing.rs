@@ -703,6 +703,15 @@ fn summary_lines(d: &mut Doc, c: &Config, s: &ShiftSummary) {
     d.pair(format!("  Paid from drawer ({})", s.expenses_count), money(s.expenses_cash));
     d.pair(format!("  Paid by UPI/bank ({}), not in drawer", s.expenses_other_count), money(s.expenses_other));
     d.rule();
+    // Supplier payments: each one by name; only the cash ones are in the drawer lines below.
+    if !s.supplier_payments.is_empty() {
+        d.text("PAID TO SUPPLIERS", BOLD);
+        for p in &s.supplier_payments {
+            let how = if p.mode == "cash" { "cash".to_string() } else { format!("{}, not in drawer", p.mode.to_uppercase()) };
+            d.pair(format!("  {} ({how})", p.supplier), money(p.amount));
+        }
+        d.rule();
+    }
     // The drawer: every movement on its own line; the lines add up to the expected cash exactly.
     d.text("CASH DRAWER", BOLD);
     d.pair("  Opening cash", money(s.opening_cash));
@@ -710,7 +719,7 @@ fn summary_lines(d: &mut Doc, c: &Config, s: &ShiftSummary) {
     d.pair("+ Cash added", money(s.cash_in - s.collections_cash));
     d.pair("+ Customer collections", money(s.collections_cash));
     d.pair("- Cash taken out", money(s.cash_out - s.supplier_cash));
-    d.pair("- Supplier payments", money(s.supplier_cash));
+    d.pair("- Paid to suppliers (cash)", money(s.supplier_cash));
     d.pair("- Cash refunds", money(s.cash_refunds));
     d.pair(format!("- Expenses (cash) ({})", s.expenses_count), money(s.expenses_cash));
     d.push(Op::Rule('='));
