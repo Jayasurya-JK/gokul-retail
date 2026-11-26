@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, BarChart3, ChevronRight, CreditCard, Download, Package, RefreshCw, Search, Users } from 'lucide-react';
 import {
   formatQty, formatRupees, groupStock, passesStockFilter, type GroupBy, type StockFilter, type StockGroup, type PaymodeReport, type SalesReport, type SalesReportRow, type Staff, type StaffReportRow, type StockReport, type StockRow,
@@ -262,7 +262,7 @@ function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
 }
 
 /** Header plus rows inside one scroll area, so the columns scroll together and the header stays on top. */
-function Grid({ cols, head, right, minWidth = 1000, foot, readable, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; foot?: ReactNode; readable?: boolean; children: ReactNode }) {
+function Grid({ cols, head, right, minWidth = 1000, foot, readable, headTone, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; foot?: ReactNode; readable?: boolean; headTone?: (i: number) => { className?: string; style?: CSSProperties } | undefined; children: ReactNode }) {
   const specs = useMemo(() => parseTracks(cols, head.map((h, i) => h || `c${i}`)), [cols, head]);
   const rc = useResizableColumns(`pos-report|${head.join(',')}`, specs);
   return (
@@ -270,7 +270,7 @@ function Grid({ cols, head, right, minWidth = 1000, foot, readable, children }: 
       <div className={cn(!!foot && 'flex min-h-full flex-col')} style={{ minWidth: Math.max(minWidth, rc.customised ? rc.minTotal + 24 : 0) }}>
         <div onContextMenu={rc.headerProps.onContextMenu} className={cn('sticky top-0 z-10 grid h-9 items-center border-b border-line-strong bg-surface-2 px-3 font-semibold uppercase', readable ? 'text-[11.5px] tracking-wide text-ink' : 'text-[10.5px] tracking-wide text-muted')} style={{ gridTemplateColumns: ROW_COLS }}>
           {head.map((h, i) => (
-            <div key={i} className={cn('relative h-full min-w-0 truncate px-2 pr-3 leading-9', right.includes(i) && 'text-right')}>
+            <div key={i} className={cn('relative h-full min-w-0 truncate px-2 pr-3 leading-9', right.includes(i) && 'text-right', headTone?.(i)?.className)} style={headTone?.(i)?.style}>
               {h}{h && <ColResizer rc={rc} index={i} />}
             </div>
           ))}
@@ -308,6 +308,13 @@ const ALL_MODES: { key: ModeKey; label: string; color: string; on: boolean }[] =
   { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-points))', on: FEATURES.sodexo },
 ];
 const MODE_COLS = ALL_MODES.filter((m) => m.on);
+/* Each pay-mode column is its own tinted block: a faint tint on the whole column, a stronger one on its total.
+   Row hover and the selected row are drawn as a translucent overlay on top of the tint so both stay visible. */
+const modeTint = (color: string, alpha: number): CSSProperties => ({ backgroundColor: `color-mix(in srgb, ${color} ${alpha * 100}%, transparent)` });
+const PAY_DIVIDER = 'border-l border-line';
+const PAY_SEL_OVERLAY = 'linear-gradient(rgb(var(--primary-soft) / 0.45), rgb(var(--primary-soft) / 0.45))';
+const PAY_HOVER = 'hover:[background-image:linear-gradient(rgb(var(--ink)/0.03),rgb(var(--ink)/0.03))]';
+const PAY_FIRST_MODE = 5; // header index of the first pay-mode column (Bill no, Time, Customer, Staff, Total come before it)
 
 export function PaymodeReportPage() {
   useScreenKeys('Paymode Report', REPORT_KEYS);
@@ -357,11 +364,12 @@ export function PaymodeReportPage() {
     >
       <Grid
         cols={cols} readable head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}
+        headTone={(i) => (i >= PAY_FIRST_MODE ? { className: PAY_DIVIDER, style: modeTint(MODE_COLS[i - PAY_FIRST_MODE].color, 0.05) } : undefined)}
         foot={
           <FootRow>
             <span className="col-span-4 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
             <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
-            {MODE_COLS.map((m) => <span key={m.key} className="px-2 text-right" style={{ color: m.color }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
+            {MODE_COLS.map((m) => <span key={m.key} className={cn('px-2 text-right font-bold', PAY_DIVIDER)} style={{ color: m.color, ...modeTint(m.color, 0.10) }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
           </FootRow>
         }
       >
@@ -369,7 +377,7 @@ export function PaymodeReportPage() {
         {shown.map((r, i) => {
           const used = ALL_MODES.filter((m) => r[m.key] > 0).length;
           return (
-            <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
+            <div key={r.id} onMouseDown={() => setSel(i)} className={cn('grid h-10 items-center border-b border-line/70 px-3 text-sm hover:bg-surface-3/60', i === sel && 'bg-primary-soft/60')} style={{ gridTemplateColumns: ROW_COLS }}>
               <span className="num truncate px-2 font-semibold text-ink">{r.number}</span>
               <span className="num px-2 text-muted">{range.from !== range.to ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' : ''}{timeOf(r.at)}</span>
               <span className="truncate px-2 text-ink">{r.customerName}</span>
@@ -379,7 +387,7 @@ export function PaymodeReportPage() {
                 <Money paise={r.total} symbol={false} />
               </span>
               {MODE_COLS.map((m) => (
-                <span key={m.key} className="px-2 text-right font-medium" style={r[m.key] ? { color: m.color } : undefined}>
+                <span key={m.key} className={cn('px-2 text-right font-medium', PAY_DIVIDER, PAY_HOVER)} style={{ ...modeTint(m.color, 0.05), ...(i === sel ? { backgroundImage: PAY_SEL_OVERLAY } : {}), ...(r[m.key] ? { color: m.color } : {}) }}>
                   {r[m.key] ? <Money paise={r[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}
                 </span>
               ))}
