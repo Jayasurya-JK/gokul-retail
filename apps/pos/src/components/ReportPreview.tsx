@@ -1,3 +1,4 @@
+import { clockTime } from '@gokul/ui';
 import { formatPaise, type Settings, type ShiftSummary, type Paise } from '@gokul/data';
 
 export interface ReportData {
@@ -30,7 +31,7 @@ function Head({ children }: { children: string }) {
 export function ReportPreview({ data, settings }: { data: ReportData; settings: Settings | null }) {
   const { summary: s } = data;
   const at = new Date(s.at);
-  const d = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  const d = (iso: string) => `${new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${clockTime(iso)}`;
   return (
     <div className="mx-auto w-[330px] rounded-sm bg-white px-4 py-5 font-mono text-[12.5px] leading-[1.5] text-black shadow-pop ring-1 ring-line">
       <div className="text-center">

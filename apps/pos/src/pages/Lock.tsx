@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock as LockIcon, LogOut, ShoppingBasket } from 'lucide-react';
 import { countdownText, lockedSeconds } from '@gokul/data';
-import { Kbd, Logo, StatusDot, cn, useCountdown } from '@gokul/ui';
+import { Kbd, Logo, StatusDot, clockTime, cn, useCountdown } from '@gokul/ui';
 import { api, useOpenLines, useSession } from '../store';
 
 const PIN_LEN = 4;
-const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Ctrl+L lock. The bill in progress stays exactly as it was; only the right PIN brings it back. */
 export function Lock() {
@@ -69,7 +68,7 @@ export function Lock() {
       <header className="relative flex h-16 shrink-0 items-center justify-between px-8">
         <div className="flex items-center gap-2.5"><Logo size={30} badge="P" /><span className="text-md font-semibold tracking-tight text-white">{settings?.shopName ?? ''}</span><span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-chrome-muted">POS</span></div>
         <div className="text-right">
-          <div className="num text-2xl font-semibold leading-none text-white">{pad(now.getHours() % 12 || 12)}:{pad(now.getMinutes())} <span className="text-sm font-medium text-chrome-muted">{now.getHours() >= 12 ? 'PM' : 'AM'}</span></div>
+          <div className="num text-2xl font-semibold leading-none text-white">{clockTime(now)}</div>
           <div className="mt-1 text-xs text-chrome-muted">{now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         </div>
       </header>

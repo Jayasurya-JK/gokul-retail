@@ -15,6 +15,7 @@ export * from './layouts/OfficeLayout';
 export * from './components/ManagerPinDialog';
 export * from './components/useCountdown';
 export * from './components/Logo';
+export * from './clock';
 export * from './components/useRefreshOnFocus';
 export * from './components/useResizableColumns';
 export * from './components/WindowControls';

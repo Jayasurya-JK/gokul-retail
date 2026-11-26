@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShieldCheck, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
-import { Kbd, Logo, Tooltip, cn, useWindowControls } from '@gokul/ui';
+import { ArrowLeftRight, BarChart3, House, ChevronDown, Maximize, Minimize, Minimize2, CreditCard, Keyboard, Lock, LogOut, Moon, Package, Pause, Printer, ReceiptIndianRupee, ShoppingCart, Undo2, UserRound, UserRoundCheck, Wallet, type LucideIcon } from 'lucide-react';
+import { Kbd, Logo, Tooltip, WindowButtons, clockTime, cn, useWindowControls } from '@gokul/ui';
 import { billingStores, useSession } from '../store';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { usePrinterStatus } from '../printing';
@@ -35,8 +35,8 @@ const MORE: MoreItem[] = [
 
 /** Every navigable screen by its Alt number (Alt+1..8). Alt+3 is gone with POS2. */
 const SCREENS: (string | null)[] = ['/billing', '/pos1', null, '/sales', '/reports/sales', '/reports/paymode', '/reports/stock', '/customers'];
-/** The two bill screens: Esc from any other screen comes back to the main one */
-export const BILL_PATHS = ['/billing', '/pos1'];
+/** The two bill screens and Home: Esc from any other screen comes back to billing (Home stays put) */
+export const BILL_PATHS = ['/billing', '/pos1', '/home'];
 
 export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () => void; onCloseDay?: () => void; minimal?: boolean }) {
   const printer = usePrinterStatus();
@@ -64,7 +64,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
     const h = (e: KeyboardEvent) => {
       if (e.key === 'F1') { e.preventDefault(); e.stopPropagation(); setKeys((o) => !o); return; }
       if (keys && e.key !== 'Escape' && e.key !== 'Tab' && e.key !== ' ' && e.key !== 'Enter') { e.stopPropagation(); return; } // the sheet is modal: nothing leaks to the screen behind
-      if (e.altKey && !e.ctrlKey && /^[0-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); const target = e.key === '0' ? '/billing' : SCREENS[Number(e.key) - 1]; if (target) nav(target); }
+      if (e.altKey && !e.ctrlKey && /^[0-8]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); const target = e.key === '0' ? '/home' : SCREENS[Number(e.key) - 1]; if (target) nav(target); }
       else if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'u') { e.preventDefault(); e.stopPropagation(); setMenu((o) => !o); }
       else if (menu && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false); }
       else if (e.key === 'Escape' && !keys && !BILL_PATHS.includes(pathname)) {
@@ -91,8 +91,8 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
   const brand = (
     <div className="flex shrink-0 items-center gap-2.5 pr-2">
       {!minimal && (
-        <Tooltip label="Home: start billing" kbd="Alt+0">
-          <button type="button" tabIndex={-1} onClick={() => nav('/billing')} aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20">
+        <Tooltip label="Home" kbd="Alt+0">
+          <button type="button" tabIndex={-1} onClick={() => nav('/home')} aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20">
             <House size={18} />
           </button>
         </Tooltip>
@@ -110,7 +110,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
       <>
         {brand}
         <div className="flex-1" />
-        <span className="num text-xs text-chrome-muted">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} {pad(now.getHours())}:{pad(now.getMinutes())}</span>
+        <span className="num text-xs text-chrome-muted">{now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} {clockTime(now)}</span>
       </>
     );
   }
@@ -173,12 +173,9 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
         <Tooltip label={printer.ready ? `Printer ready: ${printer.name}` : printer.message}>
           <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><Printer size={15} /><span className={cn('absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-chrome', printer.ready ? 'bg-success' : printer.configured ? 'bg-danger' : 'bg-warning')} /></span>
         </Tooltip>
-        <Tooltip label="All bills saved on this computer">
-          <span className="relative flex h-8 w-8 items-center justify-center rounded-md text-chrome-muted"><ShieldCheck size={15} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-chrome" /></span>
-        </Tooltip>
       </div>
 
-      <span className="num mx-3 text-[13px] font-medium text-chrome-ink">{pad(now.getHours())}:{pad(now.getMinutes())}</span>
+      <span className="num mx-3 text-[13px] font-medium text-chrome-ink">{clockTime(now)}</span>
 
       <div ref={menuRef} className="relative">
         <button onClick={() => setMenu((o) => !o)} tabIndex={-1} className="flex h-9 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-white/10">
@@ -193,7 +190,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
           <div className="g-overlay absolute right-0 top-[calc(100%+6px)] z-[60] w-[248px] overflow-hidden rounded-card border border-line bg-surface text-ink shadow-overlay">
             <div className="border-b border-line bg-surface-2 px-3 py-2.5 text-xs text-muted">
               <div className="flex items-center gap-1.5 font-semibold text-ink"><UserRound size={13} /> {user?.name}</div>
-              <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? `${pad(opened.getHours())}:${pad(opened.getMinutes())}` : '--'} ({hrs}h {pad(mins)}m)</div>
+              <div className="num mt-1">{shift?.counter ?? settings?.counter ?? '-'} - shift since {opened ? clockTime(opened) : '--'} ({hrs}h {pad(mins)}m)</div>
             </div>
             {win.available && (
               <>
@@ -207,6 +204,7 @@ export function TopBar({ onHeld, minimal }: { onHeld?: () => void; onLock?: () =
         )}
       </div>
 
+        <WindowButtons />
       </div>
 
       <ShortcutsSheet open={keys} onClose={() => setKeys(false)} />

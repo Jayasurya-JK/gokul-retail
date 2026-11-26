@@ -4,7 +4,7 @@ import { FEATURES } from '../features';
 import type { BillTotals, CreditNote, Customer, CustomerWallet, Supply } from '@gokul/data';
 import type { Delivery } from '../store';
 import { creditLeft, formatPoints, formatPaise, formatQty, formatRupees, stateName } from '@gokul/data';
-import { Button, Kbd, Money, cn } from '@gokul/ui';
+import { Button, Kbd, Money, clockTime, cn } from '@gokul/ui';
 
 function CustStat({ k, v, tone }: { k: string; v: string; tone?: 'warning' }) {
   return (
@@ -63,7 +63,7 @@ function BillStrip({ billNo, label, wholesale }: { billNo: string; label?: strin
       </div>
       <div className="whitespace-nowrap text-right leading-tight">
         <div className="num text-md font-semibold text-ink">{now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-        <div className="num text-xs text-muted">{now.toLocaleDateString('en-IN', { weekday: 'long' })}, {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
+        <div className="num text-xs text-muted">{now.toLocaleDateString('en-IN', { weekday: 'long' })}, {clockTime(now)}</div>
       </div>
     </div>
   );

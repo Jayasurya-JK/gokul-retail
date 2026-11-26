@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { formatPaise, formatQty, type BillLine, type BillTotals, type Payment, type Settings } from '@gokul/data';
 import { cn } from '../cn';
+import { clockTime } from '../clock';
 import { Logo } from './Logo';
 
 export interface ReceiptData {
@@ -97,7 +98,7 @@ export function ReceiptPreview({ data, settings, shop, className }: { data: Rece
   const { totals: t } = data;
   const dt = new Date(data.at);
   const date = dt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
-  const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+  const time = clockTime(dt, true);
   const sign = data.refund ? '-' : '';
   const isBill = !data.refund;
   const rule = <div className="my-1.5 border-t border-dashed border-neutral-400" />;

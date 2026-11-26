@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Printer, Truck, UserPlus } from 'lucide-react';
 import { DEFAULT_GST_RATES, GST_STATES, enabledRates, rateText, stateLabel, formatRupees, parsePaise, parseQty, type Bill, type BillLine, type Staff } from '@gokul/data';
-import { Button, Dialog, Field, Input, Money, cn } from '@gokul/ui';
+import { Button, Dialog, Field, Input, Money, clockTime, cn } from '@gokul/ui';
 import { api } from '../store';
 import type { Delivery } from '../store';
 
@@ -150,7 +150,7 @@ export function RecentBillsDialog({ open, onClose, onReprint, onOpenSales }: {
               <span className="text-muted"> - </span>
               <span className="font-medium">{b.customerName}</span>
             </span>
-            <span className="num w-16 text-muted">{new Date(b.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+            <span className="num w-16 text-muted">{clockTime(b.at)}</span>
             <Money paise={b.totals.grand} className="w-24 text-right font-semibold" />
             <button type="button" tabIndex={-1} onClick={() => onReprint(b)} title="Print a duplicate copy" aria-label={`Reprint ${b.number}`} className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface hover:text-primary"><Printer size={15} /></button>
           </div>

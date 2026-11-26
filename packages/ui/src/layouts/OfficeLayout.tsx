@@ -5,7 +5,7 @@ import { Kbd } from '../components/Display';
 import { Dialog, Tooltip } from '../components/Overlay';
 import { IconButton } from '../components/Button';
 import { Logo } from '../components/Logo';
-import { useWindowControls } from '../components/WindowControls';
+import { WindowButtons, useWindowControls } from '../components/WindowControls';
 
 export interface NavItem { path: string; label: string; icon: ReactNode; keywords?: string }
 export interface NavGroup { title: string; items: NavItem[] }
@@ -107,6 +107,7 @@ export function OfficeLayout({ nav, activePath, onNavigate, user, children, stat
             )}
           </div>
         </div>
+        <WindowButtons />
       </header>
 
       <div className="flex min-h-0 flex-1">

@@ -1,6 +1,6 @@
 import { Ban, CheckCircle2, CornerUpLeft, IndianRupee } from 'lucide-react';
 import { billTitleFor, printNumber, type Bill, type BillDetail, type CreditNote, type PayMode, type ReceiptConfig, type RefundMode } from '@gokul/data';
-import { Badge } from '@gokul/ui';
+import { Badge, clockTime } from '@gokul/ui';
 import type { ReceiptData } from '@gokul/ui';
 
 export const dayKey = (d: Date) =>
@@ -18,7 +18,7 @@ export const dayLabel = (key: string) => {
   if (key === shiftDay(today, -1)) return `Yesterday, ${txt}`;
   return txt;
 };
-export const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+export const timeOf = (iso: string) => clockTime(iso);
 export const dateTimeOf = (iso: string) =>
   new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 

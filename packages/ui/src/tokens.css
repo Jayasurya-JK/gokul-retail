@@ -32,6 +32,17 @@
   --chrome-ink: 232 244 237;
   --chrome-muted: 148 190 170;
   --overlay: 15 23 42;
+  /* Colour standard (docs/design/COLOR-STANDARD.md): meaning colours and payment modes. Tints are solid colours for row cells; totals use ~10% of the base. */
+  --money-good: 21 128 61; --money-good-ink: 20 110 52; --money-good-tint: 236 250 240;
+  --money-owed: 185 28 28; --money-owed-ink: 153 27 27; --money-owed-tint: 254 242 242;
+  --attention: 180 83 9; --attention-ink: 146 64 14; --attention-tint: 255 247 230;
+  --neutral: 71 84 103; --neutral-ink: 51 65 85; --neutral-tint: 241 243 246;
+  --mode-cash: 67 56 202; --mode-cash-ink: 55 48 163; --mode-cash-tint: 238 240 255;
+  --mode-upi: 3 105 161; --mode-upi-ink: 7 89 133; --mode-upi-tint: 236 248 255;
+  --mode-card: 126 34 206; --mode-card-ink: 107 33 168; --mode-card-tint: 248 243 255;
+  --mode-points: 190 24 93; --mode-points-ink: 157 23 77; --mode-points-tint: 253 241 247;
+  --mode-credit: 185 28 28; --mode-credit-ink: 153 27 27; --mode-credit-tint: 254 242 242;
+  --mode-wallet: 51 65 85; --mode-wallet-ink: 30 41 59; --mode-wallet-tint: 241 245 249;
   color-scheme: light;
 }
 :root[data-theme='dark'] {
@@ -62,5 +73,15 @@
   --chrome-ink: 232 244 237;
   --chrome-muted: 128 168 148;
   --overlay: 0 0 0;
+  --money-good: 74 222 128; --money-good-ink: 74 222 128; --money-good-tint: 16 52 34;
+  --money-owed: 248 113 113; --money-owed-ink: 252 165 165; --money-owed-tint: 64 22 22;
+  --attention: 251 191 36; --attention-ink: 251 191 36; --attention-tint: 62 45 10;
+  --neutral: 162 174 189; --neutral-ink: 203 213 225; --neutral-tint: 30 41 54;
+  --mode-cash: 165 180 252; --mode-cash-ink: 165 180 252; --mode-cash-tint: 30 30 70;
+  --mode-upi: 125 211 252; --mode-upi-ink: 125 211 252; --mode-upi-tint: 12 46 66;
+  --mode-card: 216 180 254; --mode-card-ink: 216 180 254; --mode-card-tint: 56 30 88;
+  --mode-points: 249 168 212; --mode-points-ink: 249 168 212; --mode-points-tint: 78 24 54;
+  --mode-credit: 248 113 113; --mode-credit-ink: 252 165 165; --mode-credit-tint: 64 22 22;
+  --mode-wallet: 148 163 184; --mode-wallet-ink: 203 213 225; --mode-wallet-tint: 30 41 59;
   color-scheme: dark;
 }

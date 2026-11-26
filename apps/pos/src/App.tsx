@@ -5,6 +5,7 @@ import { api, billingStores, useSession } from './store';
 import type { CloseGuard } from '@gokul/ui';
 import { Login } from './pages/Login';
 import { Billing } from './pages/Billing';
+import { HomePage } from './pages/Home';
 import { DayOpen } from './pages/DayOpen';
 import { Sales } from './pages/Sales';
 import { Customers } from './pages/Customers';
@@ -50,6 +51,7 @@ export function App() {
           <ScanRouter />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/home" element={<Guard><HomePage /></Guard>} />
             <Route path="/billing" element={<Guard><Billing slot="pos" /></Guard>} />
             <Route path="/pos1" element={<Guard><Billing slot="pos1" /></Guard>} />
             <Route path="/reports/sales" element={<Guard><SalesReportPage /></Guard>} />

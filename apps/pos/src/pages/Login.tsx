@@ -144,7 +144,6 @@ export function Login() {
             <Info k="Counter" v={shop?.counter ?? '-'} />
             <Info k="Printer" v={printer.configured ? `${printer.name}${printer.ready ? ", ready" : ", not ready"}` : "Not set up yet"} />
             <Info k="Today" v={today} />
-            <Info k="Data" v="Saved on this computer" />
           </div>
         </div>
         <div className="relative text-xs text-chrome-muted">Gokul POS 0.1 - Billing counter</div>

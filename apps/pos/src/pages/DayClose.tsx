@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, MoonStar, Printer, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { countedTotal, formatRupees, type DenomCounts, type ShiftSummary, type ZReport } from '@gokul/data';
 import { printDoc, printWithToast } from '../printing';
-import { Badge, Button, Dialog, Kbd, Money, PosLayout, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
+import { Badge, Button, Dialog, Kbd, Money, PosLayout, clockTime, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
@@ -179,7 +179,7 @@ function XSummary({ s, onPrint }: { s: ShiftSummary; onPrint: () => void }) {
     { k: 'Credit', v: s.byMode.credit, c: 'bg-warning' },
   ], [s]);
   const total = modes.reduce((a, m) => a + m.v, 0) || 1;
-  const opened = new Date(s.openedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const opened = clockTime(s.openedAt);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-line px-5">

@@ -6,14 +6,14 @@ import {
   type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom,
 } from '@gokul/data';
 import { printDoc } from '../printing';
-import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
+import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, clockTime, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
 import { api, useSession } from '../store';
 import { TopBar } from '../components/TopBar';
 import { useScreenKeys, type KeyRows } from '../components/screenKeys';
 
 const COLS = '72px minmax(0,1.1fr) minmax(0,1.6fr) 112px minmax(0,0.8fr) 104px 176px';
 const MODES: ExpensePaidFrom[] = ['cash', 'upi', 'bank'];
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+const time = (iso: string) => clockTime(iso);
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const KEYS: KeyRows = [

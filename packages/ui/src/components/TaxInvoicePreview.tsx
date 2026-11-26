@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { formatPaise, formatQty, placeText, rateText, type InvoiceData } from '@gokul/data';
 import { cn } from '../cn';
+import { clockTime } from '../clock';
 
 const DECIMAL = ['kg', 'g', 'l', 'ml'];
 const money = (p: number) => formatPaise(p);
@@ -11,7 +12,7 @@ const fmtDate = (iso: string) => {
   const d = new Date(iso);
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
 };
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+const fmtTime = (iso: string) => clockTime(iso);
 
 function Stamp({ text }: { text: string }) {
   return (

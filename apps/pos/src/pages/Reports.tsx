@@ -23,6 +23,8 @@ const REPORT_KEYS: KeyRows = [
   ['Back to billing', ['Esc']],
 ];
 
+const PAY_HOVER = 'hover:[background-image:linear-gradient(rgb(var(--ink)/0.03),rgb(var(--ink)/0.03))]';
+
 /** Owner and managers see cost and profit; a cashier never gets those numbers from the backend. */
 function useCanSeeCost() {
   const role = useSession((s) => s.user?.role);
@@ -190,13 +192,14 @@ export function SalesReportPage() {
     >
       <Grid
         cols={cols} readable head={['', 'Bill no', 'Time', 'Customer', 'Staff', 'Qty', 'Total', 'Net', ...(canCost ? ['Profit'] : []), 'Remarks']} right={[5, 6, 7, canCost ? 8 : -1]}
+        headTone={(i) => salesNumTone(i, canCost)}
         foot={
           <FootRow>
             <span className="col-span-5 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
-            <span className="num px-2 text-right text-ink">{formatQty(t?.qty ?? 0, (t?.qty ?? 0) % 1000 !== 0)}</span>
-            <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
-            <span className="px-2 text-right text-ink"><Money paise={t?.net ?? 0} symbol={false} /></span>
-            {canCost && <span className={cn('px-2 text-right', (t?.profit ?? 0) < 0 ? 'text-danger' : 'text-success')}><Money paise={t?.profit ?? 0} symbol={false} /></span>}
+            <span className={cn('num px-2 text-right font-bold text-ink', PAY_DIVIDER)} style={NEUTRAL_TOTAL}>{formatQty(t?.qty ?? 0, (t?.qty ?? 0) % 1000 !== 0)}</span>
+            <span className={cn('px-2 text-right font-bold text-ink', PAY_DIVIDER)} style={NEUTRAL_TOTAL}><Money paise={t?.total ?? 0} symbol={false} /></span>
+            <span className={cn('px-2 text-right font-bold text-ink', PAY_DIVIDER)} style={NEUTRAL_TOTAL}><Money paise={t?.net ?? 0} symbol={false} /></span>
+            {canCost && <span className={cn('px-2 text-right font-bold', PAY_DIVIDER, (t?.profit ?? 0) < 0 ? 'text-[rgb(var(--money-owed-ink))]' : 'text-[rgb(var(--money-good-ink))]')} style={GOOD_TOTAL}><Money paise={t?.profit ?? 0} symbol={false} /></span>}
             <span className="truncate px-2 text-xs font-medium text-muted">GST <Money paise={t?.gst ?? 0} symbol={false} /></span>
           </FootRow>
         }
@@ -226,10 +229,10 @@ function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
         <span className="num px-2 text-muted">{multiDay ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' : ''}{timeOf(r.at)}</span>
         <span className="truncate px-2 text-ink">{r.customerName}{r.wholesale && <span className="ml-1.5 rounded bg-accent/20 px-1 text-[10px] font-bold uppercase text-warning">W</span>}</span>
         <span className="truncate px-2 text-muted">{r.staff || '-'}</span>
-        <span className="num px-2 text-right text-muted">{formatQty(r.qty, loose)}</span>
-        <span className="px-2 text-right font-semibold"><Money paise={r.total} symbol={false} /></span>
-        <span className="px-2 text-right text-muted"><Money paise={r.net} symbol={false} /></span>
-        {canCost && <span className={cn('px-2 text-right', (r.profit ?? 0) < 0 ? 'text-danger' : 'text-success')}><Money paise={r.profit ?? 0} symbol={false} /></span>}
+        <span className={cn('num px-2 text-right text-muted', PAY_DIVIDER, SALES_HOVER)} style={cellStyle(on, NEUTRAL_TINT)}>{formatQty(r.qty, loose)}</span>
+        <span className={cn('px-2 text-right font-semibold text-ink', PAY_DIVIDER, SALES_HOVER)} style={cellStyle(on, NEUTRAL_TINT)}><Money paise={r.total} symbol={false} /></span>
+        <span className={cn('px-2 text-right text-muted', PAY_DIVIDER, SALES_HOVER)} style={cellStyle(on, NEUTRAL_TINT)}><Money paise={r.net} symbol={false} /></span>
+        {canCost && <span className={cn('px-2 text-right font-medium', PAY_DIVIDER, SALES_HOVER)} style={{ ...cellStyle(on, GOOD_TINT), color: (r.profit ?? 0) < 0 ? 'rgb(var(--money-owed-ink))' : 'rgb(var(--money-good-ink))' }}><Money paise={r.profit ?? 0} symbol={false} /></span>}
         <span className="truncate px-2 text-xs text-muted">{r.status === 'credit' ? 'On credit' : r.status === 'returned' ? 'Returned' : r.remarks}</span>
       </div>
       {open && (
@@ -261,6 +264,10 @@ function SalesRow({ r, canCost, on, open, multiDay, onSelect, onToggle }: {
   );
 }
 
+/** A tinted cell keeps its tint when selected (the selection is a translucent overlay on top). */
+const cellStyle = (on: boolean, tint: CSSProperties): CSSProperties => (on ? { ...tint, backgroundImage: PAY_SEL_OVERLAY } : tint);
+
+const SALES_HOVER = PAY_HOVER;
 /** Header plus rows inside one scroll area, so the columns scroll together and the header stays on top. */
 function Grid({ cols, head, right, minWidth = 1000, foot, readable, headTone, children }: { cols: string; head: string[]; right: number[]; minWidth?: number; foot?: ReactNode; readable?: boolean; headTone?: (i: number) => { className?: string; style?: CSSProperties } | undefined; children: ReactNode }) {
   const specs = useMemo(() => parseTracks(cols, head.map((h, i) => h || `c${i}`)), [cols, head]);
@@ -297,23 +304,31 @@ function FootRow({ children }: { children: ReactNode }) {
 /* ================================================================== */
 type ModeKey = 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points' | 'sodexo';
 /** Each pay mode keeps one calm colour everywhere on this screen, so one look shows how a bill was paid. */
-const ALL_MODES: { key: ModeKey; label: string; color: string; ink: string; on: boolean }[] = [
-  { key: 'cash', label: 'Cash', color: 'rgb(var(--mode-cash))', ink: 'rgb(var(--mode-cash-ink))', on: true },
-  { key: 'upi', label: 'BharatQR / UPI', color: 'rgb(var(--mode-upi))', ink: 'rgb(var(--mode-upi))', on: true },
-  { key: 'card', label: 'Card', color: 'rgb(var(--mode-card))', ink: 'rgb(var(--mode-card))', on: true },
-  { key: 'credit', label: 'Credit', color: 'rgb(var(--mode-credit))', ink: 'rgb(var(--mode-credit-ink))', on: true },
-  { key: 'points', label: 'Cust. points', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: true },
+const ALL_MODES: { key: ModeKey; label: string; color: string; ink: string; tint: string; on: boolean }[] = [
+  { key: 'cash', label: 'Cash', color: 'rgb(var(--mode-cash))', ink: 'rgb(var(--mode-cash-ink))', tint: 'rgb(var(--mode-cash-tint))', on: true },
+  { key: 'upi', label: 'BharatQR / UPI', color: 'rgb(var(--mode-upi))', ink: 'rgb(var(--mode-upi-ink))', tint: 'rgb(var(--mode-upi-tint))', on: true },
+  { key: 'card', label: 'Card', color: 'rgb(var(--mode-card))', ink: 'rgb(var(--mode-card-ink))', tint: 'rgb(var(--mode-card-tint))', on: true },
+  { key: 'credit', label: 'Credit', color: 'rgb(var(--mode-credit))', ink: 'rgb(var(--mode-credit-ink))', tint: 'rgb(var(--mode-credit-tint))', on: true },
+  { key: 'points', label: 'Cust. points', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points-ink))', tint: 'rgb(var(--mode-points-tint))', on: true },
   // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true / FEATURES.sodexo=true (see ../features.ts)
-  { key: 'wallet', label: 'Wallet', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: FEATURES.wallet },
-  { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: FEATURES.sodexo },
+  { key: 'wallet', label: 'Wallet', color: 'rgb(var(--mode-wallet))', ink: 'rgb(var(--mode-wallet-ink))', tint: 'rgb(var(--mode-wallet-tint))', on: FEATURES.wallet },
+  { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-wallet))', ink: 'rgb(var(--mode-wallet-ink))', tint: 'rgb(var(--mode-wallet-tint))', on: FEATURES.sodexo },
 ];
 const MODE_COLS = ALL_MODES.filter((m) => m.on);
-/* Each pay-mode column is its own tinted block: a faint tint on the whole column, a stronger one on its total.
+/* Each pay-mode column is its own tinted block: the -tint token on the whole column, a stronger mix of the mode colour on its total.
    Row hover and the selected row are drawn as a translucent overlay on top of the tint so both stay visible. */
 const modeTint = (color: string, alpha: number): CSSProperties => ({ backgroundColor: `color-mix(in srgb, ${color} ${alpha * 100}%, transparent)` });
 const PAY_DIVIDER = 'border-l border-line';
 const PAY_SEL_OVERLAY = 'linear-gradient(rgb(var(--primary-soft) / 0.45), rgb(var(--primary-soft) / 0.45))';
-const PAY_HOVER = 'hover:[background-image:linear-gradient(rgb(var(--ink)/0.03),rgb(var(--ink)/0.03))]';
+/* Sales report number columns (Qty, Total, Net neutral grey; Profit green = money-good). Same tint and total rules as pay modes. */
+const NEUTRAL_TINT: CSSProperties = { backgroundColor: 'rgb(var(--neutral-tint))' };
+const GOOD_TINT: CSSProperties = { backgroundColor: 'rgb(var(--money-good-tint))' };
+const NEUTRAL_TOTAL = modeTint('rgb(var(--neutral))', 0.10);
+const GOOD_TOTAL = modeTint('rgb(var(--money-good))', 0.10);
+const salesNumTone = (i: number, canCost: boolean) =>
+  canCost && i === 8 ? { className: PAY_DIVIDER, style: GOOD_TINT }
+  : i >= 5 && i <= 7 ? { className: PAY_DIVIDER, style: NEUTRAL_TINT }
+  : undefined;
 const PAY_FIRST_MODE = 5; // header index of the first pay-mode column (Bill no, Time, Customer, Staff, Total come before it)
 
 export function PaymodeReportPage() {
@@ -364,12 +379,12 @@ export function PaymodeReportPage() {
     >
       <Grid
         cols={cols} readable head={['Bill no', 'Time', 'Customer', 'Staff', 'Total', ...MODE_COLS.map((m) => m.label)]} right={[4, 5, 6, 7, 8, 9, 10, 11]}
-        headTone={(i) => (i >= PAY_FIRST_MODE ? { className: PAY_DIVIDER, style: modeTint(MODE_COLS[i - PAY_FIRST_MODE].color, 0.05) } : undefined)}
+        headTone={(i) => (i >= PAY_FIRST_MODE ? { className: PAY_DIVIDER, style: { backgroundColor: MODE_COLS[i - PAY_FIRST_MODE].tint } } : undefined)}
         foot={
           <FootRow>
             <span className="col-span-4 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
             <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
-            {MODE_COLS.map((m) => <span key={m.key} className={cn('px-2 text-right font-bold', PAY_DIVIDER)} style={{ color: m.ink, ...modeTint(m.color, 0.10) }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
+            {MODE_COLS.map((m) => <span key={m.key} className={cn('px-2 text-right font-bold', PAY_DIVIDER)} style={{ color: m.ink, ...modeTint(m.color, 0.12) }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
           </FootRow>
         }
       >
@@ -387,7 +402,7 @@ export function PaymodeReportPage() {
                 <Money paise={r.total} symbol={false} />
               </span>
               {MODE_COLS.map((m) => (
-                <span key={m.key} className={cn('px-2 text-right font-medium', PAY_DIVIDER, PAY_HOVER)} style={{ ...modeTint(m.color, 0.05), ...(i === sel ? { backgroundImage: PAY_SEL_OVERLAY } : {}), ...(r[m.key] ? { color: m.ink } : {}) }}>
+                <span key={m.key} className={cn('px-2 text-right font-medium', PAY_DIVIDER, PAY_HOVER)} style={{ backgroundColor: m.tint, ...(i === sel ? { backgroundImage: PAY_SEL_OVERLAY } : {}), ...(r[m.key] ? { color: m.ink } : {}) }}>
                   {r[m.key] ? <Money paise={r[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}
                 </span>
               ))}
