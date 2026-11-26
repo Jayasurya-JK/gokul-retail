@@ -81,13 +81,20 @@ export function ReportPreview({ data, settings }: { data: ReportData; settings: 
       <Line k={`Paid from drawer (${s.expensesCount})`} v={rs(s.expensesCash)} />
       <Line k={`Paid by UPI/bank (${s.expensesOtherCount ?? 0}), not in drawer`} v={rs(s.expensesOther ?? 0)} />
 
+      {(s.supplierPayments ?? []).length > 0 && (
+        <>
+          <Head>PAID TO SUPPLIERS</Head>
+          {(s.supplierPayments ?? []).map((p, i) => <Line key={i} k={`${p.supplier} (${p.mode === 'cash' ? 'cash' : `${p.mode.toUpperCase()}, not in drawer`})`} v={rs(p.amount)} />)}
+        </>
+      )}
+
       <Head>CASH DRAWER</Head>
       <Line k="Opening cash" v={rs(s.openingCash)} />
       <Line k="+ Cash sales" v={rs(s.byMode.cash)} />
       <Line k="+ Cash added" v={rs(s.cashIn - (s.collectionsCash ?? 0))} />
       <Line k="+ Customer collections" v={rs(s.collectionsCash ?? 0)} />
       <Line k="- Cash taken out" v={rs(s.cashOut - (s.supplierCash ?? 0))} />
-      <Line k="- Supplier payments" v={rs(s.supplierCash ?? 0)} />
+      <Line k="- Paid to suppliers (cash)" v={rs(s.supplierCash ?? 0)} />
       <Line k="- Cash refunds" v={rs(s.cashRefunds ?? 0)} />
       <Line k={`- Expenses (cash) (${s.expensesCount})`} v={rs(s.expensesCash)} />
       <Rule dashed={false} />

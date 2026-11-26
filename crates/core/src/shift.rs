@@ -228,6 +228,21 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         [s.id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
+    // Supplier payments of this shift: cash ones are the drawer movements (the note holds the supplier or bill), the others come from the payment book.
+    let mut supplier_payments: Vec<SupplierPayLine> = vec![];
+    if s.id > 0 {
+        let mut st = conn.prepare_cached("SELECT note, amount FROM cash_movements WHERE shift_id=?1 AND kind='out' AND reason='Supplier payment' ORDER BY id")?;
+        for r in st.query_map([s.id], |r| Ok(SupplierPayLine { supplier: r.get(0)?, amount: r.get(1)?, mode: "cash".into() }))? {
+            supplier_payments.push(r?);
+        }
+        let mut st = conn.prepare_cached(
+            "SELECT COALESCE(s.name, p.supplier_id), p.amount, p.mode FROM supplier_payments p LEFT JOIN suppliers s ON s.id=p.supplier_id
+             WHERE p.mode!='cash' AND p.at >= ?1 AND p.at <= ?2 ORDER BY p.id",
+        )?;
+        for r in st.query_map([&s.opened_at, end_iso], |r| Ok(SupplierPayLine { supplier: r.get(0)?, amount: r.get(1)?, mode: r.get(2)? }))? {
+            supplier_payments.push(r?);
+        }
+    }
     let mut expense_lines: Vec<ExpenseLine> = vec![];
     let (mut expenses_other, mut expenses_other_count) = (0i64, 0i64);
     if s.id > 0 {
@@ -276,6 +291,7 @@ fn summarise(conn: &Connection, s: &ShiftRow, end_iso: &str) -> Result<ShiftSumm
         expenses_other,
         expenses_other_count,
         expense_lines,
+        supplier_payments,
         expected_cash: s.opening_cash + by_mode.cash + cash_in - cash_out - cash_refunds - cash_cancel_refunds - exchange_cash_refunds - expenses_cash,
         by_mode,
     })

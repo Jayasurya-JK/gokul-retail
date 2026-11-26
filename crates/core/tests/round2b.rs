@@ -153,6 +153,59 @@ fn expenses_limit_pin_void_and_the_drawer() {
 }
 
 #[test]
+fn supplier_paid_from_the_counter_reduces_dues_and_shows_in_day_close() {
+    let (_d, db) = mini_db();
+    let o = owner(&db);
+    let c = cashier(&db);
+    let sup = call(&db, &o, "saveSupplier", json!([{ "name": "Kongu Traders", "phone": "98427 11111", "city": "Tiruppur", "gstin": "", "address": "", "contact": "", "creditDays": 10 }])).unwrap();
+    let sid = sup["id"].as_str().unwrap().to_string();
+    // Rs 3,000 owed to the supplier: 10 kg at Rs 300 a kg
+    call(&db, &o, "createGrn", json!([{ "supplierId": sid, "invoiceNo": "INV/9", "invoiceDate": day_of(Local::now()), "lines": [{ "itemId": "rm-gn", "qty": 10000, "rate": 30_000, "discountPct": 0, "gstRate": 0 }],
+        "freight": 0, "otherCharges": 0, "paidNow": 0, "payMode": "cash", "updateCost": false }])).unwrap();
+    let due = |db: &Db, s: &Session| -> i64 {
+        let all = call(db, s, "listSupplierSummaries", json!([])).unwrap();
+        all.as_array().unwrap().iter().find(|x| x["profile"]["id"] == sid).unwrap()["due"].as_i64().unwrap()
+    };
+    assert_eq!(due(&db, &c), 300_000);
+    open_day(&db, &c);
+    assert_eq!(expected_cash(&db, &c), 500_000);
+
+    // a cashier pays Rs 500 cash from the drawer: dues fall, the drawer falls, it is not an expense
+    call(&db, &c, "recordSupplierPayment", json!([{ "supplierId": sid, "amount": 50_000, "mode": "cash", "ref": "INV/9", "note": "part" }])).unwrap();
+    assert_eq!(due(&db, &c), 250_000);
+    assert_eq!(expected_cash(&db, &c), 450_000);
+    // UPI and bank payments reduce dues but never touch the drawer
+    call(&db, &c, "recordSupplierPayment", json!([{ "supplierId": sid, "amount": 20_000, "mode": "upi" }])).unwrap();
+    assert_eq!(due(&db, &c), 230_000);
+    assert_eq!(expected_cash(&db, &c), 450_000);
+    // over the expense limit (Rs 1,000) needs a manager PIN, like an expense
+    let big = json!({ "supplierId": sid, "amount": 150_000, "mode": "cash" });
+    err_has(call(&db, &c, "recordSupplierPayment", json!([big])), "manager pin is needed");
+    let mut ok = big.clone();
+    ok["managerPin"] = json!("2222");
+    call(&db, &c, "recordSupplierPayment", json!([ok])).unwrap();
+    assert_eq!(due(&db, &c), 80_000);
+    assert_eq!(expected_cash(&db, &c), 300_000);
+
+    let s = call(&db, &c, "shiftSummary", json!([])).unwrap();
+    assert_eq!(s["supplierCash"], 200_000);
+    assert_eq!(s["expensesCash"], 0, "supplier payments are not expenses");
+    assert_eq!(s["cashOut"], 200_000);
+    let lines = s["supplierPayments"].as_array().unwrap();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines.iter().filter(|l| l["mode"] == "cash").map(|l| l["amount"].as_i64().unwrap()).sum::<i64>(), 200_000);
+    let upi = lines.iter().find(|l| l["mode"] == "upi").unwrap();
+    assert_eq!((upi["supplier"].as_str().unwrap(), upi["amount"].as_i64().unwrap()), ("Kongu Traders", 20_000));
+    assert!(lines.iter().filter(|l| l["mode"] == "cash").all(|l| l["supplier"] == "Kongu Traders"));
+
+    // the Z report carries the lines and the counted drawer matches
+    let rep = call(&db, &c, "closeDay", json!([{ "userId": "x", "counts": { "500": 6 }, "managerPin": "2222" }])).unwrap();
+    assert_eq!(rep["expected"], 300_000);
+    assert_eq!(rep["difference"], 0);
+    assert_eq!(rep["summary"]["supplierPayments"].as_array().unwrap().len(), 3);
+}
+
+#[test]
 fn cashiers_see_only_today_and_reports_subtract_expenses() {
     let (_d, db) = mini_db();
     let o = owner(&db);

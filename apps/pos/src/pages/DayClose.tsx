@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, MoonStar, Printer, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, ChevronDown, MoonStar, Printer, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { countedTotal, formatRupees, type DenomCounts, type ShiftSummary, type ZReport } from '@gokul/data';
 import { printDoc, printWithToast } from '../printing';
 import { Badge, Button, Dialog, Kbd, Money, PosLayout, clockTime, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
@@ -146,7 +146,7 @@ function Compare({ summary, counted, diff, hasCount }: { summary: ShiftSummary |
           <span className="flex justify-between"><span>+ Cash added</span><b className="num text-success"><Money paise={(summary?.cashIn ?? 0) - (summary?.collectionsCash ?? 0)} decimals={false} symbol={false} /></b></span>
           <span className="flex justify-between"><span>+ Collections</span><b className="num text-success"><Money paise={summary?.collectionsCash ?? 0} decimals={false} symbol={false} /></b></span>
           <span className="flex justify-between"><span>- Cash taken out</span><b className="num text-danger"><Money paise={(summary?.cashOut ?? 0) - (summary?.supplierCash ?? 0)} decimals={false} symbol={false} /></b></span>
-          <span className="flex justify-between"><span>- Supplier pay</span><b className="num text-danger"><Money paise={summary?.supplierCash ?? 0} decimals={false} symbol={false} /></b></span>
+          <span className="flex justify-between"><span>- Paid to suppliers</span><b className="num text-danger"><Money paise={summary?.supplierCash ?? 0} decimals={false} symbol={false} /></b></span>
           <span className="flex justify-between"><span>- Refunds</span><b className="num text-danger"><Money paise={summary?.cashRefunds ?? 0} decimals={false} symbol={false} /></b></span>
           <span className="flex justify-between"><span>- Expenses (cash)</span><b className="num text-danger"><Money paise={summary?.expensesCash ?? 0} decimals={false} symbol={false} /></b></span>
         </div>
@@ -224,7 +224,7 @@ function XSummary({ s, onPrint }: { s: ShiftSummary; onPrint: () => void }) {
           <Row k="+ Cash added" v={<span className="text-success"><Money paise={s.cashIn - (s.collectionsCash ?? 0)} decimals={false} /></span>} />
           <Row k="+ Customer collections (cash)" v={<span className="text-success"><Money paise={s.collectionsCash ?? 0} decimals={false} /></span>} />
           <Row k="- Cash taken out" v={<span className="text-danger"><Money paise={-(s.cashOut - (s.supplierCash ?? 0))} decimals={false} /></span>} />
-          <Row k="- Supplier payments" v={<span className="text-danger"><Money paise={-(s.supplierCash ?? 0)} decimals={false} /></span>} />
+          <SupplierRow s={s} />
           <Row k="- Cash refunds" v={<span className="text-danger"><Money paise={-(s.cashRefunds ?? 0)} decimals={false} /></span>} />
           <Row k={`- Expenses paid in cash (${s.expensesCount})`} v={<span className="text-danger"><Money paise={-s.expensesCash} decimals={false} /></span>} />
           <Row k="= Expected cash" v={<b><Money paise={s.expectedCash} decimals={false} /></b>} />
@@ -251,6 +251,31 @@ function XSummary({ s, onPrint }: { s: ShiftSummary; onPrint: () => void }) {
           <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total GST</span><Money paise={s.cgst + s.sgst} decimals={false} /></div>
         </div>
       </div>
+    </div>
+  );
+}
+/** "Paid to suppliers (cash)" in the drawer lines; opens to list each supplier. UPI and bank ones are shown apart: they never touch the drawer. */
+function SupplierRow({ s }: { s: ShiftSummary }) {
+  const lines = s.supplierPayments ?? [];
+  const cash = lines.filter((p) => p.mode === 'cash');
+  const other = lines.filter((p) => p.mode !== 'cash');
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <div className="flex h-8 items-center justify-between text-base">
+        <button type="button" tabIndex={-1} aria-expanded={open} disabled={lines.length === 0} onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 text-muted enabled:hover:text-ink">
+          <ChevronDown size={14} className={cn('transition-transform', !open && '-rotate-90', lines.length === 0 && 'opacity-30')} />
+          - Paid to suppliers (cash)
+        </button>
+        <b className="num text-danger"><Money paise={-(s.supplierCash ?? 0)} decimals={false} /></b>
+      </div>
+      {open && lines.length > 0 && (
+        <div className="mb-1 ml-5 divide-y divide-line/60 rounded-lg bg-surface-2 px-3 py-1 text-sm">
+          {cash.map((p, i) => <div key={`c${i}`} className="flex h-7 items-center justify-between"><span className="truncate text-muted">{p.supplier}</span><b className="num text-ink"><Money paise={p.amount} decimals={false} /></b></div>)}
+          {other.length > 0 && <div className="pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">UPI / bank: not from the drawer</div>}
+          {other.map((p, i) => <div key={`o${i}`} className="flex h-7 items-center justify-between"><span className="truncate text-muted">{p.supplier} <span className="text-xs text-subtle">({p.mode.toUpperCase()})</span></span><span className="num text-muted"><Money paise={p.amount} decimals={false} /></span></div>)}
+        </div>
+      )}
     </div>
   );
 }

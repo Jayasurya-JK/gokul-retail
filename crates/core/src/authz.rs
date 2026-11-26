@@ -131,6 +131,8 @@ enum Rule {
     Bill,
     /// An expense over the limit (setting) needs a manager PIN unless the role may open the drawer on its own.
     ExpenseAdd,
+    /// Paying a supplier: stock managers as before; a counter user who may add expenses can pay from the POS, over the limit with a manager PIN.
+    SupplierPay,
     /// Edit or delete a saved record: the role must hold `canEditRecords` (owner and admin).
     EditRecords,
     /// Removing a scanned line: no PIN, unless the setting asks for one and the role lists it.
@@ -143,7 +145,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         "saveItem" | "setItemsActive" | "setItemsCategory" | "setItemsGst" | "setItemsBrand" | "applyHsn" | "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory"
         | "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => Perm("canManageItems"),
         "editPressingBatch" | "deletePressingBatch" | "saveSeedNorms" | "editGodownBarrel" | "editOutsourcedOil" | "deleteOutsourcedOil" | "deleteStickReading" => EditRecords,
-        "createGrn" | "saveSupplier" | "recordSupplierPayment" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
+        "createGrn" | "saveSupplier" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => {
             Perm("canManageStock")
         }
         "setCustomerCredit" => PermPin { perm: "canEditPrices", action: "allow_credit", pin_arg: 2, pin_key: None },
@@ -163,6 +165,7 @@ fn rule_for(method: &str, args: &[Value]) -> Rule {
         }
         "saveBill" => Bill,
         "addExpense" => ExpenseAdd,
+        "recordSupplierPayment" => SupplierPay,
         "editExpense" => PermPin { perm: "canOpenDrawer", action: "edit_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "voidExpense" => PermPin { perm: "canOpenDrawer", action: "void_expense", pin_arg: 0, pin_key: Some("managerPin") },
         "logVoidedLine" => VoidLine,
@@ -179,7 +182,7 @@ fn describe(method: &str) -> &'static str {
         "addCategory" | "renameCategory" | "deleteCategory" | "moveCategory" => "change categories",
         "syncStatus" | "syncSetConfig" | "syncNow" | "syncUploadEverything" => "change cloud sync",
         "addBrand" | "renameBrand" | "deleteBrand" | "moveBrand" => "change brands",
-        "createGrn" | "saveSupplier" | "recordSupplierPayment" => "record purchases and supplier payments",
+        "createGrn" | "saveSupplier" => "record purchases and supplier payments",
         "saveSeedNorms" | "createPressingBatch" | "createPressingBatches" | "moveBatchToBarrel" | "createPackRun" => "record production",
         "createAdjustment" | "postStockTake" => "adjust stock",
         "recordCollection" | "logReminder" => "collect credit",
@@ -193,6 +196,7 @@ fn describe(method: &str) -> &'static str {
         "createReturn" => "give a refund",
         "addCashEntry" => "take cash out of the drawer",
         "addExpense" => "record an expense over the limit",
+        "recordSupplierPayment" => "record supplier payments",
         "editExpense" => "change an expense",
         "voidExpense" => "void an expense",
         "logVoidedLine" => "remove a scanned line",
@@ -347,6 +351,25 @@ pub fn authorize(conn: &Connection, actor: &Actor, method: &str, args: &mut Vec<
             }
         }
         Rule::Bill => check_bill(conn, actor, args),
+        Rule::SupplierPay => {
+            if actor.has("canManageStock") {
+                return Ok(None);
+            }
+            let amount = args.first().and_then(|a| a["amount"].as_i64()).unwrap_or(0);
+            let limit = crate::expenses::expense_limit(conn);
+            if amount <= limit || (!actor.pin_listed("expense_over_limit") && actor.has("canOpenDrawer")) {
+                return Ok(None);
+            }
+            let what = "pay a supplier over the limit";
+            let pin = pin_from(args, 0, Some("managerPin"));
+            if pin.is_empty() {
+                return invalid(format!("A manager PIN is needed to {what}"));
+            }
+            match store::find_approver(conn, &pin, Some("canOpenDrawer"), 0)? {
+                Some(m) => Ok(Some(Override { approver: m.name, what: what.to_string() })),
+                None => Err(wrong_approval_pin(conn, actor, what)),
+            }
+        }
         Rule::ExpenseAdd => {
             let amount = args.first().and_then(|a| a["amount"].as_i64()).unwrap_or(0);
             let limit = crate::expenses::expense_limit(conn);

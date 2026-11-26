@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, Pencil, ReceiptIndianRupee, Wallet, Ban } from 'lucide-react';
+import { ArrowDownLeft, Pencil, ReceiptIndianRupee, Truck, Wallet, Ban } from 'lucide-react';
 import {
-  CASH_REASONS, PAID_FROM_LABEL, formatRupees, needsManagerPin, parsePaise,
-  type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom,
+  CASH_REASONS, PAID_FROM_LABEL, formatRupees, fuzzyFilter, needsManagerPin, parsePaise,
+  type Expense, type ExpenseCategory, type ExpenseList, type ExpensePaidFrom, type SupplierSummary,
 } from '@gokul/data';
 import { printDoc } from '../printing';
 import { Badge, Button, Dialog, EmptyState, Field, Input, Kbd, ManagerPinDialog, Money, PosLayout, clockTime, cn, useRefreshOnFocus, useToast } from '@gokul/ui';
@@ -17,13 +17,14 @@ const time = (iso: string) => clockTime(iso);
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const KEYS: KeyRows = [
-  ['Record an expense', ['F3']], ['Cash added to the drawer', ['F4']], ['Next field', ['Tab']],
+  ['Record an expense', ['F3']], ['Pay a supplier', ['F2']], ['Cash added to the drawer', ['F4']], ['Next field', ['Tab']],
   ['Change category or paid-from', ['Left', 'Right']], ['Save the entry', ['F12', 'Enter']],
   ['Select an entry in the list', ['Up', 'Down']], ['Edit the selected entry', ['E']], ['Void the selected entry', ['V']],
   ['Back to billing', ['Esc']],
 ];
 
-type Mode = 'expense' | 'in';
+type Mode = 'expense' | 'supplier' | 'in';
+const SUPPLIER_FROM = ['Cash from drawer', 'UPI', 'Bank'];
 
 export function Expenses() {
   const nav = useNavigate();
@@ -42,6 +43,11 @@ export function Expenses() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pinAsk, setPinAsk] = useState<string | null>(null);
+  const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
+  const [supQ, setSupQ] = useState('');
+  const [supPick, setSupPick] = useState<SupplierSummary | null>(null);
+  const [supHi, setSupHi] = useState(0);
+  const [invoiceNo, setInvoiceNo] = useState('');
   const [sel, setSel] = useState(-1);
   const [edit, setEdit] = useState<Expense | null>(null);
   const [voiding, setVoiding] = useState<Expense | null>(null);
@@ -50,13 +56,19 @@ export function Expenses() {
   const fromRef = useRef<HTMLDivElement>(null);
   const reasonRef = useRef<HTMLDivElement>(null);
   const toRef = useRef<HTMLInputElement>(null);
+  const supRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLInputElement>(null);
   useScreenKeys('Expenses', KEYS);
 
   const refresh = useCallback(async () => {
     const t = todayKey();
-    const [l, c, entries] = await Promise.all([api.listExpenses({ from: t, to: t, status: 'all' }), api.listExpenseCategories(), api.listCashEntries()]);
+    const [l, c, entries, sups] = await Promise.all([
+      api.listExpenses({ from: t, to: t, status: 'all' }), api.listExpenseCategories(), api.listCashEntries(),
+      api.listSupplierSummaries().catch(() => [] as SupplierSummary[]),
+    ]);
     setData(l);
+    setSuppliers(sups);
+    setSupPick((p) => (p ? sups.find((x) => x.profile.id === p.profile.id) ?? p : p));
     setCats(c.filter((x) => x.active));
     setCashIn(entries.filter((e) => e.kind === 'in').reduce((s, e) => s + e.amount, 0));
   }, []);
@@ -74,11 +86,28 @@ export function Expenses() {
     requestAnimationFrame(() => amountRef.current?.focus());
   }, []);
 
+  // Suppliers that owe us money come first when nothing is typed yet.
+  const supMatches = useMemo(() => {
+    const q = supQ.trim();
+    if (!q) return [...suppliers].sort((a, b) => b.due - a.due || a.profile.name.localeCompare(b.profile.name)).slice(0, 6);
+    return fuzzyFilter(suppliers, q, (x) => [x.profile.name, x.profile.city], 6);
+  }, [suppliers, supQ]);
+  const showSupList = !supPick;
+  const pickSupplier = (x: SupplierSummary) => {
+    setSupPick(x); setSupQ(x.profile.name); setError(null);
+    requestAnimationFrame(() => fromRef.current?.focus());
+  };
+
   const save = useCallback(async (pin?: string): Promise<string | null> => {
     if (saving) return null;
     const paise = parsePaise(amount);
     if (paise === null || paise <= 0) { setError('Enter the amount first.'); amountRef.current?.focus(); return null; }
     if (paise > 99_99_999_00) { setError('That amount looks too large. Check the digits.'); amountRef.current?.focus(); return null; }
+    if (mode === 'supplier') {
+      if (!supPick) { setError('Choose the supplier first.'); supRef.current?.focus(); return null; }
+      if (supPick.due <= 0) { setError(`Nothing is due to ${supPick.profile.name}. Record the purchase in Office first.`); return null; }
+      if (paise > supPick.due) { setError(`${supPick.profile.name} is owed only ${formatRupees(supPick.due, { decimals: false })}. Enter that or less.`); amountRef.current?.focus(); return null; }
+    }
     if (mode === 'expense' && !cat) { setError('Choose a category.'); return null; }
     if (mode === 'expense' && cat?.id === 'other' && !note.trim() && !paidTo.trim()) { setError('Add who it was paid to, or a note, when the category is Other.'); toRef.current?.focus(); return null; }
     setSaving(true);
@@ -91,6 +120,14 @@ export function Expenses() {
           tone: 'success', title: 'Expense saved',
           detail: `${formatRupees(paise, { decimals: false })} - ${cat!.name}${paidFrom === 'cash' ? '. Taken off the drawer total.' : `, paid by ${PAID_FROM_LABEL[paidFrom]}.`}`,
         });
+      } else if (mode === 'supplier') {
+        const mode2 = (['cash', 'upi', 'bank'] as const)[fromIdx];
+        const ledger = await api.recordSupplierPayment({ supplierId: supPick!.profile.id, amount: paise, mode: mode2, ref: invoiceNo.trim() || undefined, note: note.trim() || undefined, managerPin: pin });
+        toast.show({
+          tone: 'success', title: `Paid ${supPick!.profile.name} ${formatRupees(paise, { decimals: false })}`,
+          detail: `${mode2 === 'cash' ? 'Taken from the drawer' : `Paid by ${PAID_FROM_LABEL[mode2]}`}. Still due to this supplier: ${formatRupees(ledger.summary.due, { decimals: false })}.`,
+        });
+        setSupPick(null); setSupQ(''); setInvoiceNo('');
       } else {
         await api.addCashEntry({ kind: 'in', reason: reasons[reasonIdx], amount: paise, note: note.trim(), by: user?.name ?? 'Cashier' });
         toast.show({ tone: 'success', title: 'Cash added to drawer', detail: `${formatRupees(paise, { decimals: false })} - ${reasons[reasonIdx]}.` });
@@ -108,7 +145,7 @@ export function Expenses() {
     } finally {
       setSaving(false);
     }
-  }, [amount, cat, mode, note, paidFrom, paidTo, reasonIdx, reasons, refresh, saving, toast, user]);
+  }, [amount, cat, fromIdx, invoiceNo, mode, note, paidFrom, paidTo, reasonIdx, reasons, refresh, saving, supPick, toast, user]);
 
   const typing = () => {
     const t = document.activeElement;
@@ -119,6 +156,7 @@ export function Expenses() {
     const h = (e: KeyboardEvent) => {
       if (pinAsk || edit || voiding) return;
       if (e.key === 'F3') { e.preventDefault(); switchMode('expense'); }
+      else if (e.key === 'F2') { e.preventDefault(); switchMode('supplier'); }
       else if (e.key === 'F4') { e.preventDefault(); switchMode('in'); }
       else if (e.key === 'F12') { e.preventDefault(); void save(); }
       else if (!typing() && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && rows.length) {
@@ -149,6 +187,7 @@ export function Expenses() {
       sideWidth={470}
       keys={[
         { key: 'F3', label: 'Expense', onClick: () => switchMode('expense') },
+        { key: 'F2', label: 'Pay supplier', onClick: () => switchMode('supplier') },
         { key: 'F4', label: 'Cash added', onClick: () => switchMode('in') },
         { key: 'Tab', label: 'Next field' },
         { key: 'E / V', label: 'Edit / void selected' },
@@ -160,14 +199,15 @@ export function Expenses() {
           <div className="flex h-[72px] shrink-0 items-center gap-3 border-b border-line px-5">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><Wallet size={20} /></span>
             <div>
-              <h1 className="text-md font-semibold leading-5 text-ink">{mode === 'expense' ? 'New expense' : 'Cash added to drawer'}</h1>
-              <p className="text-xs text-muted">{mode === 'expense' ? 'Tea, transport, wages, supplier cash and every other cost' : 'Change or float put into the drawer'}</p>
+              <h1 className="text-md font-semibold leading-5 text-ink">{mode === 'expense' ? 'New shop expense' : mode === 'supplier' ? 'Paid to a supplier' : 'Cash added to drawer'}</h1>
+              <p className="text-xs text-muted">{mode === 'expense' ? 'Tea, transport, wages and every other shop cost' : mode === 'supplier' ? 'Lowers what the shop owes that supplier' : 'Change or float put into the drawer'}</p>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-3 p-1">
-              <Seg active={mode === 'expense'} onClick={() => switchMode('expense')} icon={<ReceiptIndianRupee size={16} />} label="Expense" k="F3" />
+            <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface-3 p-1">
+              <Seg active={mode === 'expense'} onClick={() => switchMode('expense')} icon={<ReceiptIndianRupee size={16} />} label="Shop expense" k="F3" />
+              <Seg active={mode === 'supplier'} onClick={() => switchMode('supplier')} icon={<Truck size={16} />} label="Paid to supplier" k="F2" />
               <Seg active={mode === 'in'} onClick={() => switchMode('in')} icon={<ArrowDownLeft size={16} />} label="Cash added" k="F4" />
             </div>
 
@@ -178,7 +218,7 @@ export function Expenses() {
                 ref={amountRef} value={amount} inputMode="decimal" autoComplete="off" placeholder="0"
                 onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => { setAmount(e.target.value.replace(/[^\d.]/g, '')); setError(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (mode === 'expense' ? catRef : reasonRef).current?.focus(); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (mode === 'expense' ? catRef : mode === 'supplier' ? supRef : reasonRef).current?.focus(); } }}
                 aria-label="Amount in rupees"
                 className="num h-14 w-full rounded-xl border border-line-strong bg-surface pl-9 pr-4 text-right text-2xl font-semibold text-ink placeholder:text-subtle focus:border-primary focus:ring-4 focus:ring-primary/20"
               />
@@ -203,6 +243,54 @@ export function Expenses() {
                   className="mt-1 h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-base text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
               </>
+            ) : mode === 'supplier' ? (
+              <>
+                <label className="mt-5 flex items-center justify-between text-xs font-medium text-muted">
+                  <span>Supplier</span>
+                  <span className="flex items-center gap-1 text-subtle"><Kbd>Up</Kbd><Kbd>Down</Kbd> choose <Kbd>Enter</Kbd> pick</span>
+                </label>
+                <input
+                  ref={supRef} value={supQ} autoComplete="off" spellCheck={false} placeholder="Type the supplier name" aria-label="Supplier"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => { setSupQ(e.target.value); setSupPick(null); setSupHi(0); setError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (supMatches.length) setSupHi((i) => (i + (e.key === 'ArrowDown' ? 1 : -1) + supMatches.length) % supMatches.length); }
+                    else if (e.key === 'Enter') { e.preventDefault(); if (supPick) fromRef.current?.focus(); else if (supMatches[supHi]) pickSupplier(supMatches[supHi]); }
+                  }}
+                  className="mt-1 h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-base text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25"
+                />
+                {showSupList && (
+                  <div role="listbox" aria-label="Suppliers" className="mt-1.5 overflow-hidden rounded-xl border border-line bg-surface">
+                    {supMatches.length === 0 && <div className="px-3 py-3 text-sm text-muted">No supplier with that name. Add new suppliers in Office.</div>}
+                    {supMatches.map((x, i) => (
+                      <button
+                        key={x.profile.id} type="button" tabIndex={-1} role="option" aria-selected={i === supHi}
+                        onMouseEnter={() => setSupHi(i)} onClick={() => pickSupplier(x)}
+                        className={cn('flex h-12 w-full items-center justify-between gap-3 border-b border-line/70 px-3 text-left last:border-b-0', i === supHi ? 'bg-primary-soft' : 'hover:bg-surface-3')}
+                      >
+                        <span className="min-w-0"><span className="block truncate text-base font-medium text-ink">{x.profile.name}</span><span className="block truncate text-xs text-muted">{x.profile.city || 'Supplier'}</span></span>
+                        <span className="shrink-0 text-right"><span className="block text-[11px] text-subtle">Due</span><b className={cn('num text-base', x.due > 0 ? 'text-warning' : 'text-subtle')}><Money paise={x.due} decimals={false} /></b></span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {supPick && (
+                  <div className={cn('mt-1.5 flex items-center justify-between rounded-xl px-3 py-2 text-sm', supPick.due > 0 ? 'bg-warning-soft text-warning' : 'bg-surface-3 text-muted')}>
+                    <span>Owed to {supPick.profile.name}</span><b className="num text-base"><Money paise={supPick.due} decimals={false} /></b>
+                  </div>
+                )}
+
+                <label className="mt-5 block text-xs font-medium text-muted">Paid from</label>
+                <Chips refEl={fromRef} label="Paid from" items={SUPPLIER_FROM} idx={fromIdx} setIdx={setFromIdx} onKeyDown={radioKeys(3, setFromIdx, () => toRef.current?.focus())} />
+
+                <label className="mt-5 block text-xs font-medium text-muted">Supplier bill number (optional)</label>
+                <input
+                  ref={toRef} value={invoiceNo} autoComplete="off" spellCheck={false} maxLength={30} placeholder="Number printed on the supplier's bill"
+                  onChange={(e) => { setInvoiceNo(e.target.value); setError(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); noteRef.current?.focus(); } }}
+                  className="mt-1 h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-base text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25"
+                />
+              </>
             ) : (
               <>
                 <label className="mt-5 block text-xs font-medium text-muted">Reason</label>
@@ -213,7 +301,7 @@ export function Expenses() {
             <label className="mt-5 block text-xs font-medium text-muted">Note (optional)</label>
             <input
               ref={noteRef} value={note} autoComplete="off" spellCheck={false} maxLength={80}
-              placeholder={mode === 'expense' ? 'What it was for' : 'Where did the money come from'}
+              placeholder={mode === 'expense' ? 'What it was for' : mode === 'supplier' ? 'Anything to remember about this payment' : 'Where did the money come from'}
               onChange={(e) => { setNote(e.target.value); setError(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void save(); } }}
               className="mt-1 h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-base text-ink placeholder:text-subtle focus:border-primary focus:ring-2 focus:ring-primary/25"
@@ -223,7 +311,7 @@ export function Expenses() {
 
           <div className="shrink-0 border-t border-line p-4">
             <Button variant="primary" size="lg" block className="!h-[52px] !text-lg" disabled={saving} onClick={() => void save()} kbd="F12">
-              {mode === 'expense' ? 'Save expense' : 'Add cash to drawer'}
+              {mode === 'expense' ? 'Save expense' : mode === 'supplier' ? 'Save supplier payment' : 'Add cash to drawer'}
             </Button>
           </div>
         </div>
@@ -240,7 +328,7 @@ export function Expenses() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {rows.length === 0 ? (
-            <EmptyState icon={<Wallet size={22} />} title="No expenses yet today" hint="Tea money, transport, wages or supplier cash will show up here. Entries are never deleted: a wrong one is voided with a reason." />
+            <EmptyState icon={<Wallet size={22} />} title="No expenses yet today" hint="Tea money, transport and wages will show up here. Supplier payments are listed in Close the day. Entries are never deleted: a wrong one is voided with a reason." />
           ) : rows.map((e, i) => (
             <div
               key={e.id} onClick={() => setSel(i)}
@@ -396,8 +484,8 @@ function Chips({ refEl, label, items, idx, setIdx, onKeyDown }: {
 
 function Seg({ active, onClick, icon, label, k }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; k: string }) {
   return (
-    <button type="button" tabIndex={-1} onClick={onClick} className={cn('flex h-11 items-center justify-center gap-2 rounded-lg text-base font-semibold transition-colors', active ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-ink')}>
-      {icon}{label}<Kbd>{k}</Kbd>
+    <button type="button" tabIndex={-1} onClick={onClick} className={cn('flex h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-sm font-semibold transition-colors', active ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-ink')}>
+      <span className="flex items-center gap-1.5 whitespace-nowrap">{icon}{label}</span><Kbd>{k}</Kbd>
     </button>
   );
 }

@@ -78,6 +78,8 @@ export interface ShiftSummary {
   collectionsCash?: Paise;
   /** Part of cashOut: supplier payments paid from the drawer */
   supplierCash?: Paise;
+  /** Every supplier payment of the day, by name. Cash ones are in supplierCash and come off the drawer; UPI, bank and cheque ones are information only. */
+  supplierPayments?: { supplier: string; amount: Paise; mode: string }[];
   /** Cash given back on returns and cancels */
   cashRefunds?: Paise;
   /** Expenses paid by UPI or bank: they never touch the drawer */
@@ -167,7 +169,9 @@ export function createShiftMock(store: MockStore): ShiftApi {
     }
     const slabs = [...slabMap.entries()].sort((a, b) => a[0] - b[0]).map(([rate, v]) => ({ rate, ...v }));
     const cashIn = sum(entries.filter((e) => e.kind === 'in').map((e) => e.amount));
-    const cashOut = sum(entries.filter((e) => e.kind === 'out').map((e) => e.amount));
+    const supplierPayments = (store.supplierPays ?? []).filter((x) => sameDay(x.at, new Date())).map((x) => ({ supplier: x.supplier, amount: x.amount, mode: x.mode }));
+    const supplierCash = sum(supplierPayments.filter((x) => x.mode === 'cash').map((x) => x.amount));
+    const cashOut = sum(entries.filter((e) => e.kind === 'out').map((e) => e.amount)) + supplierCash;
     const openingCash = shift?.openingCash ?? 0;
     const todayKey = new Date().toISOString().slice(0, 10);
     const todays = (store.expenses ?? []).filter((e) => e.status === 'active' && e.paidFrom === 'cash' && e.day === todayKey);
@@ -199,6 +203,7 @@ export function createShiftMock(store: MockStore): ShiftApi {
       slabs,
       expensesCash, expensesCount: todays.length,
       cashRefunds,
+      supplierCash, supplierPayments,
       expectedCash: openingCash + byMode.cash + cashIn - cashOut - cashRefunds - expensesCash,
     };
   };
