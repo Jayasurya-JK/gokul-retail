@@ -649,7 +649,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
       <PaymentDialog
-        open={dialog === 'pay'} total={due} billTotal={totals.grand} storeCredit={storeCreditUsed} pointsApplied={pointsUsed} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
+        open={dialog === 'pay'} total={due} billTotal={totals.grand} storeCredit={storeCreditUsed} pointsApplied={pointsUsed} lines={lines} totals={totals} settings={settings} billNo={billNo} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
         exchange={exchange ? { credit: exchangeCredit, number: exchange.number, billNumber: exchange.billNumber } : null}
         onComplete={(p, c, refund) => void complete(p, c, undefined, refund)} onCustomerUpdate={(c) => B.setCustomer(c)}
       />

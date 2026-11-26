@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FEATURES } from '../features';
-import { IndianRupee, CreditCard, QrCode, Star, Ticket, Wallet, X } from 'lucide-react';
-import { NO_CREDIT_LIMIT, creditLeft, formatPaise, formatRupees, parsePaise, type Customer, type CustomerWallet, type PayMode, type Payment } from '@gokul/data';
-import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, cn } from '@gokul/ui';
+import { ArrowLeft, Check, X, IndianRupee, CreditCard, QrCode, Star, Ticket, UserRound, Wallet } from 'lucide-react';
+import { NO_CREDIT_LIMIT, billTitleFor, printNumber, creditLeft, formatRupees, parsePaise, type BillLine, type BillTotals, type Customer, type CustomerWallet, type PayMode, type Payment, type Settings } from '@gokul/data';
+import { Button, Dialog, Field, Input, Kbd, ManagerPinDialog, Money, ReceiptPreview, cn } from '@gokul/ui';
 import { api } from '../store';
+import { useReceiptConfig } from '../receiptConfig';
 
 const MODES: { mode: PayMode; label: string; key: string; icon: React.ReactNode }[] = [
   { mode: 'cash', label: 'Cash', key: 'F1', icon: <IndianRupee size={20} /> },
@@ -26,7 +27,7 @@ const ceilTo = (paise: number, step: number) => Math.ceil(paise / step) * step;
 /** Exchange credit carried into this bill (from the Returns screen). */
 export interface ExchangeInfo { credit: number; number: string; billNumber: string }
 
-export function PaymentDialog({ open, total, billTotal, storeCredit, pointsApplied, exchange, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
+export function PaymentDialog({ open, total, billTotal, storeCredit, pointsApplied, exchange, lines, totals, settings, billNo, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
   open: boolean;
   /** What the customer still has to pay for this bill (after any exchange credit and store credit); 0 when the credit covers it */
   total: number;
@@ -37,6 +38,11 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
   /** Paise of loyalty points already applied in the summary panel; they are saved as a points payment and are not entered again here */
   pointsApplied?: number;
   exchange?: ExchangeInfo | null;
+  /** For the live bill preview on the right */
+  lines?: BillLine[];
+  totals: BillTotals;
+  settings?: Settings | null;
+  billNo?: string;
   customer: Customer | null; wallet?: CustomerWallet | null; onClose: () => void; busy: boolean;
   onCustomerUpdate?: (c: Customer) => void;
   /** `refund` is set when the exchange credit was bigger than the bill: the difference goes back to the customer in that mode. */
@@ -82,6 +88,33 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
   const pointsAvail = Math.max(0, Math.floor(pointsCap / pv) * pv);
   const pointsWorth = rules && wallet ? Math.floor(wallet.points) * pv - spentPoints : 0;
   const minRedeemWorth = (rules?.minRedeem ?? 100) * pv;
+
+  /* The primary button: says what saving does, and why it cannot be pressed yet */
+  const effAmt = amount > 0 ? amount : typedMode(mode) ? 0 : remaining;
+  const saveBlocked = busy || (!refund && !covered && (short || effAmt <= 0));
+  const saveReason = busy ? 'Saving...' : short ? `${formatRupees(remaining - amount, { decimals: (remaining - amount) % 100 !== 0 })} still to pay` : 'Type the amount first';
+  const saveText = refund ? `Refund ${formatRupees(refund, { decimals: false })} and save` : `Save bill ${formatRupees(total, { decimals: total % 100 !== 0 })}`;
+  /* Live preview: what is typed now counts as a tentative row until Enter takes it */
+  const pendingAmt = !refund && !covered && mode !== 'credit_note' && effAmt > 0 ? Math.min(effAmt, remaining) : 0;
+  const pendingRow = pendingAmt > 0 && !(typedMode(mode) && amount <= 0) ? { mode, amount: pendingAmt } : null;
+  const receiptCfg = useReceiptConfig();
+  const paperRef = useRef<HTMLDivElement>(null);
+  const now = useMemo(() => new Date().toISOString(), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown: Payment[] = [
+    ...(pointsApplied0 > 0 ? [{ mode: 'credit_note' as PayMode, amount: pointsApplied0, ref: 'PTS' }] : []),
+    ...payments.map((p) => (p.mode === 'points' ? { ...p, mode: 'credit_note' as PayMode, ref: 'PTS' } : p)),
+    ...(pendingRow ? [pendingRow.mode === 'points' ? { ...pendingRow, mode: 'credit_note' as PayMode, ref: 'PTS' } : pendingRow] : []),
+  ];
+  const cashShown = payments.filter((p) => p.mode === 'cash').reduce((t, p) => t + p.amount, 0) + (pendingRow?.mode === 'cash' ? amount : 0);
+  const f = receiptCfg?.billFormat;
+  const receiptData = {
+    title: f ? billTitleFor(shown, f) : 'TAX INVOICE', subtitle: f ? 'TAX INVOICE' : undefined, number: f ? printNumber(billNo || '-', f.numberFormat) : billNo || '-', at: now, cashier: settings?.counter ?? '', counter: settings?.counter,
+    customerName: customer?.name, customerId: customer?.id, customerPhone: customer?.phone,
+    points: wallet && customer ? wallet.points : undefined,
+    lines: lines ?? [], totals, payments: shown, received: cashShown || undefined,
+    storeCreditUsed: storeApplied || undefined,
+  };
+  useEffect(() => { const el = paperRef.current; if (el) el.scrollTop = payments.length > 0 ? el.scrollHeight : 0; }, [payments.length, open]);
 
   const visibleModes = refund
     ? MODES.filter((m) => m.mode === 'cash' || m.mode === 'upi')
@@ -176,40 +209,47 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Payment" size="xl" hideHeader bodyClassName="p-0">
-      <div onKeyDown={onKeyDown} className="bg-surface">
-        {/* The money the customer must give (or get back) */}
-        <div className="flex items-end justify-between gap-6 bg-chrome px-6 pb-4 pt-4 text-white">
-          <div className="min-w-0">
+      <div onKeyDown={onKeyDown} className="flex flex-col bg-surface" style={{ height: 'min(610px, calc(100vh - 48px))' }}>
+        {/* Header band: back, the one number the customer must give (or get back), customer */}
+        <div className="flex h-[104px] shrink-0 items-center gap-5 bg-chrome px-5 text-white">
+          <button type="button" tabIndex={-1} onClick={onClose} className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-chrome-muted transition-colors hover:bg-white/10 hover:text-white">
+            <ArrowLeft size={16} /> Back <Kbd>Esc</Kbd>
+          </button>
+          <div className="min-w-0 flex-1 border-l border-white/15 pl-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-chrome-muted">
-              {refund ? 'Refund to customer' : covered ? 'Nothing to pay' : payments.length ? 'Balance to pay' : exchange ? 'Customer pays' : pointsApplied0 > 0 ? 'To pay after points' : 'Bill amount'}
+              {refund ? 'Refund to customer' : covered ? 'Nothing to pay' : payments.length ? 'Balance to pay' : 'To pay'}
             </div>
-            <div className="num font-semibold leading-none tracking-tight" style={{ fontSize: 52 }}><Money paise={refund || remaining} softPaise /></div>
+            <div className="num font-semibold leading-none tracking-tight" style={{ fontSize: 48 }}><Money paise={refund || remaining} softPaise /></div>
+            {(exchange || storeApplied > 0 || pointsApplied0 > 0 || payments.length > 0) && (
+              <div className="num mt-1 truncate text-xs text-chrome-muted">
+                {exchange
+                  ? <>New items {formatRupees(billTotal)} - exchange credit {formatRupees(exchange.credit)}</>
+                  : <>Bill total {formatRupees(billTotal)}{storeApplied > 0 && <> - store credit {formatRupees(storeApplied)}</>}{pointsApplied0 > 0 && <> - points {formatRupees(pointsApplied0)}</>}{payments.length > 0 && <> - taken {formatRupees(paid)}</>}</>}
+              </div>
+            )}
           </div>
-          <div className="min-w-0 text-right text-sm text-chrome-muted">
-            <div className="truncate">{customer ? customer.name : 'Walk-in customer'}</div>
-            {exchange ? (
-              <div className="num mt-0.5 text-chrome-ink">New items {formatRupees(billTotal)} - exchange credit {formatRupees(exchange.credit)}</div>
-            ) : storeApplied > 0 || pointsApplied0 > 0 ? (
-              <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(billTotal)}{storeApplied > 0 && <> - store credit {formatRupees(storeApplied)}</>}{pointsApplied0 > 0 && <> - points {formatRupees(pointsApplied0)}</>}</div>
-            ) : payments.length > 0 ? (
-              <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(total)}</div>
-            ) : null}
+          <div className="flex min-w-0 max-w-[240px] shrink-0 items-center gap-2.5 text-right">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-white">{customer ? customer.name : 'Walk-in customer'}</div>
+              {customer && customer.phone && <div className="num truncate text-xs text-chrome-muted">{customer.phone}</div>}
+            </div>
+            <UserRound size={22} className="shrink-0 text-chrome-muted" />
           </div>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_280px]">
-          <div className="min-w-0 border-r border-line p-5">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-h-0 min-w-0 flex-col overflow-auto border-r border-line p-5">
             {covered ? (
               <div className="rounded-xl bg-success-soft px-4 py-3 text-sm font-medium text-success">
                 {exchange ? <>The exchange credit <b className="num">{exchange.number}</b> pays this bill in full.</> : pointsApplied0 > 0 && storeApplied === 0 ? <>The points pay this bill in full.</> : <>The store credit pays this bill in full.</>} Press Enter to save it.
               </div>
             ) : (
-              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleModes.length}, minmax(0, 1fr))` }}>
+              <div className="grid shrink-0 gap-2" style={{ gridTemplateColumns: `repeat(${visibleModes.length}, minmax(0, 1fr))` }}>
                 {visibleModes.map((m) => (
                   <button
                     key={m.mode} tabIndex={-1} onClick={() => choose(m.mode)}
                     className={cn(
-                      'flex h-[72px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-sm font-semibold transition-colors',
+                      'flex h-[68px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-sm font-semibold transition-colors',
                       mode === m.mode ? 'border-primary bg-primary-soft text-primary shadow-[0_0_0_1px_rgb(var(--primary))]' : 'border-line bg-surface text-ink hover:bg-surface-2',
                     )}
                   >
@@ -222,18 +262,18 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
 
             {!covered && (
               <>
-                <label className="mt-5 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted">
+                <label className="mt-4 flex shrink-0 items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted">
                   <span>{fieldLabel}</span>
                   {!refund && typedMode(mode) && (
                     <button type="button" tabIndex={-1} onClick={useMax} className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-xs font-semibold normal-case tracking-normal text-primary hover:bg-primary-soft">Use max</button>
                   )}
                 </label>
                 {refund ? (
-                  <div className="num mt-1.5 flex h-16 w-full items-center justify-end rounded-xl border border-line bg-surface-2 px-4 font-semibold text-ink" style={{ fontSize: 32 }}>
+                  <div className="num mt-1.5 flex h-16 w-full shrink-0 items-center justify-end rounded-xl border border-line bg-surface-2 px-4 font-semibold text-ink" style={{ fontSize: 32 }}>
                     <Money paise={refund} />
                   </div>
                 ) : (
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-1.5 shrink-0">
                     <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl text-subtle">{'₹'}</span>
                     <input
                       ref={inputRef} data-autofocus autoComplete="off" inputMode="decimal" value={field}
@@ -252,7 +292,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
                 )}
 
                 {!refund && mode === 'cash' && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex shrink-0 flex-wrap gap-1.5">
                     {chips.map((c, i) => (
                       <button key={c} tabIndex={-1} onClick={() => setField(toField(c))} className="h-8 rounded-lg border border-line bg-surface-2 px-3 text-sm font-medium text-ink num hover:bg-surface-3">
                         {i === 0 ? 'Exact' : formatRupees(c, { decimals: false })}
@@ -262,21 +302,21 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
                 )}
 
                 {!refund && mode === 'points' && wallet && (
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div className="mt-2 grid shrink-0 grid-cols-3 gap-2 text-sm">
                     <Info k="Customer has" v={`${Math.floor(wallet.points).toLocaleString('en-IN')} pts`} sub={`worth ${formatRupees(Math.max(0, pointsWorth), { decimals: false })}`} />
                     <Info k="Can use now" v={formatRupees(pointsAvail, { decimals: false })} sub={`up to ${rules?.maxPct ?? 100}% of the bill`} />
                     <Info k="Points left after" v={`${wholePoints(pointsLeft)} pts`} sub={`least ${rules?.minRedeem ?? 100} pts (${formatRupees(minRedeemWorth, { decimals: false })})`} />
                   </div>
                 )}
                 {!refund && mode === 'credit_note' && (
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div className="mt-2 grid shrink-0 grid-cols-3 gap-2 text-sm">
                     <Info k="Wallet balance" v={formatRupees(creditAvail)} sub="credit notes of this customer" />
                     <Info k="This bill needs" v={formatRupees(remaining)} sub="still to pay" />
                     <Info k="Wallet left after" v={formatRupees(walletLeft)} sub="partial use is fine" />
                   </div>
                 )}
 
-                <div className="mt-4 min-h-[56px]">
+                <div className="mt-3 min-h-[60px] shrink-0">
                   {error ? (
                     <div className="rounded-lg bg-danger-soft px-3 py-2 text-sm font-medium text-danger">{error}</div>
                   ) : refund ? (
@@ -289,9 +329,14 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
                       <span className="num text-2xl font-bold text-success"><Money paise={change} /></span>
                     </div>
                   ) : short ? (
-                    <div className="flex items-center justify-between rounded-lg bg-warning-soft px-4 py-2.5">
-                      <span className="text-sm font-medium text-warning">Balance still to pay. Press Enter to take this part, then pay the rest another way.</span>
-                      <span className="num ml-3 text-2xl font-bold text-warning"><Money paise={remaining - amount} /></span>
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-warning-soft px-4 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-warning">Balance still to pay</div>
+                        <button type="button" tabIndex={-1} onClick={apply} className="mt-0.5 text-left text-xs font-medium text-warning underline decoration-dotted underline-offset-2 hover:decoration-solid">
+                          Take {formatRupees(amount, { decimals: amount % 100 !== 0 })} now, pay the rest another way (Enter)
+                        </button>
+                      </div>
+                      <span className="num shrink-0 text-2xl font-bold text-warning"><Money paise={remaining - amount} /></span>
                     </div>
                   ) : noCredit && customer ? (
                     <div className="space-y-2 rounded-lg bg-warning-soft px-3 py-2.5">
@@ -315,68 +360,42 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, pointsAppli
                 </div>
               </>
             )}
-          </div>
 
-          <div className="flex min-w-0 flex-col bg-surface-2 p-5">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted">Payments</div>
-            <div className="mt-2 min-h-0 flex-1 space-y-1.5">
-              {exchange && (
-                <div className="flex items-center justify-between rounded-lg border border-info/30 bg-info-soft px-3 py-2 text-sm">
-                  <span className="min-w-0 truncate font-medium text-info">Exchange credit</span>
-                  <b className="num text-info">{formatPaise(Math.min(exchange.credit, billTotal))}</b>
-                </div>
-              )}
-              {storeApplied > 0 && (
-                <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-sm">
-                  <span className="min-w-0 truncate font-medium text-success">Store credit</span>
-                  <b className="num text-success">{formatPaise(storeApplied)}</b>
-                </div>
-              )}
-              {payments.length === 0 && !exchange && storeApplied === 0 && <div className="text-sm text-subtle">Nothing taken yet. Type the amount and press Enter.</div>}
-              {payments.map((p, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-sm">
-                  <span className="font-medium">{modeLabel(p.mode)}</span>
-                  <span className="flex items-center gap-2 num font-semibold">
-                    {formatPaise(p.amount)}
-                    <button tabIndex={-1} aria-label="Remove payment" onClick={() => { setPayments(payments.filter((_, k) => k !== i)); setField(toField(remaining + p.amount)); setMode('cash'); }} className="text-subtle hover:text-danger"><X size={14} /></button>
+            {payments.length > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5 pt-2.5 text-sm">
+                <span className="text-xs font-semibold text-muted">Taken</span>
+                {payments.map((p, i) => (
+                  <span key={i} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 py-1 pl-2.5 pr-1.5 num">
+                    <span className="font-medium">{modeLabel(p.mode)}</span> <b>{formatRupees(p.amount)}</b>
+                    <button tabIndex={-1} aria-label="Remove payment" onClick={() => { setPayments(payments.filter((_, k) => k !== i)); setField(toField(remaining + p.amount)); setMode('cash'); }} className="rounded p-0.5 text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
                   </span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
-              {exchange ? (
-                <>
-                  <div className="flex justify-between text-muted"><span>New items</span><span className="num">{formatRupees(billTotal)}</span></div>
-                  <div className="flex justify-between text-info"><span>Exchange credit</span><span className="num">-{formatRupees(Math.min(exchange.credit, billTotal))}</span></div>
-                </>
-              ) : storeApplied > 0 ? (
-                <>
-                  <div className="flex justify-between text-muted"><span>Bill amount</span><span className="num">{formatRupees(billTotal)}</span></div>
-                  <div className="flex justify-between text-success"><span>Store credit</span><span className="num">-{formatRupees(storeApplied)}</span></div>
-                </>
-              ) : (
-                <div className="flex justify-between text-muted"><span>Bill amount</span><span className="num">{formatRupees(total)}</span></div>
-              )}
-              {!refund && <div className="flex justify-between text-muted"><span>Received</span><span className="num">{formatRupees(paid)}</span></div>}
-              {refund ? (
-                <div className="flex justify-between font-semibold text-warning"><span>Refund to customer</span><span className="num">{formatRupees(refund)}</span></div>
-              ) : (
-                <div className="flex justify-between font-semibold text-ink"><span>Balance</span><span className="num">{formatRupees(remaining)}</span></div>
-              )}
-            </div>
-          </div>
-        </div>
+                ))}
+              </div>
+            )}
 
-        <div className="flex items-center justify-between border-t border-line bg-surface px-5 py-3">
-          <div className="flex items-center gap-3 text-xs text-muted">
-            {!refund && !covered && <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>{FEATURES.sodexo ? 'F7' : 'F6'}</Kbd> method</span>}
-            {!refund && !covered && <span className="flex items-center gap-1"><Kbd>Ctrl+Z</Kbd> undo split</span>}
+            {/* The one primary action, under the change box */}
+            <div className="shrink-0 pt-3">
+              <button
+                type="button" tabIndex={-1} onClick={apply} disabled={saveBlocked}
+                className={cn(
+                  'flex h-[60px] w-full items-center justify-center gap-3 rounded-xl text-lg font-semibold transition-colors',
+                  saveBlocked ? 'cursor-not-allowed bg-surface-3 text-muted' : 'bg-primary text-primary-fg shadow-[0_2px_0_rgb(var(--primary)/0.35)] hover:bg-primary-hover active:translate-y-px',
+                )}
+              >
+                {saveBlocked ? saveReason : <><Check size={22} strokeWidth={3} /> {saveText} <Kbd>Enter</Kbd></>}
+              </button>
+            </div>
+              {!refund && !covered && (
+                <div className="mt-auto flex shrink-0 pt-3 items-center justify-center gap-4 text-xs text-muted">
+                  <span className="flex items-center gap-1"><Kbd>F1</Kbd>-<Kbd>{FEATURES.sodexo ? 'F7' : 'F6'}</Kbd> method</span>
+                  <span className="flex items-center gap-1"><Kbd>Ctrl+Z</Kbd> undo split</span>
+                </div>
+              )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={onClose} kbd="Esc">Back to bill</Button>
-            <Button variant="primary" size="lg" onClick={apply} kbd="Enter" disabled={busy} className="min-w-[220px]">
-              {refund ? `Refund ${formatRupees(refund, { decimals: false })} and save` : short ? 'Take part payment' : 'Complete and save'}
-            </Button>
+
+          {/* Live receipt: exactly what will print, updated as payments are typed */}
+          <div ref={paperRef} className="min-h-0 min-w-0 overflow-y-auto bg-surface-2 p-3">
+            {settings && <ReceiptPreview data={receiptData} settings={settings} shop={receiptCfg} className="w-full max-w-[316px]" />}
           </div>
         </div>
       </div>
@@ -417,3 +436,5 @@ function Info({ k, v, sub }: { k: string; v: string; sub?: string }) {
     </div>
   );
 }
+
+
