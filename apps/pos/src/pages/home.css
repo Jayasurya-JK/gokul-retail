@@ -1,0 +1,34 @@
+/* Home v3: calm solid tiles. One colour per tile with a barely-there tonal depth. White text is at least 4.5:1 on every base. */
+.home-tile {
+  --hb: 31 95 70;
+  background: linear-gradient(165deg, rgb(var(--hb) / 1) 0%, rgb(var(--hb) / 1) 100%);
+  background-image: linear-gradient(165deg, rgb(255 255 255 / 0.07), rgb(0 0 0 / 0.06));
+  background-color: rgb(var(--hb));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.14);
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 120ms, box-shadow 120ms, filter 120ms;
+}
+.home-tile[data-on='true'] { outline-color: rgb(var(--ink)); box-shadow: 0 8px 18px -10px rgb(15 23 42 / 0.5); }
+.home-tile[data-hue='pos'] { --hb: 24 98 68; }
+.home-tile[data-hue='sales'] { --hb: 37 82 160; }
+.home-tile[data-hue='paymode'] { --hb: 18 104 116; }
+.home-tile[data-hue='bills'] { --hb: 64 78 110; }
+.home-tile[data-hue='customer'] { --hb: 120 50 130; }
+.home-tile[data-hue='stock'] { --hb: 112 92 18; }
+.home-tile[data-hue='held'] { --hb: 160 76 12; }
+.home-tile[data-hue='more'] { --hb: 55 65 81; }
+.home-soft-good { color: rgb(190 250 214); }
+.home-soft-bad { color: rgb(255 208 208); }
+.home-soft-warn { color: rgb(254 232 140); }
+.home-num { font-size: clamp(24px, 4.2vh, 52px); }
+.home-num > span { letter-spacing: 0; font-size: clamp(15px, 2vh, 20px); margin-left: 4px; }
+@media (max-height: 760px) {
+  .home-tile { padding-top: 14px; padding-bottom: 14px; }
+  .home-tile .home-ico { width: 32px; height: 32px; }
+  .home-tile .home-ico svg { width: 18px; height: 18px; }
+  .home-line { margin-top: 4px; }
+  h1.home-title { font-size: 30px; }
+  div.home-strip { height: 56px; }
+  .home-strip .num { font-size: 18px; line-height: 22px; }
+}
