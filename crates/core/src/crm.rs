@@ -692,11 +692,11 @@ fn yes() -> bool {
     true
 }
 
-/// The rules every PIN a person picks must pass: 4 to 6 digits, not one digit repeated (1111), not a straight run (1234, 4321, 123456).
+/// The rules every PIN a person picks must pass: exactly 4 digits, not one digit repeated (1111), not a straight run (1234, 4321, 0123, 3210).
 /// The answer is a plain-words message for the screen, or `None` when the PIN is fine.
 pub fn pin_rule_problem(p: &str) -> Option<&'static str> {
-    if p.len() < 4 || p.len() > 6 || !p.chars().all(|c| c.is_ascii_digit()) {
-        return Some("The PIN must be 4 to 6 digits, numbers only.");
+    if p.len() != 4 || !p.chars().all(|c| c.is_ascii_digit()) {
+        return Some("The PIN must be 4 digits, numbers only.");
     }
     let d: Vec<i32> = p.chars().map(|c| c as i32 - '0' as i32).collect();
     if d.iter().all(|x| *x == d[0]) {
@@ -762,7 +762,7 @@ pub fn save_user_account(conn: &mut Connection, i: &UserInput) -> Result<Value> 
             id.clone()
         }
         None => {
-            let Some(pin) = i.pin.as_deref().filter(|p| !p.is_empty()) else { return invalid("Choose a PIN (4 to 6 digits) for the new user.") };
+            let Some(pin) = i.pin.as_deref().filter(|p| !p.is_empty()) else { return invalid("Choose a PIN (4 digits) for the new user.") };
             check_new_pin(&tx, pin, "")?;
             let id = fresh_id(&tx, "users", "u", "USER")?;
             let parts: Vec<&str> = name.split_whitespace().collect();

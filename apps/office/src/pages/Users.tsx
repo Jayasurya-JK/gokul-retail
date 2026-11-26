@@ -36,7 +36,7 @@ function UserSheet({ open, user, roles, onClose, onSave }: {
   return (
     <Drawer
       open={open} onOpenChange={(o) => !o && onClose()} width={420} title={user ? 'Edit user' : 'New user'}
-      description={user ? user.name : 'Choose a PIN for them (4 to 6 digits), typed twice.'}
+      description={user ? user.name : 'Choose a PIN for them (4 digits), typed twice.'}
       footer={<><Button variant="ghost" onClick={onClose} kbd="Esc">Cancel</Button><Button variant="primary" onClick={submit} kbd="Ctrl+S">Save user</Button></>}
     >
       <div className="flex flex-col gap-4" onKeyDown={(ev) => { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') { ev.preventDefault(); void submit(); } }}>
@@ -53,12 +53,12 @@ function UserSheet({ open, user, roles, onClose, onSave }: {
           <>
             <Input
               label="PIN" value={d.pin} inputMode="numeric" type="password" autoComplete="new-password"
-              onChange={(ev) => setD({ ...d, pin: ev.target.value.replace(/\D/g, '').slice(0, 6) })} error={touched ? e.pin : undefined}
-              hint="4 to 6 digits. Not 1111, 1234 or a PIN another user has." className="num tracking-[0.4em]"
+              onChange={(ev) => setD({ ...d, pin: ev.target.value.replace(/\D/g, '').slice(0, 4) })} error={touched ? e.pin : undefined}
+              hint="4 digits. Not 1111, 1234 or a PIN another user has." className="num tracking-[0.4em]"
             />
             <Input
               label="Type the PIN again" value={d.pin2} inputMode="numeric" type="password" autoComplete="new-password"
-              onChange={(ev) => setD({ ...d, pin2: ev.target.value.replace(/\D/g, '').slice(0, 6) })} error={touched ? e.pin2 : undefined} className="num tracking-[0.4em]"
+              onChange={(ev) => setD({ ...d, pin2: ev.target.value.replace(/\D/g, '').slice(0, 4) })} error={touched ? e.pin2 : undefined} className="num tracking-[0.4em]"
             />
           </>
         )}

@@ -4,7 +4,7 @@ import { Button } from './Button';
 import { Field, Input } from './Form';
 import { Dialog } from './Overlay';
 
-const digits = (v: string) => v.replace(/\D/g, '').slice(0, 6);
+const digits = (v: string) => v.replace(/\D/g, '').slice(0, 4);
 
 /**
  * A person chooses a PIN: type it twice (and the current PIN first when `askOld`). Used for "Change my PIN" (everyone) and
@@ -46,7 +46,7 @@ export function PinChangeDialog({ open, title, description, askOld = false, save
     <Field label={label}>
       <Input
         value={value} onChange={(e) => { set(digits(e.target.value)); setError(null); }}
-        data-autofocus={auto || undefined} type="password" inputMode="numeric" autoComplete="new-password" placeholder="4 to 6 digits"
+        data-autofocus={auto || undefined} type="password" inputMode="numeric" autoComplete="new-password" placeholder="4 digits"
         icon={<KeyRound size={15} />} className="num tracking-[0.3em]"
       />
     </Field>
@@ -65,7 +65,7 @@ export function PinChangeDialog({ open, title, description, askOld = false, save
         {field('New PIN', pin, setPin, !askOld)}
         {field('Type the new PIN again', again, setAgain)}
         <p className={error ? 'min-h-[18px] text-xs font-medium text-danger' : 'min-h-[18px] text-xs text-subtle'}>
-          {error ?? 'Use 4 to 6 digits. Not 1111, 1234 or another PIN already in use. It is never shown again.'}
+          {error ?? 'Use 4 digits. Not 1111, 1234 or another PIN already in use. It is never shown again.'}
         </p>
       </div>
     </Dialog>

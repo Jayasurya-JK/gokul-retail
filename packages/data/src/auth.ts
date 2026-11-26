@@ -18,11 +18,11 @@ export function countdownText(secs: number): string {
 }
 
 /**
- * The rules for a PIN a person chooses (same as the Rust backend): 4 to 6 digits, not one digit repeated (1111),
- * not a straight run (1234, 4321, 123456). Returns a plain-words problem, or `null` when the PIN is fine.
+ * The rules for a PIN a person chooses (same as the Rust backend): exactly 4 digits, not one digit repeated (1111),
+ * not a straight run (1234, 4321, 0123, 3210). Returns a plain-words problem, or `null` when the PIN is fine.
  */
 export function pinRuleProblem(pin: string): string | null {
-  if (!/^\d{4,6}$/.test(pin)) return 'The PIN must be 4 to 6 digits, numbers only.';
+  if (!/^\d{4}$/.test(pin)) return 'The PIN must be 4 digits, numbers only.';
   const d = [...pin].map(Number);
   if (d.every((x) => x === d[0])) return 'That PIN is too easy to guess (the same digit repeated). Choose another.';
   const step = (n: number) => d.every((x, i) => i === 0 || x - d[i - 1] === n);

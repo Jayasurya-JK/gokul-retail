@@ -189,7 +189,6 @@ if (APPS.includes('pos')) {
     const page = await ctx.newPage();
     await page.goto('http://localhost:5180/'); await sleep(900);
     for (const d of '1111') { await page.keyboard.press(d); await sleep(60); }
-    await page.keyboard.press('Enter'); // a PIN is 4 to 6 digits now: Enter signs in
     await sleep(1200);
     const add = async (codes) => { for (const c of codes) { await hash(page, '#/billing'); await sleep(250); const i = page.locator('[data-scan-input]'); await i.focus(); await i.fill(c); await page.keyboard.press('Enter'); await sleep(350); } };
     for (const variant of ['no bill', 'open bill', 'held + open bill']) {

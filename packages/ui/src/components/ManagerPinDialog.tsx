@@ -27,7 +27,7 @@ export function ManagerPinDialog({ open, title = 'Manager approval', message, co
 
   const submit = async () => {
     if (busyRef.current) return;
-    if (pin.length < 4) { setError('Enter the PIN (4 to 6 digits)'); return; }
+    if (pin.length < 4) { setError('Enter the PIN (4 digits)'); return; }
     busyRef.current = true; setBusy(true);
     const err = await onSubmit(pin);
     busyRef.current = false; setBusy(false);
@@ -50,7 +50,7 @@ export function ManagerPinDialog({ open, title = 'Manager approval', message, co
         <p className="text-sm text-ink">{message}</p>
         <Field label="Manager or owner PIN" error={error}>
           <Input
-            value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null); }}
+            value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(null); }}
             data-autofocus type="password" inputMode="numeric" autoComplete="off" placeholder="PIN" icon={<KeyRound size={15} />}
             className={error ? 'num tracking-[0.3em] !border-danger' : 'num tracking-[0.3em]'}
           />

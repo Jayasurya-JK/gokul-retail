@@ -5,9 +5,8 @@ import { countdownText, lockedSeconds } from '@gokul/data';
 import { Kbd, Logo, StatusDot, clockTime, cn, darkenForWhite, useCountdown } from '@gokul/ui';
 import { api, useOpenLines, useSession } from '../store';
 
-/** A PIN is 4 to 6 digits (chosen by the person), so nothing is checked until Enter, or at the 6th digit. */
-const PIN_MIN = 4;
-const PIN_MAX = 6;
+/** A PIN is exactly 4 digits: it is checked as soon as the 4th digit is typed. The Sign in button is the mouse and touch way in. */
+const PIN_LEN = 4;
 
 /** Ctrl+L lock. The bill in progress stays exactly as it was; only the right PIN brings it back. */
 export function Lock() {
@@ -82,24 +81,24 @@ export function Lock() {
         <div className="mt-0.5 text-sm capitalize text-chrome-muted">{user.role} - {settings?.counter ?? '-'}</div>
 
         <div className={cn('mt-9 flex gap-4', error && 'animate-[shake_0.35s]')}>
-          {Array.from({ length: Math.max(PIN_MIN, pin.length) }, (_, i) => (
+          {Array.from({ length: PIN_LEN }, (_, i) => (
             <span key={i} className={cn('h-4 w-4 rounded-full border-2 transition-colors', i < pin.length ? (error ? 'border-danger bg-danger' : 'border-white bg-white') : 'border-white/35')} />
           ))}
         </div>
         <input
-          ref={inputRef} type="password" inputMode="numeric" autoComplete="off" value={pin} maxLength={PIN_MAX} aria-label="Enter your PIN to unlock"
+          ref={inputRef} type="password" inputMode="numeric" autoComplete="off" value={pin} maxLength={PIN_LEN} aria-label="Enter your PIN to unlock"
           onBlur={() => window.setTimeout(() => inputRef.current?.focus(), 0)}
           onChange={(e) => {
             if (busy || pinLocked) return;
-            const v = e.target.value.replace(/\D/g, '').slice(0, PIN_MAX);
+            const v = e.target.value.replace(/\D/g, '').slice(0, PIN_LEN);
             setPin(v);
-            if (v.length === PIN_MAX) window.setTimeout(() => void submit(v), 80);
+            if (v.length === PIN_LEN) window.setTimeout(() => void submit(v), 80);
           }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && pin.length >= PIN_MIN) { e.preventDefault(); void submit(pin); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && pin.length === PIN_LEN) { e.preventDefault(); void submit(pin); } }}
           className="sr-only"
         />
         <div className={cn('mt-4 h-5 text-sm font-medium', error || pinLocked ? 'text-danger' : 'text-chrome-muted')}>
-          {pinLocked ? <>Too many wrong PINs. Try again in <span className="num">{countdownText(left)}</span></> : error ? 'Wrong PIN. Try again.' : 'Type your PIN, then press Enter'}
+          {pinLocked ? <>Too many wrong PINs. Try again in <span className="num">{countdownText(left)}</span></> : error ? 'Wrong PIN. Try again.' : 'Type your PIN to unlock'}
         </div>
 
         <div className="mt-10 flex items-center gap-3 rounded-xl bg-white/[0.06] px-4 py-2.5 text-sm ring-1 ring-white/10">
@@ -110,7 +109,7 @@ export function Lock() {
       </main>
 
       <footer className="relative flex h-14 shrink-0 items-center justify-between px-8 text-sm text-chrome-muted">
-        <span className="flex items-center gap-1.5"><Kbd tone="chrome">0-9</Kbd> PIN <Kbd tone="chrome" className="ml-3">Enter</Kbd> unlock <Kbd tone="chrome" className="ml-3">Esc</Kbd> clear</span>
+        <span className="flex items-center gap-1.5"><Kbd tone="chrome">0-9</Kbd> PIN <Kbd tone="chrome" className="ml-3">Esc</Kbd> clear</span>
         <button tabIndex={-1} onClick={switchUser} className="flex h-9 items-center gap-2 rounded-lg px-3 text-chrome-ink hover:bg-white/10"><LogOut size={15} /> Switch user <Kbd tone="chrome">F2</Kbd></button>
       </footer>
     </div>

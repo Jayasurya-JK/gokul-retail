@@ -213,7 +213,7 @@ export interface UserInput {
   role: Role;
   phone: string;
   active: boolean;
-  /** PIN chosen by a person, 4 to 6 digits. Required for a new user. */
+  /** PIN chosen by a person, exactly 4 digits. Required for a new user. */
   pin?: string;
 }
 
@@ -1084,7 +1084,7 @@ export function createCrmMock(store: MockStore): CrmApi {
       if (input.pin) {
         const problem = pinRuleProblem(input.pin) ?? (pinInUse(input.pin, u?.id) ? 'Another user already has this PIN. Choose a different one.' : null);
         if (problem) return Promise.reject(new Error(problem));
-      } else if (!u) return Promise.reject(new Error('Choose a PIN (4 to 6 digits) for the new user.'));
+      } else if (!u) return Promise.reject(new Error('Choose a PIN (4 digits) for the new user.'));
       if (u) {
         u.name = input.name.trim(); u.role = input.role;
         if (input.pin) { u.pin = input.pin; accountState.get(u.id)!.pinChangedAt = new Date().toISOString(); }
