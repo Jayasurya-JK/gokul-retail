@@ -38,3 +38,6 @@
   background: rgb(253 224 110); color: rgb(92 51 8); font-size: 13px; font-weight: 700; line-height: 20px;
 }
 @media (max-height: 760px) { h1.home-title { font-size: 32px; } .home-tile { padding: 14px 18px; } }
+.home-today .home-lbl { font-size: clamp(14px, 1.95vh, 17px); font-weight: 500; color: rgb(71 85 105); margin-right: 8px; }
+.home-today .home-val { font-size: clamp(20px, 2.85vh, 28px); font-weight: 700; color: rgb(var(--ink)); letter-spacing: -0.01em; }
+.home-today .home-val.home-owed { color: rgb(var(--money-owed-ink)); }

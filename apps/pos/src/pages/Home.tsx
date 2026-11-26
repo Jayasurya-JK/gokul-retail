@@ -170,13 +170,12 @@ export function HomePage() {
           <div className="min-w-0">
             <h1 className="home-title truncate text-[40px] font-semibold leading-[1.1] tracking-tight text-ink min-[1600px]:text-[52px]">{shopName || 'Gokul Oils'}</h1>
             <div className="mt-1 truncate text-md text-muted min-[1600px]:text-lg">{town}</div>
-            <div className="num mt-4 flex flex-wrap items-baseline whitespace-nowrap text-md text-ink min-[1600px]:text-lg">
-              <span className="mr-3 font-semibold text-muted">Today</span>
-              <span className="font-semibold">{rupees(d?.todaySales ?? 0)}</span>{sep}
-              <span>{d?.todayBills ?? 0} {d?.todayBills === 1 ? 'bill' : 'bills'}</span>{sep}
-              <span>Cash {rupees(d?.cash ?? 0)}</span>{sep}
-              <span>UPI {rupees(d?.upi ?? 0)}</span>{sep}
-              <span className="font-semibold text-[rgb(var(--money-owed-ink))]">Owed {rupees(live.owed)}</span>
+            <div className="home-today num mt-4 flex items-baseline whitespace-nowrap">
+              <span className="home-lbl">Today</span><span className="home-val">{rupees(d?.todaySales ?? 0)}</span>{sep}
+              <span className="home-lbl">Bills</span><span className="home-val">{d?.todayBills ?? 0}</span>{sep}
+              <span className="home-lbl">Cash</span><span className="home-val">{rupees(d?.cash ?? 0)}</span>{sep}
+              <span className="home-lbl">UPI</span><span className="home-val">{rupees(d?.upi ?? 0)}</span>{sep}
+              <span className="home-lbl">Owed</span><span className="home-val home-owed">{rupees(live.owed)}</span>
             </div>
           </div>
           <div className="num shrink-0 text-right">
