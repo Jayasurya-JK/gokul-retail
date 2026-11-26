@@ -11,6 +11,5 @@ export const windowController = {
   isFullscreen: async (): Promise<boolean> => (isTauri ? (await win()).isFullscreen() : false),
   setFullscreen: async (on: boolean): Promise<void> => { if (isTauri) await (await win()).setFullscreen(on); },
   minimize: async (): Promise<void> => { if (isTauri) await (await win()).minimize(); },
-  maximize: async (): Promise<void> => { if (isTauri) await (await win()).maximize(); },
   close: async (): Promise<void> => { if (isTauri) await (await win()).close(); },
 };

@@ -9,8 +9,6 @@ export interface WindowController {
   isFullscreen(): Promise<boolean>;
   setFullscreen(on: boolean): Promise<void>;
   minimize(): Promise<void>;
-  /** Fills the screen except the taskbar. Used to let the taskbar show while the user still counts as "full screen". */
-  maximize(): Promise<void>;
   /** Asks the window to close (the same as the title bar cross). */
   close(): Promise<void>;
 }
@@ -31,25 +29,19 @@ interface WindowControls {
 
 const Ctx = createContext<WindowControls>({ available: false, fullscreen: false, toggleFullscreen: () => undefined, minimize: () => undefined, requestClose: () => undefined });
 
-/** Pointer must sit within this many px of the screen edge ... */
+/** Pointer must sit within this many px of the top edge ... */
 const EDGE_PX = 2;
-/** ... for this long before anything happens (a mouse flung past the edge does nothing). */
+/** ... for this long before the strip shows (a mouse flung past the edge does nothing). */
 const EDGE_DWELL_MS = 150;
-/** Back to full screen once the pointer has been this far above the bottom edge for this long. */
-const LEAVE_PX = 10;
-const LEAVE_DWELL_MS = 400;
 /** The top strip stays while the pointer is within this height; it hides after the pointer has been away this long. */
 const STRIP_ZONE_PX = 44;
 const STRIP_HIDE_MS = 350;
 const STRIP_TOUCH_HIDE_MS = 4000;
 
-const blockingUiOpen = () => !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]');
-
 /**
  * Full screen, minimize and close for the desktop window. Shift+F11 toggles full screen from anywhere (Esc is left alone, the POS uses it).
- * The apps start full screen with no taskbar. While full screen:
- *  - pointer at the bottom edge: the window becomes maximized so the Windows taskbar shows; moving back up returns to full screen;
- *  - pointer (or a touch) at the top edge: a slim strip with Minimize and Close slides in and hides when the pointer leaves.
+ * The apps start full screen. While full screen, pointer (or a touch) at the top edge slides in a slim strip with
+ * Minimize and Close, which hides when the pointer leaves.
  */
 export function WindowControlsProvider({ controller, closeGuard, children }: { controller: WindowController; closeGuard?: CloseGuard; children: ReactNode }) {
   const [fullscreen, setFs] = useState(false);
@@ -57,9 +49,7 @@ export function WindowControlsProvider({ controller, closeGuard, children }: { c
   const [confirmItems, setConfirmItems] = useState(0);
   const [closing, setClosing] = useState(false);
 
-  // The user's choice (fullscreen) can differ from what the window is doing: with the taskbar showing the window is maximized.
   const wantFs = useRef(false);
-  const taskbarMode = useRef(false);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const run = useCallback((job: () => Promise<void>) => {
     queue.current = queue.current.then(job).catch(() => undefined);
@@ -74,7 +64,6 @@ export function WindowControlsProvider({ controller, closeGuard, children }: { c
     if (!controller.available) return;
     void run(async () => {
       const next = !wantFs.current;
-      taskbarMode.current = false;
       await controller.setFullscreen(next);
       wantFs.current = next; setFs(next); setStrip(false);
     });
@@ -98,42 +87,16 @@ export function WindowControlsProvider({ controller, closeGuard, children }: { c
     return () => window.removeEventListener('keydown', h, true);
   }, [controller, toggleFullscreen]);
 
-  /* ---------- edge hover: bottom shows the taskbar, top shows the Minimize / Close strip ---------- */
+  /* ---------- top edge: the slim Minimize / Close strip ---------- */
   useEffect(() => {
     if (!controller.available || !fullscreen) return undefined;
-    let bottomTimer: number | undefined;
-    let leaveTimer: number | undefined;
     let topTimer: number | undefined;
     let hideTimer: number | undefined;
     const clear = (t: number | undefined) => { if (t !== undefined) window.clearTimeout(t); };
 
-    const showTaskbar = () => run(async () => {
-      if (!wantFs.current || taskbarMode.current) return;
-      taskbarMode.current = true;
-      await controller.setFullscreen(false);
-      await controller.maximize();
-    });
-    const backToFullscreen = () => run(async () => {
-      if (!wantFs.current || !taskbarMode.current) return;
-      taskbarMode.current = false;
-      await controller.setFullscreen(true);
-    });
-
     const onMove = (e: PointerEvent | MouseEvent) => {
       if ('pointerType' in e && e.pointerType !== 'mouse') return; // touch has its own handler below
       const y = e.clientY;
-      const h = window.innerHeight;
-      if (taskbarMode.current) {
-        // Taskbar showing: only a pointer clearly above the bottom edge (and no menu/dialog open) brings full screen back.
-        if (y < h - LEAVE_PX && document.hasFocus()) {
-          if (leaveTimer === undefined) leaveTimer = window.setTimeout(() => { leaveTimer = undefined; if (!blockingUiOpen()) void backToFullscreen(); }, LEAVE_DWELL_MS);
-        } else { clear(leaveTimer); leaveTimer = undefined; }
-        return;
-      }
-      // Full screen: dwell at the bottom edge shows the taskbar.
-      if (y >= h - EDGE_PX) {
-        if (bottomTimer === undefined) bottomTimer = window.setTimeout(() => { bottomTimer = undefined; void showTaskbar(); }, EDGE_DWELL_MS);
-      } else { clear(bottomTimer); bottomTimer = undefined; }
       // Top edge: dwell shows the strip; moving away hides it.
       if (y <= EDGE_PX) {
         clear(hideTimer); hideTimer = undefined;
@@ -144,11 +107,11 @@ export function WindowControlsProvider({ controller, closeGuard, children }: { c
         else if (y <= STRIP_ZONE_PX) { clear(hideTimer); hideTimer = undefined; }
       }
     };
-    const onLeave = () => { clear(bottomTimer); bottomTimer = undefined; clear(topTimer); topTimer = undefined; if (!taskbarMode.current) { clear(hideTimer); hideTimer = window.setTimeout(() => { hideTimer = undefined; setStrip(false); }, STRIP_HIDE_MS); } };
+    const onLeave = () => { clear(topTimer); topTimer = undefined; clear(hideTimer); hideTimer = window.setTimeout(() => { hideTimer = undefined; setStrip(false); }, STRIP_HIDE_MS); };
 
     // Touch or pen: a tap on the very top edge shows the strip; it hides on its own after a few seconds or a tap elsewhere.
     const onDown = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse' || taskbarMode.current) return;
+      if (e.pointerType === 'mouse') return;
       if (e.clientY <= 24) { setStrip(true); clear(hideTimer); hideTimer = window.setTimeout(() => { hideTimer = undefined; setStrip(false); }, STRIP_TOUCH_HIDE_MS); }
       else if (e.clientY > STRIP_ZONE_PX) setStrip(false);
     };
@@ -160,7 +123,7 @@ export function WindowControlsProvider({ controller, closeGuard, children }: { c
       window.removeEventListener('pointermove', onMove, true);
       document.removeEventListener('mouseleave', onLeave);
       window.removeEventListener('pointerdown', onDown, true);
-      clear(bottomTimer); clear(leaveTimer); clear(topTimer); clear(hideTimer);
+      clear(topTimer); clear(hideTimer);
     };
   }, [controller, fullscreen, run]);
 
