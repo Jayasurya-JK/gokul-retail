@@ -297,15 +297,15 @@ function FootRow({ children }: { children: ReactNode }) {
 /* ================================================================== */
 type ModeKey = 'cash' | 'upi' | 'card' | 'credit' | 'wallet' | 'points' | 'sodexo';
 /** Each pay mode keeps one calm colour everywhere on this screen, so one look shows how a bill was paid. */
-const ALL_MODES: { key: ModeKey; label: string; color: string; on: boolean }[] = [
-  { key: 'cash', label: 'Cash', color: 'rgb(var(--mode-cash))', on: true },
-  { key: 'upi', label: 'BharatQR / UPI', color: 'rgb(var(--mode-upi))', on: true },
-  { key: 'card', label: 'Card', color: 'rgb(var(--mode-card))', on: true },
-  { key: 'credit', label: 'Credit', color: 'rgb(var(--mode-credit))', on: true },
-  { key: 'points', label: 'Cust. points', color: 'rgb(var(--mode-points))', on: true },
+const ALL_MODES: { key: ModeKey; label: string; color: string; ink: string; on: boolean }[] = [
+  { key: 'cash', label: 'Cash', color: 'rgb(var(--mode-cash))', ink: 'rgb(var(--mode-cash-ink))', on: true },
+  { key: 'upi', label: 'BharatQR / UPI', color: 'rgb(var(--mode-upi))', ink: 'rgb(var(--mode-upi))', on: true },
+  { key: 'card', label: 'Card', color: 'rgb(var(--mode-card))', ink: 'rgb(var(--mode-card))', on: true },
+  { key: 'credit', label: 'Credit', color: 'rgb(var(--mode-credit))', ink: 'rgb(var(--mode-credit-ink))', on: true },
+  { key: 'points', label: 'Cust. points', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: true },
   // disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true / FEATURES.sodexo=true (see ../features.ts)
-  { key: 'wallet', label: 'Wallet', color: 'rgb(var(--mode-points))', on: FEATURES.wallet },
-  { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-points))', on: FEATURES.sodexo },
+  { key: 'wallet', label: 'Wallet', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: FEATURES.wallet },
+  { key: 'sodexo', label: 'Sodexo', color: 'rgb(var(--mode-points))', ink: 'rgb(var(--mode-points))', on: FEATURES.sodexo },
 ];
 const MODE_COLS = ALL_MODES.filter((m) => m.on);
 /* Each pay-mode column is its own tinted block: a faint tint on the whole column, a stronger one on its total.
@@ -369,7 +369,7 @@ export function PaymodeReportPage() {
           <FootRow>
             <span className="col-span-4 px-2 text-ink">{plural(t?.bills ?? 0, 'bill')}</span>
             <span className="px-2 text-right text-ink"><Money paise={t?.total ?? 0} symbol={false} /></span>
-            {MODE_COLS.map((m) => <span key={m.key} className={cn('px-2 text-right font-bold', PAY_DIVIDER)} style={{ color: m.color, ...modeTint(m.color, 0.10) }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
+            {MODE_COLS.map((m) => <span key={m.key} className={cn('px-2 text-right font-bold', PAY_DIVIDER)} style={{ color: m.ink, ...modeTint(m.color, 0.10) }}>{t?.[m.key] ? <Money paise={t[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}</span>)}
           </FootRow>
         }
       >
@@ -387,7 +387,7 @@ export function PaymodeReportPage() {
                 <Money paise={r.total} symbol={false} />
               </span>
               {MODE_COLS.map((m) => (
-                <span key={m.key} className={cn('px-2 text-right font-medium', PAY_DIVIDER, PAY_HOVER)} style={{ ...modeTint(m.color, 0.05), ...(i === sel ? { backgroundImage: PAY_SEL_OVERLAY } : {}), ...(r[m.key] ? { color: m.color } : {}) }}>
+                <span key={m.key} className={cn('px-2 text-right font-medium', PAY_DIVIDER, PAY_HOVER)} style={{ ...modeTint(m.color, 0.05), ...(i === sel ? { backgroundImage: PAY_SEL_OVERLAY } : {}), ...(r[m.key] ? { color: m.ink } : {}) }}>
                   {r[m.key] ? <Money paise={r[m.key]} symbol={false} /> : <span className="font-normal text-line-strong">-</span>}
                 </span>
               ))}
