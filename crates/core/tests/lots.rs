@@ -316,3 +316,61 @@ fn real_copy_lots_equal_balances() {
     })
     .unwrap();
 }
+
+/// Points applied in the bill panel (typed before Pay now) reach the core as one "points" payment next to the cash/UPI rest.
+/// They must be stored exactly like a payment-window redemption: a PTS credit-note payment, lots used once, GST untouched,
+/// and the Paymode report showing the points column. A held bill keeps the applied points.
+#[test]
+fn points_applied_in_the_bill_panel_save_as_a_points_payment_and_use_lots_once() {
+    let (_d, db) = mini_db();
+    db.with(|c| {
+        give_lot(c, "c1", 6_000, "2027-01-01T00:00:00.000Z");
+        give_lot(c, "c1", 7_000, "2027-06-01T00:00:00.000Z");
+        let plain = draft_with(oil(1000), 0, None, "cash"); // same bill without points: the tax to compare with
+        let plain_bill = save_bill(c, &plain)?;
+
+        // held: the panel's points (whole points) come back unchanged when the bill is recalled
+        let mut held = draft_with(oil(1000), 0, Some("c1"), "cash");
+        held.payments = vec![];
+        held.extras.points_applied = 100;
+        let h = gokul_core::bills::hold_bill(c, &held)?;
+        assert_eq!(h.extras.points_applied, 100);
+        let back = gokul_core::bills::recall_held(c, &h.id)?.expect("held bill is there");
+        assert_eq!(back.extras.points_applied, 100, "a held bill keeps the points applied in the panel");
+        assert_eq!(loyalty::balance(c, "c1")?, 13_000, "holding never spends points");
+
+        // Rs 360 bill: 100 points (Rs 100) applied in the panel, Rs 260 by UPI in the payment window
+        let mut d = draft_with(oil(1000), 0, Some("c1"), "upi");
+        d.payments = vec![pay("points", 10_000), pay("upi", 26_000)];
+        let b = save_bill(c, &d)?;
+        assert_eq!(b.totals.grand, 36_000, "points are a payment: the bill total does not move");
+        assert_eq!(b.totals.grand, plain_bill.totals.grand);
+        assert_eq!(b.totals.slabs[0].taxable, plain_bill.totals.slabs[0].taxable, "GST and taxable value are the same as without points");
+        assert_eq!(b.totals.discount, 0, "not a discount line");
+        let saved: Vec<(String, i64, Option<String>)> = {
+            let mut st = c.prepare("SELECT mode,amount,ref FROM bill_payments WHERE bill_id=?1 ORDER BY id")?;
+            let rows = st.query_map([b.id.trim_start_matches('b').parse::<i64>().unwrap()], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<Result<Vec<_>, _>>()?;
+            rows
+        };
+        assert_eq!(saved[0], ("credit_note".to_string(), 10_000, Some("PTS".to_string())), "stored as the PTS payment, like the payment window does");
+        assert_eq!(saved[1].0, "upi");
+
+        // oldest lot first, used exactly once: 60.00 gone, 40.00 of the next
+        let l = lot_rows(c, "c1");
+        assert_eq!(l[0].1, 0);
+        assert_eq!(l[1].1, 7_000 - 4_000);
+        assert_eq!(loyalty::balance(c, "c1")? - 260, 13_000 - 10_000, "100 points redeemed once (the rest is the bill's own earning of 2.60)");
+        let redeems: i64 = c.query_row("SELECT COUNT(*) FROM points_ledger WHERE customer_id='c1' AND kind='redeem'", [], |r| r.get(0))?;
+        assert_eq!(redeems, 1);
+        lots_match_balance(c, "c1");
+
+        // the Paymode report shows the points in its own column
+        let rep = gokul_core::posreports::paymode_report(c, &Default::default())?;
+        let row = rep["rows"].as_array().unwrap().iter().find(|r| r["number"] == json!(b.number)).expect("bill is in the report");
+        assert_eq!(row["points"], 10_000);
+        assert_eq!(row["upi"], 26_000);
+        assert_eq!(row["wallet"], 0, "points are not counted as store credit");
+        Ok(())
+    })
+    .unwrap();
+}

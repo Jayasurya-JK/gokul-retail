@@ -221,6 +221,10 @@ pub struct BillExtras {
     /// Cash discount in paise as saved (already part of the bill-level discount).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cash_disc: i64,
+    /// Held bills only: whole loyalty points the cashier applied in the bill panel. It is kept so a recalled bill shows it again;
+    /// the real redemption is the "points" payment sent when the bill is saved.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub points_applied: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub remarks: String,
     /// Exchange credit was larger than this bill: the difference handed back to the customer (needs a manager PIN).

@@ -122,6 +122,8 @@ export interface BillExtras {
   cashDiscBps?: number;
   /** Saved cash discount in paise (already inside the bill-level discount) */
   cashDisc?: Paise;
+  /** Held bills: whole loyalty points applied in the bill panel (the real redemption is the 'points' payment at save) */
+  pointsApplied?: number;
   remarks?: string;
   /** Exchange credit was bigger than this bill: the rest goes back to the customer in cash or UPI (needs a manager PIN) */
   exchangeRefund?: ExchangeRefund;

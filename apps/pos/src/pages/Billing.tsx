@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ScanBarcode, XCircle } from 'lucide-react';
 import {
-  cashDiscount, computeTotalsWithDelivery, supplyFor, formatQty, formatRupees, lineGross, parsePaise, parseQty,
+  cashDiscBpsForRupees, cashDiscount, checkPointsTyped, computeTotalsWithDelivery, percentDiscount, pointsLimit, supplyFor, formatQty, formatRupees, lineGross, parsePaise, parseQty,
   type BillLine, type CreditNote, type Customer, type CustomerWallet, type HeldBill, type Item, type Payment,
 } from '@gokul/data';
 import { Kbd, ManagerPinDialog, PosLayout, cn, useRefreshOnFocus, useToast, type FKey } from '@gokul/ui';
@@ -32,7 +32,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /* Point of Sale and POS 1 are two separate bills: this screen shows the one for its tab, the other keeps its state. */
   const useBilling = billingStores[slot];
   const B = useBilling();
-  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps, placeOfSupply } = B;
+  const { lines, selected, customer, billDiscount, staff, delivery, wholesale, cashDiscBps, placeOfSupply, pointsApplied } = B;
 
   const [items, setItems] = useState<Item[]>([]);
   const [scan, setScan] = useState('');
@@ -45,6 +45,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const [lastBill, setLastBill] = useState<{ number: string; total: number } | null>(null);
   const lastBillId = useRef<string | null>(null);
   const [wallet, setWallet] = useState<CustomerWallet | null>(null);
+  /** The customer the loaded wallet belongs to (a wallet from the previous customer is never used) */
+  const [walletOf, setWalletOf] = useState<string | null>(null);
   const customerId = customer?.id;
   const [billNo, setBillNo] = useState('');
   const [exchange, setExchange] = useState<CreditNote | null>(null);
@@ -58,6 +60,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   /** Store credit (wallet / credit notes) put on this bill, in paise. A different customer never keeps it. */
   const [storeCredit, setStoreCredit] = useState(0);
   const [storeFocus, setStoreFocus] = useState(0);
+  /** Alt+P asks the summary panel to put the cursor in the inline Points box. */
+  const [pointsFocus, setPointsFocus] = useState(0);
   const removed = useRef<{ line: BillLine; at: number } | null>(null);
 
   const itemMap = useMemo(() => {
@@ -82,7 +86,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   const extras = () => ({
     staff: staff || undefined, deliveryAddress: delivery.address || undefined, deliveryLocality: delivery.locality || undefined,
     deliveryCharge: delivery.charge || undefined, wholesale: wholesale || undefined, cashDiscBps: cashDiscBps || undefined,
-    placeOfSupply: placeOfSupply || undefined,
+    placeOfSupply: placeOfSupply || undefined, pointsApplied: pointsUsedPts || undefined,
   });
   /* Exchange credit pays part of the bill like a payment (GST on the bill stays as is). A bigger credit than the bill is allowed:
      the difference goes back to the customer (cash or UPI, manager PIN, audited), chosen in the payment window. */
@@ -92,7 +96,18 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   // wallet (store credit) disabled 26 Nov 2026 by owner; re-enable by setting FEATURES.wallet=true
   const storeCreditAvail = FEATURES.wallet && customer ? wallet?.storeCredit ?? 0 : 0;
   const storeCreditUsed = Math.min(storeCredit, storeCreditAvail, Math.max(0, totals.grand - exchangeUsed));
-  const due = totals.grand - exchangeUsed - storeCreditUsed;
+  /* Loyalty points typed in the panel. They are paid as a "points" payment (the same one the payment window makes), so the GST on the
+     bill, the Paymode report and the points ledger stay as they are. Only whole points, within the rules and never more than the
+     bill still needs: when items or the customer change, what is applied shrinks or goes to zero by itself. */
+  const rules = wallet?.rules;
+  const pv = rules?.pointValue ?? 100;
+  const walletOk = !!customer && !!wallet && walletOf === customer.id;
+  const pointsBalance = walletOk ? wallet!.points : 0;
+  const payableBeforePoints = Math.max(0, totals.grand - exchangeUsed - storeCreditUsed);
+  const pointsMax = pointsLimit(rules, pointsBalance, totals.grand, payableBeforePoints);
+  const pointsUsedPts = walletOk && rules && pointsApplied >= Math.max(1, rules.minRedeem) ? Math.min(pointsApplied, pointsMax.maxPoints) : 0;
+  const pointsUsed = pointsUsedPts >= (rules?.minRedeem ?? 0) ? pointsUsedPts * pv : 0;
+  const due = totals.grand - exchangeUsed - storeCreditUsed - pointsUsed;
   const refundDue = exchange && totals.grand > 0 ? Math.max(0, exchangeCredit - totals.grand) : 0;
 
   /* The store-credit box belongs to one customer: removing or changing them starts it at zero again. */
@@ -124,11 +139,18 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
   // store credit and loyalty points of the attached customer (refreshed after every bill)
   useEffect(() => {
     let live = true;
-    if (!customerId) { setWallet(null); return; }
-    api.getCustomerWallet(customerId).then((w) => live && setWallet(w)).catch(() => live && setWallet(null));
+    if (!customerId) { setWallet(null); setWalletOf(null); return; }
+    api.getCustomerWallet(customerId).then((w) => { if (live) { setWallet(w); setWalletOf(customerId); } }).catch(() => { if (live) { setWallet(null); setWalletOf(null); } });
     return () => { live = false; };
   }, [customerId, lastBill, tick]);
   useEffect(() => { api.peekNextBillNumber().then(setBillNo); }, [lastBill]);
+  /* Points applied never stay above what the rules and the bill allow now (items removed, bill got smaller, balance changed). */
+  useEffect(() => {
+    if (!walletOk || pointsApplied === pointsUsedPts) return;
+    if (pointsApplied > 0) toast.show({ tone: 'info', title: pointsUsedPts > 0 ? `Points changed to ${pointsUsedPts}` : 'Points taken off the bill', detail: 'The bill changed, so the points no longer fit the rules.' });
+    B.setPointsApplied(pointsUsedPts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletOk, pointsApplied, pointsUsedPts]);
 
   /* Focus: the scan box owns the keyboard unless a dialog or cell editor is open. */
   const focusScan = useCallback(() => requestAnimationFrame(() => scanRef.current?.focus()), []);
@@ -308,6 +330,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     setSaving(true);
     try {
       const all: Payment[] = [
+        ...(pointsUsed > 0 ? [{ mode: 'points' as const, amount: pointsUsed }] : []),
         ...(exchange && exchangeUsed > 0 ? [{ mode: 'credit_note' as const, amount: exchangeUsed, ref: exchange.number }] : []),
         ...(storeCreditUsed > 0 ? storeCreditPayments(storeCreditUsed) : []),
         ...payments,
@@ -327,7 +350,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
         tone: 'success', title: `Bill ${bill.number} saved`,
         detail: exchangeRefund ? `Give ${formatRupees(exchangeRefund.amount)} back to the customer (${exchangeRefund.mode.toUpperCase()})`
           : change > 0 ? `Give change ${formatRupees(change)}` : payments.length ? payments.map((p) => p.mode.toUpperCase()).join(' + ') + ' received'
-          : storeCreditUsed > 0 ? `Paid by store credit (${formatRupees(storeCreditUsed, { decimals: false })})` : 'Paid by exchange credit',
+          : storeCreditUsed > 0 ? `Paid by store credit (${formatRupees(storeCreditUsed, { decimals: false })})` : pointsUsed > 0 && !exchange ? `Paid by ${pointsUsedPts} points` : 'Paid by exchange credit',
       });
       return null;
     } catch (e) {
@@ -383,21 +406,27 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     B.setWholesale(on, (id) => byId.get(id));
     toast.show({ tone: 'info', title: on ? 'Wholesale prices on' : 'Wholesale prices off', detail: on ? 'Items without a wholesale price keep the normal price.' : 'Back to normal prices.' });
   };
-  /** Inline cash discount: "50" is Rs 50 off the bill, "2.5%" is two and a half percent. Stored as percent x 100. */
+  /** Inline cash discount: rupees only. "5" is Rs 5 off the bill. It is kept as a percent (bps) of the item lines, as before. */
   const applyCashDiscount = (v: string) => {
     const t = v.trim();
     if (!t || t === '0') { B.setCashDisc(0); return; }
-    if (t.endsWith('%')) {
-      const pct = Number(t.slice(0, -1));
-      if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Cash discount must be between 0% and 100%' }); return; }
-      B.setCashDisc(Math.round(pct * 100));
-      return;
-    }
-    const net = lines.reduce((s, l) => s + l.amount, 0);
+    const net = lines.reduce((x, l) => x + l.amount, 0);
     const amt = parsePaise(t);
     if (net <= 0) { toast.show({ tone: 'info', title: 'Add items before a cash discount' }); return; }
-    if (amt === null || amt < 0) { toast.show({ tone: 'error', title: 'Type an amount like 50, or a percent like 2.5%' }); return; }
-    B.setCashDisc(Math.min(10000, Math.round((amt * 10000) / net)));
+    if (amt === null || amt <= 0) { toast.show({ tone: 'error', title: 'Type the cash discount in rupees, like 5' }); return; }
+    if (amt + billDiscount > net) { toast.show({ tone: 'error', title: 'Cash discount is more than the bill', detail: `At most ${formatRupees(Math.max(0, net - billDiscount))} can be taken off.` }); return; }
+    B.setCashDisc(cashDiscBpsForRupees(lines, amt));
+  };
+  /** Points typed in the panel: whole points to pay part of the bill. Returns a plain-words reason when they cannot be used. */
+  const applyPoints = (v: string): string | null => {
+    const t = v.trim();
+    if (!t || t === '0') { B.setPointsApplied(0); return null; }
+    if (!customer) return 'Choose a customer first (F11). Points belong to a customer.';
+    if (!walletOk) return 'Points are still loading. Try again in a moment.';
+    const r = checkPointsTyped(t, rules, pointsBalance, totals.grand, payableBeforePoints);
+    if ('error' in r) return r.error;
+    B.setPointsApplied(r.points);
+    return null;
   };
   /** Store credit typed in the panel: rupees of the customer's wallet (open credit notes) to use on this bill. */
   const applyStoreCredit = (v: string) => {
@@ -456,6 +485,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSearchSeed(scanQ.text); setScan(''); setDialog('search'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'd') { e.preventDefault(); if (selected >= 0) startEdit('disc'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setCashFocus((n) => n + 1); return; }
+    if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'p') { e.preventDefault(); setPointsFocus((n) => n + 1); return; }
     if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); setStoreFocus((n) => n + 1); return; }
     if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'w') { e.preventDefault(); toggleWholesale(); return; }
     if (e.ctrlKey && e.key.toLowerCase() === 'p') {
@@ -504,20 +534,15 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  /** Whole-bill discount typed in the right panel: 50 = Rs 50 off, 5% = five percent off. Empty clears it. */
+  /** Whole-bill discount typed in the right panel: percent only, "5" is five percent off. Empty clears it. The role's discount limit is checked when the bill is saved (manager PIN). */
   const applyBillDiscount = (v: string) => {
     const net = lines.reduce((x, l) => x + l.amount, 0);
     const d = v.trim();
     if (d === '') { B.setBillDiscount(0); return; }
-    if (d.endsWith('%')) {
-      const pct = Number(d.slice(0, -1));
-      if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast.show({ tone: 'error', title: 'Discount must be between 0% and 100%' }); return; }
-      B.setBillDiscount(Math.round((net * pct) / 100));
-    } else {
-      const amt = parsePaise(d);
-      if (amt === null) { toast.show({ tone: 'error', title: 'Type an amount like 50, or a percent like 5%' }); return; }
-      B.setBillDiscount(Math.min(amt, net));
-    }
+    const off = percentDiscount(net, d);
+    if (off === null) { toast.show({ tone: 'error', title: 'Type a percent from 0 to 100, like 5' }); return; }
+    if (off + cashDisc > net) { toast.show({ tone: 'error', title: 'Discount and cash discount are more than the bill' }); return; }
+    B.setBillDiscount(off);
   };
 
   const pickCustomer = (c: Customer | null) => { B.setCustomer(c); setDialog(null); };
@@ -549,6 +574,8 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
           slotLabel={SLOT_LABEL[slot]} wholesale={wholesale} cashDisc={cashDisc} cashDiscBps={cashDiscBps}
           supply={supply} shopState={shopState} onPlace={() => setDialog('place')}
           focusCashDisc={cashFocus} onApplyCashDisc={applyCashDiscount} onClearCashDisc={() => B.setCashDisc(0)}
+          pointsRow={walletOk && rules?.enabled && pointsBalance > 0 ? { balance: pointsBalance, maxPoints: pointsMax.maxPoints, maxWorth: pointsMax.worth, minRedeem: rules.minRedeem, applied: pointsUsedPts, amount: pointsUsed } : null}
+          focusPoints={pointsFocus} onApplyPoints={applyPoints} onClearPoints={() => B.setPointsApplied(0)}
           storeCredit={storeCreditAvail} storeCreditUsed={storeCreditUsed} focusStoreCredit={storeFocus}
           onApplyStoreCredit={applyStoreCredit} onClearStoreCredit={() => setStoreCredit(0)}
           delivery={delivery} onDelivery={() => setDialog('delivery')} onWholesale={toggleWholesale} staff={staff} onStaff={() => setDialog('staff')}
@@ -622,7 +649,7 @@ export function Billing({ slot = 'pos' }: { slot?: BillSlot }) {
       <CustomerDialog open={dialog === 'customer'} current={customer} onClose={() => setDialog(null)} onPick={pickCustomer} />
       <HeldDialog open={dialog === 'held'} held={held} onClose={() => setDialog(null)} onPick={(h) => void recall(h)} />
       <PaymentDialog
-        open={dialog === 'pay'} total={due} billTotal={totals.grand} storeCredit={storeCreditUsed} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
+        open={dialog === 'pay'} total={due} billTotal={totals.grand} storeCredit={storeCreditUsed} pointsApplied={pointsUsed} customer={customer} wallet={wallet} busy={saving} onClose={() => setDialog(null)}
         exchange={exchange ? { credit: exchangeCredit, number: exchange.number, billNumber: exchange.billNumber } : null}
         onComplete={(p, c, refund) => void complete(p, c, undefined, refund)} onCustomerUpdate={(c) => B.setCustomer(c)}
       />

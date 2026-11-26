@@ -166,3 +166,65 @@ export const creditUnlimited = (limit: Paise) => limit < 0;
 /** What a customer can still take on credit; null when there is no limit, 0 when credit is not allowed. */
 export const creditLeft = (c: { creditLimit: Paise; outstanding: Paise }): Paise | null =>
   c.creditLimit < 0 ? null : c.creditLimit === 0 ? 0 : Math.max(0, c.creditLimit - c.outstanding);
+
+/* ---------- counter discount boxes and points on the bill panel ---------- */
+
+/** Whole-bill discount box: percent only. Returns paise off `net`, or null when the text is not a percent from 0 to 100. */
+export function percentDiscount(net: Paise, typed: string): Paise | null {
+  const t = typed.trim();
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(t)) return null;
+  const pct = Number(t);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return null;
+  return Math.round((net * pct) / 100);
+}
+
+/**
+ * Cash discount box: rupees only. The bill keeps it as percent x 100 (bps) of the item lines, so this finds the bps whose
+ * rupee result is nearest the typed amount (exact to the paise on normal bills). Capped at the whole bill.
+ */
+export function cashDiscBpsForRupees(lines: BillLine[], amount: Paise): number {
+  const net = lines.reduce((s, l) => s + l.amount, 0);
+  if (net <= 0 || !(amount > 0)) return 0;
+  if (amount >= net) return 10000;
+  const guess = Math.round((amount * 10000) / net);
+  let best = guess;
+  let bestErr = Infinity;
+  for (let b = Math.max(0, guess - 3); b <= Math.min(10000, guess + 3); b++) {
+    const err = Math.abs(cashDiscount(lines, b) - amount);
+    if (err < bestErr) { best = b; bestErr = err; }
+  }
+  return best;
+}
+
+export interface PointsRules { enabled: boolean; pointValue: Paise; minRedeem: number; maxPct: number }
+
+/**
+ * What points can pay on one bill, in whole points. `billTotal` is the bill's grand total (the max-percent rule is on that);
+ * `payable` is what is still unpaid after credit and other points. Same checks as loyalty::redeem_for_bill in Rust.
+ */
+export function pointsLimit(rules: PointsRules | undefined, balance: number, billTotal: Paise, payable: Paise): { maxPoints: number; worth: Paise } {
+  if (!rules || !rules.enabled || !(rules.pointValue > 0) || balance <= 0) return { maxPoints: 0, worth: 0 };
+  const pv = rules.pointValue;
+  const byBalance = Math.floor(balance + 1e-9);
+  const byPct = Math.floor(Math.floor((billTotal * rules.maxPct) / 100) / pv);
+  const byBill = Math.floor(Math.max(0, payable) / pv);
+  const maxPoints = Math.max(0, Math.min(byBalance, byPct, byBill));
+  return { maxPoints, worth: maxPoints * pv };
+}
+
+/** Checks points typed on the panel. Returns whole points to use, or a plain-words reason why not. */
+export function checkPointsTyped(typed: string, rules: PointsRules | undefined, balance: number, billTotal: Paise, payable: Paise): { points: number } | { error: string } {
+  if (!rules || !rules.enabled) return { error: 'Loyalty points are switched off.' };
+  const t = typed.trim();
+  if (!/^\d+(\.\d+)?$/.test(t)) return { error: 'Type the number of points, like 200.' };
+  const pts = Number(t);
+  if (!Number.isInteger(pts)) return { error: 'Use whole points, like 200.' };
+  if (pts <= 0) return { error: 'Type the number of points, like 200.' };
+  if (pts < rules.minRedeem) return { error: `Below the minimum: at least ${rules.minRedeem} points are needed.` };
+  if (pts > Math.floor(balance + 1e-9)) return { error: `More than the balance: the customer has only ${Math.floor(balance + 1e-9)} points.` };
+  const byPct = Math.floor(Math.floor((billTotal * rules.maxPct) / 100) / rules.pointValue);
+  if (pts > byPct) return { error: `More than ${rules.maxPct}% of the bill: at most ${byPct} points can be used on this bill.` };
+  const { maxPoints } = pointsLimit(rules, balance, billTotal, payable);
+  if (pts > maxPoints) return { error: `More than the bill needs: at most ${maxPoints} points can be used now.` };
+  return { points: pts };
+}

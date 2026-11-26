@@ -117,6 +117,15 @@ export function createMockApi(): Api {
         placeOfSupply: supply.place, supplyType: supply.inter ? 'inter' : 'intra', customerGstin: supply.gstin || undefined,
       };
       bills.push(bill);
+      // Points used on the bill come off the customer's balance once, like loyalty::redeem_for_bill in Rust.
+      const usedPts = draft.payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
+      if (usedPts > 0) {
+        if (!cust) throw new Error('Points need a customer');
+        const pv = 100; // preview shop: one point is Rs 1
+        if (usedPts % pv !== 0) throw new Error('Points are used in whole points.');
+        if (usedPts / pv > cust.loyaltyPoints + 1e-9) throw new Error('The customer does not have that many points.');
+        cust.loyaltyPoints = Math.round((cust.loyaltyPoints - usedPts / pv) * 100) / 100;
+      }
       for (const l of draft.lines) {
         const it = byId.get(l.itemId);
         if (it) it.stock -= l.qty;
@@ -137,7 +146,7 @@ export function createMockApi(): Api {
         customerId: draft.customerId, lines: draft.lines, billDiscount: draft.billDiscount,
         total: computeTotalsWithDelivery(draft.lines, draft.billDiscount + cashDiscount(draft.lines, draft.cashDiscBps ?? 0), true, draft.deliveryCharge ?? 0, settings.deliveryGstRate ?? 0).grand,
         staff: draft.staff, deliveryAddress: draft.deliveryAddress, deliveryLocality: draft.deliveryLocality, deliveryCharge: draft.deliveryCharge,
-        wholesale: draft.wholesale, cashDiscBps: draft.cashDiscBps, remarks: draft.remarks,
+        wholesale: draft.wholesale, cashDiscBps: draft.cashDiscBps, remarks: draft.remarks, pointsApplied: draft.pointsApplied,
       };
       held.push(h);
       return h;

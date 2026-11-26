@@ -26,7 +26,7 @@ const ceilTo = (paise: number, step: number) => Math.ceil(paise / step) * step;
 /** Exchange credit carried into this bill (from the Returns screen). */
 export interface ExchangeInfo { credit: number; number: string; billNumber: string }
 
-export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
+export function PaymentDialog({ open, total, billTotal, storeCredit, pointsApplied, exchange, customer, wallet, onClose, onComplete, busy, onCustomerUpdate }: {
   open: boolean;
   /** What the customer still has to pay for this bill (after any exchange credit and store credit); 0 when the credit covers it */
   total: number;
@@ -34,6 +34,8 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
   billTotal: number;
   /** Store credit already put on the bill in the summary panel; it is saved as Wallet (credit note) payments */
   storeCredit?: number;
+  /** Paise of loyalty points already applied in the summary panel; they are saved as a points payment and are not entered again here */
+  pointsApplied?: number;
   exchange?: ExchangeInfo | null;
   customer: Customer | null; wallet?: CustomerWallet | null; onClose: () => void; busy: boolean;
   onCustomerUpdate?: (c: Customer) => void;
@@ -43,6 +45,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
   const refund = exchange && billTotal < exchange.credit ? exchange.credit - billTotal : 0;
   const covered = !refund && total === 0;
   const storeApplied = storeCredit ?? 0;
+  const pointsApplied0 = pointsApplied ?? 0;
   const [payments, setPayments] = useState<Payment[]>([]);
   const [mode, setMode] = useState<PayMode>('cash');
   const [field, setField] = useState('');
@@ -71,7 +74,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
   const spentCredit = storeApplied + payments.filter((p) => p.mode === 'credit_note').reduce((s, p) => s + p.amount, 0);
   const creditAvail = Math.max(0, (wallet?.storeCredit ?? 0) - spentCredit);
   const rules = wallet?.rules;
-  const spentPoints = payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
+  const spentPoints = pointsApplied0 + payments.filter((p) => p.mode === 'points').reduce((s, p) => s + p.amount, 0);
   const pv = rules?.pointValue ?? 100;
   const pointsCap = rules && wallet && rules.enabled
     ? Math.min(Math.floor(wallet.points) * pv - spentPoints, Math.floor((billTotal * rules.maxPct) / 100) - spentPoints, remaining)
@@ -178,7 +181,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
         <div className="flex items-end justify-between gap-6 bg-chrome px-6 pb-4 pt-4 text-white">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-chrome-muted">
-              {refund ? 'Refund to customer' : covered ? 'Nothing to pay' : payments.length ? 'Balance to pay' : exchange ? 'Customer pays' : 'Bill amount'}
+              {refund ? 'Refund to customer' : covered ? 'Nothing to pay' : payments.length ? 'Balance to pay' : exchange ? 'Customer pays' : pointsApplied0 > 0 ? 'To pay after points' : 'Bill amount'}
             </div>
             <div className="num font-semibold leading-none tracking-tight" style={{ fontSize: 52 }}><Money paise={refund || remaining} softPaise /></div>
           </div>
@@ -186,8 +189,8 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
             <div className="truncate">{customer ? customer.name : 'Walk-in customer'}</div>
             {exchange ? (
               <div className="num mt-0.5 text-chrome-ink">New items {formatRupees(billTotal)} - exchange credit {formatRupees(exchange.credit)}</div>
-            ) : storeApplied > 0 ? (
-              <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(billTotal)} - store credit {formatRupees(storeApplied)}</div>
+            ) : storeApplied > 0 || pointsApplied0 > 0 ? (
+              <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(billTotal)}{storeApplied > 0 && <> - store credit {formatRupees(storeApplied)}</>}{pointsApplied0 > 0 && <> - points {formatRupees(pointsApplied0)}</>}</div>
             ) : payments.length > 0 ? (
               <div className="num mt-0.5 text-chrome-ink">Bill total {formatRupees(total)}</div>
             ) : null}
@@ -198,7 +201,7 @@ export function PaymentDialog({ open, total, billTotal, storeCredit, exchange, c
           <div className="min-w-0 border-r border-line p-5">
             {covered ? (
               <div className="rounded-xl bg-success-soft px-4 py-3 text-sm font-medium text-success">
-                {exchange ? <>The exchange credit <b className="num">{exchange.number}</b> pays this bill in full.</> : <>The store credit pays this bill in full.</>} Press Enter to save it.
+                {exchange ? <>The exchange credit <b className="num">{exchange.number}</b> pays this bill in full.</> : pointsApplied0 > 0 && storeApplied === 0 ? <>The points pay this bill in full.</> : <>The store credit pays this bill in full.</>} Press Enter to save it.
               </div>
             ) : (
               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleModes.length}, minmax(0, 1fr))` }}>

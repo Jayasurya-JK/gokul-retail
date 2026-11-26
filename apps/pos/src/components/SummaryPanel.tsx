@@ -111,7 +111,7 @@ function TaxBox({ slabs, inter }: { slabs: Slab[]; inter: boolean }) {
   );
 }
 
-export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, cashDiscBps, focusCashDisc, onApplyCashDisc, onClearCashDisc, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, onWholesale, staff, onStaff, supply, shopState, onPlace }: {
+export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDiscount, onClearDiscount, onApplyDiscount, lastBill, billNo, exchange, exchangeCredit, due, refundDue, onDropExchange, slotLabel, wholesale, cashDisc, focusCashDisc, onApplyCashDisc, onClearCashDisc, pointsRow, focusPoints, onApplyPoints, onClearPoints, storeCredit, storeCreditUsed, focusStoreCredit, onApplyStoreCredit, onClearStoreCredit, delivery, onDelivery, onWholesale, staff, onStaff, supply, shopState, onPlace }: {
   totals: BillTotals; customer: Customer | null; wallet?: CustomerWallet | null; onCustomer: () => void; onPay: () => void;
   /** Opens the whole-bill discount box (Shift+F5 does the same) */
   onDiscount: () => void; onClearDiscount: () => void;
@@ -123,6 +123,9 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   slotLabel?: string; wholesale?: boolean;
   /** Cash discount in paise and as percent x 100; separate from item discounts (Ctrl+K). The box applies a rupee amount or a percent. */
   cashDisc: number; cashDiscBps: number; focusCashDisc: number; onApplyCashDisc: (typed: string) => void; onClearCashDisc: () => void;
+  /** Points row: shown only when the customer has points and loyalty is on. `maxPoints` / `maxWorth` is what the rules allow on this bill today. */
+  pointsRow: { balance: number; maxPoints: number; maxWorth: number; minRedeem: number; applied: number; amount: number } | null;
+  focusPoints: number; onApplyPoints: (typed: string) => string | null; onClearPoints: () => void;
   /** Store credit (the customer's wallet / open credit notes) put on this bill, and how much of it this bill can use (Alt+C). */
   storeCredit: number; storeCreditUsed: number; focusStoreCredit: number; onApplyStoreCredit: (typed: string) => void; onClearStoreCredit: () => void;
   delivery: Delivery; onDelivery: () => void; onWholesale: () => void;
@@ -132,7 +135,10 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
 }) {
   const cashRef = useRef<HTMLInputElement>(null);
   const storeRef = useRef<HTMLInputElement>(null);
+  const pointsRef = useRef<HTMLInputElement>(null);
+  const [pointsMsg, setPointsMsg] = useState('');
   useEffect(() => { if (focusCashDisc > 0) { cashRef.current?.focus(); cashRef.current?.select(); } }, [focusCashDisc]);
+  useEffect(() => { if (focusPoints > 0) { pointsRef.current?.focus(); pointsRef.current?.select(); } }, [focusPoints]);
   useEffect(() => { if (focusStoreCredit > 0) { storeRef.current?.focus(); storeRef.current?.select(); } }, [focusStoreCredit]);
   const itemDisc = totals.discount - cashDisc;
   const goods = totals.gross - delivery.charge;
@@ -226,27 +232,49 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
         <GridRow label="Subtotal" amount={<Money paise={goods} />} />
         <GridRow
           label={itemDisc ? `Discount ${pct}%` : 'Discount'} tone={itemDisc ? 'success' : undefined}
-          box={<AmountBox disabled={empty} onApply={onApplyDiscount} onEmpty={onDiscount} placeholder="₹ or %" ariaLabel="Discount in rupees, or percent like 5%" />}
+          box={<AmountBox kind="percent" disabled={empty} onApply={onApplyDiscount} onEmpty={onDiscount} placeholder="0" ariaLabel="Discount in percent, like 5" title="Discount on the whole bill, in percent" />}
           amount={<Money paise={-itemDisc} />}
           clear={itemDisc > 0
             ? <button type="button" tabIndex={-1} onClick={onClearDiscount} title="Remove the discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
             : undefined}
         />
         <GridRow
-          label={cashDisc ? `Cash discount ${cashDiscBps / 100}%` : 'Cash discount'} hint="Ctrl+K" tone={cashDisc ? 'success' : undefined}
+          label="Cash discount" hint="Ctrl+K" tone={cashDisc ? 'success' : undefined}
           onLabel={() => { cashRef.current?.focus(); cashRef.current?.select(); }}
-          box={<AmountBox inputRef={cashRef} disabled={empty} onApply={onApplyCashDisc} placeholder="₹ or %" ariaLabel="Cash discount in rupees, or percent like 5%" title="Cash discount on the whole bill, on top of item discounts" />}
+          box={<AmountBox kind="rupees" inputRef={cashRef} disabled={empty} onApply={onApplyCashDisc} placeholder="0" ariaLabel="Cash discount in rupees, like 5" title="Cash discount in rupees on the whole bill, on top of item discounts" />}
           amount={<Money paise={-cashDisc} />}
           clear={cashDisc > 0
             ? <button type="button" tabIndex={-1} onClick={onClearCashDisc} title="Remove the cash discount" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
             : undefined}
         />
+        {customer && pointsRow && (
+          <>
+            <GridRow
+              label="Points" hint="Alt+P" tone={pointsRow.amount > 0 ? 'success' : undefined}
+              onLabel={() => { pointsRef.current?.focus(); pointsRef.current?.select(); }}
+              box={<AmountBox kind="points" inputRef={pointsRef} disabled={empty} onType={() => setPointsMsg('')}
+                onApply={(v) => { const m = onApplyPoints(v); setPointsMsg(m ?? ''); return m; }} onEmpty={onClearPoints}
+                placeholder="pts" ariaLabel="Loyalty points to use on this bill" title="Use the customer's loyalty points to pay part of this bill" />}
+              amount={<Money paise={-pointsRow.amount} />}
+              clear={pointsRow.amount > 0
+                ? <button type="button" tabIndex={-1} onClick={() => { setPointsMsg(''); onClearPoints(); }} title="Take the points off this bill" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
+                : undefined}
+            />
+            <div className={cn('num -mt-0.5 mb-0.5 text-[11px] leading-snug', pointsMsg ? 'font-medium text-danger' : 'text-subtle')} role={pointsMsg ? 'alert' : undefined}>
+              {pointsMsg
+                ? pointsMsg
+                : pointsRow.applied > 0
+                  ? `Using ${pointsRow.applied} pts · ${formatPoints(Math.max(0, pointsRow.balance - pointsRow.applied))} pts left`
+                  : <>Has {formatPoints(pointsRow.balance)} pts · {pointsRow.maxPoints >= pointsRow.minRedeem ? <>up to {formatRupees(pointsRow.maxWorth, { decimals: false })} today</> : empty ? 'add items to use them' : `needs ${pointsRow.minRedeem} pts to use`}</>}
+            </div>
+          </>
+        )}
         {customer && storeCredit > 0 && (
           <GridRow
             label="Store credit" sub={`${formatRupees(storeCredit - storeCreditUsed, { decimals: false })} available`} hint="Alt+C"
             tone={storeCreditUsed > 0 ? 'success' : undefined}
             onLabel={() => { storeRef.current?.focus(); storeRef.current?.select(); }}
-            box={<AmountBox inputRef={storeRef} disabled={empty} onApply={onApplyStoreCredit} onEmpty={onClearStoreCredit} placeholder="₹ amount" ariaLabel="Store credit in rupees to use on this bill" title="Use the customer's store credit (wallet) on this bill" />}
+            box={<AmountBox kind="rupees" inputRef={storeRef} disabled={empty} onApply={onApplyStoreCredit} onEmpty={onClearStoreCredit} placeholder="amount" ariaLabel="Store credit in rupees to use on this bill" title="Use the customer's store credit (wallet) on this bill" />}
             amount={<Money paise={-storeCreditUsed} />}
             clear={storeCreditUsed > 0
               ? <button type="button" tabIndex={-1} onClick={onClearStoreCredit} title="Remove the store credit from this bill" className="flex h-5 w-5 items-center justify-center rounded text-subtle hover:bg-danger-soft hover:text-danger"><X size={13} /></button>
@@ -310,6 +338,12 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
             <Money paise={totals.grand - storeCreditUsed} softPaise />
           </span>
         </div>
+        {pointsRow && pointsRow.amount > 0 && !empty && (
+          <div className="mt-1.5 flex items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary-soft px-3.5 py-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">To pay</span>
+            <span className="num text-[24px] font-semibold leading-none tracking-tight text-ink"><Money paise={due} softPaise /></span>
+          </div>
+        )}
         <Button variant="primary" size="lg" block className="mt-2 !h-[48px] !text-base" onClick={onPay} kbd="F12" disabled={empty}>
           Pay now
         </Button>
@@ -318,24 +352,32 @@ export function SummaryPanel({ totals, customer, wallet, onCustomer, onPay, onDi
   );
 }
 
-/** Discount typed in the panel itself: "50" is rupees, "5%" is percent. Enter or Apply applies it; empty clears it. */
-function AmountBox({ disabled, onApply, onEmpty, placeholder, ariaLabel, title, inputRef }: {
-  disabled?: boolean; onApply: (v: string) => void; onEmpty?: () => void; placeholder: string; ariaLabel: string; title?: string;
+/** A box in the panel: percent only, rupees only or whole points. The sign sits inside the box. Enter or Apply applies it; empty clears it.
+    `onApply` may answer with a plain-words reason (a string): the typed value then stays so it can be fixed. */
+function AmountBox({ kind, disabled, onApply, onEmpty, onType, placeholder, ariaLabel, title, inputRef }: {
+  kind: 'percent' | 'rupees' | 'points';
+  disabled?: boolean; onApply: (v: string) => void | string | null; onEmpty?: () => void; onType?: () => void; placeholder: string; ariaLabel: string; title?: string;
   inputRef?: React.RefObject<HTMLInputElement>;
 }) {
   const [v, setV] = useState('');
   const go = () => {
-    if (v.trim() !== '') { onApply(v); setV(''); document.querySelector<HTMLInputElement>('[data-scan-input]')?.focus(); }
-    else onEmpty?.();
+    if (v.trim() !== '') {
+      const r = onApply(v);
+      if (typeof r === 'string') return;
+      setV(''); document.querySelector<HTMLInputElement>('[data-scan-input]')?.focus();
+    } else onEmpty?.();
   };
+  const keep = kind === 'points' ? /[^\d]/g : /[^\d.]/g; // a percent box ignores rupee signs, a rupee box ignores %, points are whole
   return (
     <span className={cn('flex h-7 w-full min-w-0 items-center overflow-hidden rounded-md border border-line-strong bg-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20', disabled && 'opacity-50')}>
+      {kind === 'rupees' && <span aria-hidden className="shrink-0 pl-1.5 text-[13px] font-medium text-subtle">{'\u20B9'}</span>}
       <input
-        ref={inputRef} value={v} disabled={disabled} inputMode="decimal" placeholder={placeholder} aria-label={ariaLabel} title={title}
-        onChange={(e) => setV(e.target.value.replace(/[^\d.%]/g, ''))}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') { setV(''); (e.target as HTMLInputElement).blur(); } }}
-        className="num h-full min-w-0 flex-1 bg-transparent px-1.5 text-right text-[13px] font-medium text-ink placeholder:font-normal placeholder:text-subtle"
+        ref={inputRef} value={v} disabled={disabled} inputMode={kind === 'points' ? 'numeric' : 'decimal'} placeholder={placeholder} aria-label={ariaLabel} title={title}
+        onChange={(e) => { setV(e.target.value.replace(keep, '')); onType?.(); }}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') { setV(''); onType?.(); (e.target as HTMLInputElement).blur(); } }}
+        className={cn('num h-full min-w-0 flex-1 bg-transparent text-right text-[13px] font-medium text-ink placeholder:font-normal placeholder:text-subtle', kind === 'percent' ? 'pl-1.5 pr-0.5' : 'px-1.5')}
       />
+      {kind === 'percent' && <span aria-hidden className="shrink-0 pr-1.5 text-[13px] font-medium text-subtle">%</span>}
       <button type="button" tabIndex={-1} disabled={disabled} onClick={go} title={title ? `${title} (Enter)` : 'Apply (Enter)'}
         className="flex h-full shrink-0 items-center border-l border-line bg-surface-2 px-1.5 text-[10px] font-semibold text-primary hover:bg-primary-soft">Apply</button>
     </span>

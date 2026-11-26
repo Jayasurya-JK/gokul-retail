@@ -242,6 +242,7 @@ pub fn write_bill(tx: &Connection, draft: &BillDraft, now: DateTime<Local>, faul
             exchange_credit: exchange_paid,
             cash_disc_bps: ex.cash_disc_bps,
             cash_disc,
+            points_applied: 0,
             remarks: ex.remarks.trim().into(),
             exchange_refund: ex.exchange_refund.clone().filter(|r| r.amount > 0),
             place_of_supply: supply.place.clone(),
@@ -365,6 +366,7 @@ fn bill_from_row(r: &Row) -> rusqlite::Result<Bill> {
             exchange_credit: 0, // filled from the payments by fill_children
             cash_disc_bps: r.get(22)?,
             cash_disc: r.get(23)?,
+            points_applied: 0,
             remarks: r.get(24)?,
             exchange_refund: None,
             place_of_supply: r.get(25)?,
