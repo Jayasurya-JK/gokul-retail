@@ -18,19 +18,19 @@
 .home-tile[data-on='true'] { outline-color: rgb(var(--ink)); transform: translateY(-2px); box-shadow: 0 14px 24px -12px rgb(15 23 42 / 0.5); }
 .home-tile[data-hue='pos'] { --hb: 24 98 68; }
 .home-tile[data-hue='sales'] { --hb: 37 82 160; }
-.home-tile[data-hue='paymode'] { --hb: 18 104 116; }
+.home-tile[data-hue='paymode'] { --hb: 16 92 104; }
 .home-tile[data-hue='bills'] { --hb: 64 78 110; }
 .home-tile[data-hue='customer'] { --hb: 120 50 130; }
-.home-tile[data-hue='stock'] { --hb: 112 92 18; }
+.home-tile[data-hue='stock'] { --hb: 98 80 14; }
 .home-tile[data-hue='more'] { --hb: 55 65 81; }
-.home-mark { position: absolute; right: -4%; bottom: -14%; height: 78%; width: auto; aspect-ratio: 1; color: rgb(255 255 255 / 0.08); pointer-events: none; }
+.home-mark { position: absolute; right: 3%; bottom: 4%; height: 78%; width: auto; aspect-ratio: 1; color: rgb(255 255 255 / 0.08); pointer-events: none; }
 .home-tile[data-hue='pos'] .home-mark { height: 70%; }
 .home-icon { position: relative; flex: none; width: clamp(30px, 4.4vh, 46px); height: clamp(30px, 4.4vh, 46px); }
 .home-tile[data-hue='pos'] .home-icon { width: clamp(44px, 8vh, 80px); height: clamp(44px, 8vh, 80px); }
 .home-text { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
 .home-name { font-size: clamp(18px, 2.7vh, 28px); font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-tile[data-hue='pos'] .home-name { font-size: clamp(26px, 4.6vh, 46px); }
-.home-figure { font-size: clamp(13px, 2vh, 19px); color: rgb(255 255 255 / 0.85); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-figure { font-size: clamp(13px, 2vh, 19px); color: #fff; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-tile[data-hue='pos'] .home-figure { font-size: clamp(15px, 2.4vh, 24px); }
 .home-bad { color: rgb(255 214 214); font-weight: 600; }
 .home-badge {

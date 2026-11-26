@@ -142,7 +142,7 @@ export function HomePage() {
     }
   };
 
-  const sep = <span className="mx-2.5 text-line-strong">·</span>;
+  const sep = <span className="mx-2.5">·</span>;
 
   return (
     <PosLayout topBar={<TopBar />} keys={keys}>
