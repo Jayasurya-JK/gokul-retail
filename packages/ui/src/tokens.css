@@ -5,6 +5,17 @@
   --forest-400: 79 153 118; --forest-500: 46 122 90; --forest-600: 30 98 71; --forest-700: 20 82 56;
   --forest-800: 14 67 48; --forest-900: 10 52 38; --forest-950: 5 32 26;
   --brand-yellow: 255 237 0;
+  /* Home tiles: deep, calm hues (a = light end, b = deep end of the gradient). White text on all of them is >= 4.5:1. Not the meaning colours. */
+  --tile-pos-a: 22 104 74; --tile-pos-b: 9 52 37;
+  --tile-sales-a: 40 88 176; --tile-sales-b: 24 52 120;
+  --tile-paymode-a: 18 114 124; --tile-paymode-b: 12 70 82;
+  --tile-bills-a: 71 85 117; --tile-bills-b: 40 50 74;
+  --tile-customer-a: 130 52 140; --tile-customer-b: 84 30 98;
+  --tile-stock-a: 104 110 34; --tile-stock-b: 66 72 20;
+  --tile-held-a: 168 80 12; --tile-held-b: 124 50 8;
+  --tile-more-a: 58 66 82; --tile-more-b: 30 36 48;
+  /* Light status colours that read on the deep tiles (same meanings as green / red / amber) */
+  --on-tile-good: 150 242 182; --on-tile-bad: 255 190 190; --on-tile-warn: 253 224 110;
   --bg: 242 244 247;
   --surface: 255 255 255;
   --surface-2: 248 249 251;
