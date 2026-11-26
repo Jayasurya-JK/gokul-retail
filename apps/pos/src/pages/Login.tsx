@@ -46,7 +46,7 @@ export function Login() {
     if (ok) {
       await signIn(ok);
       const day = await api.getDayStatus();
-      nav(day.open ? '/billing' : '/day-open', { replace: true });
+      nav(day.open ? '/home' : '/day-open', { replace: true });
     } else {
       setError(true);
       window.setTimeout(() => { setPin(''); setError(false); setBusy(false); }, 450);

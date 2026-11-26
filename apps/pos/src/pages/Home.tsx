@@ -194,7 +194,7 @@ export function HomePage() {
                 <Tooltip key={t.id} label={t.name} kbd={t.shortcut}>
                   <button
                     type="button" tabIndex={-1} data-hue={t.hue} data-on={i === sel}
-                    style={{ gridRow: `${t.row} / span ${t.rows}`, gridColumn: `${t.col} / span ${t.cols}` } as CSSProperties}
+                    style={{ gridRow: `${t.row} / span ${t.rows}`, gridColumn: `${t.col} / span ${t.cols}`, animationDelay: `${i * 30}ms` } as CSSProperties}
                     onMouseEnter={() => setSel(i)}
                     onClick={() => { setSel(i); open(t); }}
                     className="home-tile"

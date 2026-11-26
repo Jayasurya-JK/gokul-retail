@@ -17,7 +17,7 @@ export function DayOpen() {
   const total = countedTotal(counts);
   const [gen, setGen] = useState(0);
 
-  useEffect(() => { api.getDayStatus().then((d) => { setStatus(d); if (d.open) nav('/billing', { replace: true }); }); }, [nav]);
+  useEffect(() => { api.getDayStatus().then((d) => { setStatus(d); if (d.open) nav('/home', { replace: true }); }); }, [nav]);
 
   const start = useCallback(async () => {
     if (!user || busy) return;
@@ -26,7 +26,7 @@ export function DayOpen() {
       const shift = await api.openDay({ userId: user.id, counts });
       setShift(shift);
       toast.show({ tone: 'success', title: 'Day started', detail: `Opening cash ₹${(total / 100).toLocaleString('en-IN')}. Happy billing.` });
-      nav('/billing', { replace: true });
+      nav('/home', { replace: true });
     } catch {
       toast.show({ tone: 'error', title: 'Could not start the day', detail: 'Nothing was changed. Try Enter again.' });
       setBusy(false);
