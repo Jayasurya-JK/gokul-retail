@@ -5,7 +5,7 @@ import { Kbd, Tooltip, cn } from '@gokul/ui';
 export interface MenuEntry { label: string; kbd?: string; icon?: ReactNode; onClick: () => void; danger?: boolean; /** Draws a rule above this entry */ divider?: boolean }
 
 /** A compact dropdown button. Mouse or touch only; every entry has its own key as well. */
-export function DropMenu({ label, icon, items, active, variant, heading }: { label: string; icon: ReactNode; items: MenuEntry[]; active?: boolean; variant?: 'chrome'; heading?: string }) {
+export function DropMenu({ label, icon, items, active, variant, heading }: { label: string; icon: ReactNode; items: MenuEntry[]; active?: boolean; variant?: 'chrome' | 'tab'; heading?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -18,7 +18,14 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      {variant === 'chrome' ? (
+      {variant === 'tab' ? (
+        <button
+          type="button" tabIndex={-1} onClick={() => setOpen((o) => !o)}
+          className={cn('flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-[16px] font-medium transition-colors', active || open ? 'bg-primary-soft text-primary' : 'text-muted hover:bg-surface-3 hover:text-ink')}
+        >
+          {label}{icon}
+        </button>
+      ) : variant === 'chrome' ? (
         <button
           type="button" tabIndex={-1} onClick={() => setOpen((o) => !o)}
           className={cn('relative ml-1 flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium transition-colors hover:bg-white/10', active || open ? 'text-white' : 'text-chrome-ink')}
@@ -30,7 +37,7 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
         <TBtn label={label} icon={icon} active={active || open} onClick={() => setOpen((o) => !o)} trailing={<ChevronDown size={12} className="text-subtle" />} />
       )}
       {open && (
-        <div className="g-overlay absolute right-0 top-[calc(100%+4px)] z-[60] w-64 overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay">
+        <div className={cn("g-overlay absolute top-[calc(100%+4px)] z-[60] w-64 overflow-hidden rounded-card border border-line bg-surface py-1 text-ink shadow-overlay", variant === "tab" ? "left-0" : "right-0")}>
           {heading && <div className="border-b border-line bg-surface-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{heading}</div>}
           {items.map((m) => (
             <div key={m.label}>
@@ -49,8 +56,8 @@ export function DropMenu({ label, icon, items, active, variant, heading }: { lab
   );
 }
 
-function TBtn({ label, icon, kbd, onClick, active, trailing, tip }: {
-  label: string; icon: ReactNode; kbd?: string; onClick: () => void; active?: boolean; trailing?: ReactNode; tip?: string;
+function TBtn({ label, icon, kbd, onClick, active, trailing, tip, alwaysKbd }: {
+  label: string; icon: ReactNode; kbd?: string; onClick: () => void; active?: boolean; trailing?: ReactNode; tip?: string; alwaysKbd?: boolean;
 }) {
   return (
     <Tooltip label={tip ?? label} kbd={kbd}>
@@ -63,7 +70,7 @@ function TBtn({ label, icon, kbd, onClick, active, trailing, tip }: {
       >
         <span className={active ? 'text-primary' : 'text-muted'}>{icon}</span>
         {label}
-        {kbd && <span className="hidden min-[1500px]:inline-flex"><Kbd>{kbd}</Kbd></span>}
+        {kbd && <span className={alwaysKbd ? "inline-flex" : "hidden min-[1500px]:inline-flex"}><Kbd>{kbd}</Kbd></span>}
         {trailing}
       </button>
     </Tooltip>
@@ -90,8 +97,17 @@ export function BillToolbar({ deliveryOn, staff, wholesale, heldCount, onDeliver
       <span className="mx-1 h-5 w-px shrink-0 bg-line" />
       <TBtn label={staff ? staff : 'Staff'} tip="Staff for this bill" kbd="F7" icon={<UserRoundCheck size={15} />} active={!!staff} onClick={onStaff} />
       <TBtn label="Recent" tip="Recent bills: reprint" kbd="F8" icon={<ReceiptIndianRupee size={15} />} onClick={onRecent} />
-      <TBtn label="Hold" tip="Hold this bill for later" kbd="F6" icon={<Pause size={15} />} onClick={onHold} />
-      {heldCount > 0 && <TBtn label={`Held ${heldCount}`} tip="Bring back a held bill" kbd="Shift+F6" icon={<Layers size={15} />} onClick={onHeld} />}
+      <TBtn label="Hold" tip="Hold this bill for later" kbd="F6" icon={<Pause size={15} />} onClick={onHold} alwaysKbd />
+      {heldCount > 0 && (
+        <Tooltip label="Bring back a held bill" kbd="Shift+F6">
+          <button
+            type="button" tabIndex={-1} onClick={onHeld}
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-[rgb(var(--attention-tint))] px-2 text-[13px] font-semibold text-[rgb(var(--attention-ink))] transition-colors hover:brightness-95"
+          >
+            <Layers size={14} /><span className="num">{heldCount}</span> waiting
+          </button>
+        </Tooltip>
+      )}
       <TBtn label="Wholesale" tip="Use wholesale prices on this bill" kbd="Alt+W" icon={<Tags size={15} />} active={wholesale} onClick={onWholesale} />
     </div>
   );
