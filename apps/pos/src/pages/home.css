@@ -1,22 +1,21 @@
-/* Home v4: a calm launcher. Square solid tiles, one size, centred. White text is at least 4.5:1 on every base. */
-.home-page { --s: clamp(150px, 27vh, 280px); }
+/* Home v6: the tiles fill the page. Solid colours, a faint watermark icon, white text at least 4.5:1 on every base. */
 .home-grid {
-  display: grid;
-  grid-template-columns: repeat(4, var(--s));
-  grid-auto-rows: var(--s);
-  gap: calc(var(--s) * 0.09);
+  flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 16px; padding: 4px 4px 0;
 }
+@media (min-width: 1600px) { .home-grid { gap: 20px; } }
 .home-tile {
   --hb: 24 98 68;
-  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: calc(var(--s) * 0.04); min-width: 0; padding: 12px;
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  min-width: 0; min-height: 0; padding: 20px 22px; overflow: hidden; text-align: left;
   border-radius: 18px; background: rgb(var(--hb)); color: #fff;
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.16);
   cursor: default; user-select: none;
   outline: 2px solid transparent; outline-offset: 4px;
   transition: transform 140ms ease, box-shadow 140ms ease, outline-color 120ms;
 }
-.home-tile[data-on='true'] { outline-color: rgb(var(--ink)); transform: translateY(-3px); box-shadow: 0 14px 24px -12px rgb(15 23 42 / 0.5); }
+@media (min-width: 1600px) { .home-tile { padding: 26px 30px; } }
+.home-tile[data-on='true'] { outline-color: rgb(var(--ink)); transform: translateY(-2px); box-shadow: 0 14px 24px -12px rgb(15 23 42 / 0.5); }
 .home-tile[data-hue='pos'] { --hb: 24 98 68; }
 .home-tile[data-hue='sales'] { --hb: 37 82 160; }
 .home-tile[data-hue='paymode'] { --hb: 18 104 116; }
@@ -24,15 +23,18 @@
 .home-tile[data-hue='customer'] { --hb: 120 50 130; }
 .home-tile[data-hue='stock'] { --hb: 112 92 18; }
 .home-tile[data-hue='more'] { --hb: 55 65 81; }
-.home-icon { width: calc(var(--s) * 0.3); height: calc(var(--s) * 0.3); }
-.home-name { font-size: clamp(15px, calc(var(--s) * 0.1), 24px); font-weight: 600; letter-spacing: -0.01em; text-align: center; line-height: 1.2; }
+.home-mark { position: absolute; right: -4%; bottom: -14%; height: 78%; width: auto; aspect-ratio: 1; color: rgb(255 255 255 / 0.08); pointer-events: none; }
+.home-tile[data-hue='pos'] .home-mark { height: 70%; }
+.home-icon { position: relative; flex: none; width: clamp(30px, 4.4vh, 46px); height: clamp(30px, 4.4vh, 46px); }
+.home-tile[data-hue='pos'] .home-icon { width: clamp(44px, 8vh, 80px); height: clamp(44px, 8vh, 80px); }
+.home-text { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.home-name { font-size: clamp(18px, 2.7vh, 28px); font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-tile[data-hue='pos'] .home-name { font-size: clamp(26px, 4.6vh, 46px); }
+.home-figure { font-size: clamp(13px, 2vh, 19px); color: rgb(255 255 255 / 0.85); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-tile[data-hue='pos'] .home-figure { font-size: clamp(15px, 2.4vh, 24px); }
+.home-bad { color: rgb(255 214 214); font-weight: 600; }
 .home-badge {
-  position: absolute; top: 12px; right: 12px; padding: 2px 10px; border-radius: 999px;
+  position: absolute; top: 18px; right: 20px; padding: 2px 10px; border-radius: 999px; z-index: 1;
   background: rgb(253 224 110); color: rgb(92 51 8); font-size: 13px; font-weight: 700; line-height: 20px;
 }
-@media (max-height: 760px) { .home-title { font-size: 32px; } }
-.home-tile[data-hue='pos'] .home-icon { width: calc(var(--s) * 0.34); height: calc(var(--s) * 0.34); }
-.home-tile[data-hue='pos'] .home-name { font-size: clamp(18px, calc(var(--s) * 0.12), 30px); }
-.home-icon { margin-bottom: calc(var(--s) * 0.05); }
-.home-figure { font-size: clamp(12px, calc(var(--s) * 0.065), 16px); color: rgb(255 255 255 / 0.85); text-align: center; line-height: 1.3; white-space: nowrap; }
-.home-bad { color: rgb(255 214 214); font-weight: 600; }
+@media (max-height: 760px) { h1.home-title { font-size: 32px; } .home-tile { padding: 14px 18px; } }

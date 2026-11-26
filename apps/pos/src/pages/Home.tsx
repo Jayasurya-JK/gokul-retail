@@ -27,27 +27,29 @@ const MORE_SCREENS: { label: string; path: string; icon: LucideIcon; kbd?: strin
 ];
 
 type Hue = 'pos' | 'sales' | 'paymode' | 'bills' | 'customer' | 'stock' | 'more';
-interface Tile { id: string; name: string; hue: Hue; icon: LucideIcon; path?: string; more?: boolean; shortcut?: string; row: number; col: number; cols: number }
+interface Tile { id: string; name: string; hue: Hue; icon: LucideIcon; path?: string; more?: boolean; shortcut?: string; row: number; rows: number; col: number; cols: number }
 
-/* Four equal squares across, two rows. Point of Sale is two squares wide. */
+/* 12 columns, 3 rows filling the page. Point of Sale is the large tile on the left. */
 const TILES: Tile[] = [
-  { id: 'pos', name: 'Point of Sale', hue: 'pos', icon: ShoppingCart, path: '/billing', shortcut: 'Alt+1', row: 1, col: 1, cols: 2 },
-  { id: 'sales', name: 'Sales Report', hue: 'sales', icon: BarChart3, path: '/reports/sales', shortcut: 'Alt+5', row: 1, col: 3, cols: 1 },
-  { id: 'paymode', name: 'Paymode Report', hue: 'paymode', icon: CreditCard, path: '/reports/paymode', shortcut: 'Alt+6', row: 1, col: 4, cols: 1 },
-  { id: 'bills', name: 'Bills', hue: 'bills', icon: ReceiptIndianRupee, path: '/sales', shortcut: 'Alt+4', row: 2, col: 1, cols: 1 },
-  { id: 'customer', name: 'Customer', hue: 'customer', icon: UserRound, path: '/customers', shortcut: 'Alt+8', row: 2, col: 2, cols: 1 },
-  { id: 'stock', name: 'Stock', hue: 'stock', icon: Package, path: '/reports/stock', shortcut: 'Alt+7', row: 2, col: 3, cols: 1 },
-  { id: 'more', name: 'More', hue: 'more', icon: LayoutGrid, more: true, row: 2, col: 4, cols: 1 },
+  { id: 'pos', name: 'Point of Sale', hue: 'pos', icon: ShoppingCart, path: '/billing', shortcut: 'Alt+1', row: 1, rows: 2, col: 1, cols: 6 },
+  { id: 'sales', name: 'Sales Report', hue: 'sales', icon: BarChart3, path: '/reports/sales', shortcut: 'Alt+5', row: 1, rows: 1, col: 7, cols: 6 },
+  { id: 'paymode', name: 'Paymode Report', hue: 'paymode', icon: CreditCard, path: '/reports/paymode', shortcut: 'Alt+6', row: 2, rows: 1, col: 7, cols: 6 },
+  { id: 'bills', name: 'Bills', hue: 'bills', icon: ReceiptIndianRupee, path: '/sales', shortcut: 'Alt+4', row: 3, rows: 1, col: 1, cols: 3 },
+  { id: 'customer', name: 'Customer', hue: 'customer', icon: UserRound, path: '/customers', shortcut: 'Alt+8', row: 3, rows: 1, col: 4, cols: 3 },
+  { id: 'stock', name: 'Stock', hue: 'stock', icon: Package, path: '/reports/stock', shortcut: 'Alt+7', row: 3, rows: 1, col: 7, cols: 3 },
+  { id: 'more', name: 'More', hue: 'more', icon: LayoutGrid, more: true, row: 3, rows: 1, col: 10, cols: 3 },
 ];
 
 function nextTile(from: Tile, dir: 'Up' | 'Down' | 'Left' | 'Right'): Tile | undefined {
+  const rowsOverlap = (t: Tile) => t.row < from.row + from.rows && from.row < t.row + t.rows;
   const mid = from.col + from.cols / 2;
   const dist = (t: Tile) => Math.abs(t.col + t.cols / 2 - mid);
   const pick = (c: Tile[], score: (t: Tile) => number) => c.sort((a, b) => score(a) - score(b))[0];
   const others = TILES.filter((t) => t !== from);
-  if (dir === 'Right') return pick(others.filter((t) => t.row === from.row && t.col >= from.col + from.cols), (t) => t.col);
-  if (dir === 'Left') return pick(others.filter((t) => t.row === from.row && t.col + t.cols <= from.col), (t) => -t.col);
-  return pick(others.filter((t) => (dir === 'Down' ? t.row > from.row : t.row < from.row)), dist);
+  if (dir === 'Right') return pick(others.filter((t) => t.col >= from.col + from.cols && rowsOverlap(t)), (t) => t.col * 10 + t.row);
+  if (dir === 'Left') return pick(others.filter((t) => t.col + t.cols <= from.col && rowsOverlap(t)), (t) => -t.col * 10 - t.row);
+  if (dir === 'Down') return pick(others.filter((t) => t.row >= from.row + from.rows), (t) => t.row * 100 + dist(t));
+  return pick(others.filter((t) => t.row + t.rows <= from.row), (t) => -t.row * 100 + dist(t));
 }
 
 /* ---------- live numbers (a few cheap calls, refreshed every 30 s) ---------- */
@@ -136,7 +138,7 @@ export function HomePage() {
       case 'bills': return `${d?.todayBills ?? 0} today`;
       case 'customer': return <>{live.customersToday} today{live.owing > 0 && <> · <span className="home-bad">{live.owing} owe</span></>}</>;
       case 'stock': return live.lowStock > 0 ? `${live.lowStock} ${live.lowStock === 1 ? 'item' : 'items'} low` : 'All stocked';
-      default: return null;
+      default: return 'Returns, expenses, day close';
     }
   };
 
@@ -183,7 +185,7 @@ export function HomePage() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 items-center justify-center">
+        <div className="mt-6 flex min-h-0 flex-1 flex-col min-[1600px]:mt-8">
           <div className="home-grid">
             {TILES.map((t, i) => {
               const Icon = t.icon;
@@ -193,15 +195,18 @@ export function HomePage() {
                 <Tooltip key={t.id} label={t.name} kbd={t.shortcut}>
                   <button
                     type="button" tabIndex={-1} data-hue={t.hue} data-on={i === sel}
-                    style={{ gridRow: t.row, gridColumn: `${t.col} / span ${t.cols}` } as CSSProperties}
+                    style={{ gridRow: `${t.row} / span ${t.rows}`, gridColumn: `${t.col} / span ${t.cols}` } as CSSProperties}
                     onMouseEnter={() => setSel(i)}
                     onClick={() => { setSel(i); open(t); }}
                     className="home-tile"
                   >
                     {badge > 0 && <span className="home-badge num">{badgeText}</span>}
-                    <Icon className="home-icon" strokeWidth={1.5} aria-hidden />
-                    <span className="home-name">{t.name}</span>
-                    <span className="home-figure num">{figure(t.id) || ' '}</span>
+                    <Icon className="home-mark" strokeWidth={1.1} aria-hidden />
+                    <Icon className="home-icon" strokeWidth={1.6} aria-hidden />
+                    <span className="home-text">
+                      <span className="home-name">{t.name}</span>
+                      <span className="home-figure num">{figure(t.id)}</span>
+                    </span>
                   </button>
                 </Tooltip>
               );
