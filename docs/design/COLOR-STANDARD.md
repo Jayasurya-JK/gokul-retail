@@ -18,15 +18,17 @@ Always pair colour with a word, sign or arrow (colour-blind safe); never colour 
 ## Payment modes (categorical; never green, never amber)
 | Mode | Colour |
 |---|---|
-| Cash | Indigo |
-| UPI / BharatQR | Sky blue |
+| Cash | Green (owner, 26 Nov: cash in hand reads as good money) |
+| UPI / BharatQR | Blue |
 | Card | Purple |
-| Points | Pink |
+| Points | Orange |
 | Credit (on account) | Red (it is money owed) |
 | Store credit / wallet (if re-enabled) | Slate |
 
 ## How to use
-- Tints: column/cell background at ~5% (rows) and ~10-12% (totals); text in the darker ink of the same hue.
+- Tables stay WHITE: no full-column tints (they wash out and blur columns - owner, 26 Nov). Colour goes on the data:
+  bold amounts in the strong ink of the hue, a coloured header label with a 3 px coloured underline, faint "–" for empty,
+  and solid light-tint boxes (~12-15%) with bold ink only in the totals row.
 - Contrast: every text >= 4.5:1 on its background in normal, totals, selected and hover states.
 - Tokens: define once (`--money-good`, `--money-owed`, `--attention`, `--neutral`, `--mode-cash` ... with `-ink` and `-tint`)
   in the shared design tokens of each app; components use tokens, never raw hex.

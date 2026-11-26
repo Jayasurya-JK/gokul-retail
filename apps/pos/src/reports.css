@@ -1,0 +1,55 @@
+/* Reports screens only (Paymode Report, Sales Report). Inks are 700/800 shades so every
+   amount and header label passes 4.5:1 on white, on the 14% tint boxes and on hover/selected rows. */
+
+/* Pay modes: --pm-ink is the text colour, --pm-bar the 3 px header underline. */
+.rpt-mode-cash { --pm-ink: #166534; --pm-bar: #16a34a; }
+.rpt-mode-upi { --pm-ink: #1d4ed8; --pm-bar: #2563eb; }
+.rpt-mode-card { --pm-ink: #7e22ce; --pm-bar: #9333ea; }
+.rpt-mode-points { --pm-ink: #9a3412; --pm-bar: #ea580c; }
+.rpt-mode-credit { --pm-ink: #b91c1c; --pm-bar: #dc2626; }
+.rpt-mode-wallet { --pm-ink: #334155; --pm-bar: #64748b; }
+.rpt-mode-sodexo { --pm-ink: #334155; --pm-bar: #64748b; }
+
+.rpt-amt { color: var(--pm-ink); font-weight: 600; }
+.rpt-empty { color: #cbd2dc; font-weight: 400; }
+
+/* Totals boxes: a solid light tint of the mode colour behind bold ink. */
+.rpt-box {
+  display: block;
+  border-radius: 6px;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, var(--pm-bar) 14%, #ffffff);
+  color: var(--pm-ink);
+  font-weight: 700;
+}
+.rpt-box-good {
+  display: block;
+  border-radius: 6px;
+  padding: 2px 8px;
+  background-color: color-mix(in srgb, #16a34a 14%, #ffffff);
+  color: #15803d;
+  font-weight: 700;
+}
+
+.rpt-profit { color: #15803d; font-weight: 700; }
+.rpt-profit-neg { color: #b91c1c; font-weight: 700; }
+
+/* Remarks as small tags. */
+.rpt-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0 6px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.rpt-tag-red { color: #b91c1c; background-color: #fef2f2; border-color: #fecaca; }
+.rpt-tag-blue { color: #1d4ed8; background-color: #eff6ff; border-color: #bfdbfe; }
+.rpt-tag-purple { color: #7e22ce; background-color: #faf5ff; border-color: #e9d5ff; }
+.rpt-tag-outline { color: #b91c1c; background-color: transparent; border-color: #dc2626; }
+.rpt-tag-grey { color: #334155; background-color: #f1f5f9; border-color: #e2e8f0; }
